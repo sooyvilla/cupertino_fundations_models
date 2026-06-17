@@ -1,0 +1,35 @@
+name: cupertino_fundations_models
+description: "Apple Foundation Models for Flutter with on-device AI, streaming, multimodal prompts, diagnostics, and Private Cloud Compute support."
+version: 0.0.2
+homepage: https://github.com/sooyvilla/cupertino_fundations_models
+repository: https://github.com/sooyvilla/cupertino_fundations_models
+issue_tracker: https://github.com/sooyvilla/cupertino_fundations_models/issues
+documentation: https://github.com/sooyvilla/cupertino_fundations_models#readme
+license: MIT
+topics:
+  - apple-intelligence
+  - foundation-models
+  - on-device-ai
+  - flutter-plugin
+  - ios
+platforms:
+  ios:
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=1.17.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: CupertinoFoundationModelsPlugin
