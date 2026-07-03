@@ -1,20 +1,14 @@
 PODS:
-  - cupertino_fundations_models (0.0.1):
-    - Flutter
   - Flutter (1.0.0)
 
 DEPENDENCIES:
-  - cupertino_fundations_models (from `.symlinks/plugins/cupertino_fundations_models/ios`)
   - Flutter (from `Flutter`)
 
 EXTERNAL SOURCES:
-  cupertino_fundations_models:
-    :path: ".symlinks/plugins/cupertino_fundations_models/ios"
   Flutter:
     :path: Flutter
 
 SPEC CHECKSUMS:
-  cupertino_fundations_models: 36795913f25af3990e2f54ffb58d01edb5dbaf7d
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
 
 PODFILE CHECKSUM: 4b015915ec662986b54bf30ab778da63f7dda016

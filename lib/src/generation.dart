@@ -201,13 +201,19 @@ sealed class SessionEvent {
 }
 
 final class TextDeltaEvent extends SessionEvent {
+  /// Creates a streamed text delta event.
   const TextDeltaEvent({required this.requestId, required this.text});
 
+  /// Identifier of the request that produced this event.
   final String requestId;
+
+  /// Incremental text emitted by the model.
   final String text;
 }
 
+/// Event emitted when the model requests a tool call.
 final class ToolCallEvent extends SessionEvent {
+  /// Creates a streamed tool-call event.
   const ToolCallEvent({
     required this.requestId,
     required this.toolCallId,
@@ -215,34 +221,56 @@ final class ToolCallEvent extends SessionEvent {
     required this.arguments,
   });
 
+  /// Identifier of the request that produced this event.
   final String requestId;
+
+  /// Native identifier for this tool invocation.
   final String toolCallId;
+
+  /// Name of the registered tool the model wants to call.
   final String name;
+
+  /// Arguments provided by the model for the tool call.
   final Map<String, Object?> arguments;
 }
 
+/// Event emitted when a streamed request completes successfully.
 final class CompletionEvent extends SessionEvent {
+  /// Creates a completion event.
   const CompletionEvent({required this.requestId, required this.response});
 
+  /// Identifier of the request that completed.
   final String requestId;
+
+  /// Final model response for the request.
   final ModelResponse response;
 }
 
+/// Event emitted when a streamed request fails.
 final class FailureEvent extends SessionEvent {
+  /// Creates a failure event.
   const FailureEvent({
     required this.requestId,
     required this.code,
     required this.message,
   });
 
+  /// Identifier of the request that failed.
   final String requestId;
+
+  /// Stable error code returned by the native implementation.
   final String code;
+
+  /// Human-readable error message.
   final String message;
 }
 
+/// Event used when the native side sends an unknown event payload.
 final class UnknownSessionEvent extends SessionEvent {
+  /// Creates an unknown event wrapper.
   const UnknownSessionEvent({required this.payload});
 
+  /// Raw event payload received from the native implementation.
   final Map<String, Object?> payload;
 }
 

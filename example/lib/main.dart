@@ -1,658 +1,526 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cupertino_fundations_models/cupertino_fundations_models.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-const Locale _exampleLocale = Locale('en', 'US');
-const String _exampleLocaleIdentifier = 'en_US';
+/// Optional Gemini API key used to demo hybrid routing.
+///
+/// Run with an external fallback provider:
+/// flutter run --dart-define=GEMINI_API_KEY=your_key
+const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
 void main() {
-  runApp(const _FoundationModelsExampleApp());
+  runApp(const ExampleApp());
 }
 
-final class _FoundationModelsExampleApp extends StatelessWidget {
-  const _FoundationModelsExampleApp();
+final class ExampleApp extends StatelessWidget {
+  const ExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: 'Foundation Models Chat',
       debugShowCheckedModeBanner: false,
-      title: 'Foundation Models Example',
-      locale: _exampleLocale,
+      locale: const Locale('en', 'US'),
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0A84FF)),
       ),
-      home: const _FoundationModelsExamplePage(),
+      home: const ChatScreen(),
     );
   }
 }
 
-final class _FoundationModelsExamplePage extends StatefulWidget {
-  const _FoundationModelsExamplePage();
+/// Minimal Gemini adapter used to demo Apple + external hybrid routing.
+///
+/// The package never ships provider clients; this adapter lives in the app.
+final class GeminiExternalProvider extends FoundationModelsExternalProvider {
+  const GeminiExternalProvider({required this.apiKey});
+
+  final String apiKey;
 
   @override
-  State<_FoundationModelsExamplePage> createState() {
-    return _FoundationModelsExamplePageState();
+  String get name => 'gemini';
+
+  @override
+  Future<bool> isAvailable() async => apiKey.isNotEmpty;
+
+  @override
+  Future<FoundationModelsProviderResponse> respond(
+    FoundationModelsRequest request,
+  ) async {
+    final List<Map<String, Object?>> contents = <Map<String, Object?>>[
+      for (final FoundationModelsChatMessage message in request.history)
+        <String, Object?>{
+          'role': message.role == FoundationModelsChatRole.assistant
+              ? 'model'
+              : 'user',
+          'parts': <Map<String, Object?>>[
+            <String, Object?>{'text': message.text},
+          ],
+        },
+      <String, Object?>{
+        'role': 'user',
+        'parts': <Map<String, Object?>>[
+          <String, Object?>{'text': request.prompt.text},
+        ],
+      },
+    ];
+
+    final Map<String, Object?> body = <String, Object?>{
+      'contents': contents,
+      if (request.instructions != null)
+        'systemInstruction': <String, Object?>{
+          'parts': <Map<String, Object?>>[
+            <String, Object?>{'text': request.instructions},
+          ],
+        },
+    };
+
+    final HttpClient client = HttpClient();
+    try {
+      final HttpClientRequest httpRequest = await client.postUrl(
+        Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/'
+          'gemini-2.5-flash:generateContent?key=$apiKey',
+        ),
+      );
+      httpRequest.headers.contentType = ContentType.json;
+      httpRequest.write(jsonEncode(body));
+      final HttpClientResponse httpResponse = await httpRequest.close();
+      final String payload = await httpResponse.transform(utf8.decoder).join();
+      if (httpResponse.statusCode != 200) {
+        throw FoundationModelsException(
+          code: FoundationModelsErrorCode.networkUnavailable,
+          message: 'Gemini request failed with ${httpResponse.statusCode}.',
+        );
+      }
+      final Map<String, Object?> decoded = (jsonDecode(payload) as Map)
+          .cast<String, Object?>();
+      final List<Object?> candidates =
+          (decoded['candidates'] as List<Object?>?) ?? <Object?>[];
+      final Map<String, Object?> first = candidates.isEmpty
+          ? <String, Object?>{}
+          : (candidates.first as Map).cast<String, Object?>();
+      final Map<String, Object?> content =
+          (first['content'] as Map?)?.cast<String, Object?>() ??
+          <String, Object?>{};
+      final List<Object?> parts =
+          (content['parts'] as List<Object?>?) ?? <Object?>[];
+      final String text = parts
+          .whereType<Map<String, Object?>>()
+          .map((Map<String, Object?> part) => part['text'] as String? ?? '')
+          .join();
+      return FoundationModelsProviderResponse(text: text);
+    } finally {
+      client.close(force: true);
+    }
   }
 }
 
-final class _FoundationModelsExamplePageState
-    extends State<_FoundationModelsExamplePage> {
-  final CupertinoFoundationModels _models = CupertinoFoundationModels();
-  final TextEditingController _promptController = TextEditingController(
-    text: 'Analyze the selected context and answer in Spanish.',
-  );
-  final TextEditingController _instructionsController = TextEditingController(
-    text: 'You are a concise assistant. Respond in Spanish.',
-  );
-  final TextEditingController _maxTokensController = TextEditingController(
-    text: '240',
-  );
-  final List<String> _logs = <String>[];
-  final List<PickedFoundationModelsFile> _attachments =
-      <PickedFoundationModelsFile>[];
+/// Demo tool: the on-device model can call this to read the device clock.
+final class DeviceTimeTool implements ModelTool {
+  const DeviceTimeTool();
 
-  bool _isBusy = false;
-  bool _allowCloud = false;
-  bool _useTemperature = false;
-  double _temperature = 0.7;
-  ModelMode _mode = ModelMode.local;
-  SamplingMode _samplingMode = SamplingMode.greedy;
-  ToolCallingPolicy _toolCallingPolicy = ToolCallingPolicy.automatic;
-  ReasoningLevel _reasoningLevel = ReasoningLevel.automatic;
-  FoundationModelsCapabilities? _capabilities;
-  ModelAvailability? _availability;
-  FoundationModelsDiagnostics? _diagnostics;
-  PickedFoundationModelsFile? _audioFile;
-  AudioTranscriptionResult? _transcription;
-  FoundationModelSession? _session;
-  String _liveStreamText = '';
+  @override
+  String get name => 'get_current_time';
+
+  @override
+  String get description =>
+      'Returns the current date and time on this device in ISO 8601 format.';
+
+  @override
+  Map<String, Object?> get parameters => const <String, Object?>{
+    'type': 'object',
+    'properties': <String, Object?>{},
+  };
+
+  @override
+  Duration get timeout => const Duration(seconds: 5);
+
+  @override
+  Object? call(Map<String, Object?> arguments) {
+    return DateTime.now().toIso8601String();
+  }
+}
+
+final class ChatMessageView {
+  ChatMessageView({
+    required this.isUser,
+    required this.text,
+    this.providerName,
+    this.isStreaming = false,
+    this.attachmentName,
+  });
+
+  final bool isUser;
+  String text;
+  String? providerName;
+  bool isStreaming;
+  final String? attachmentName;
+}
+
+final class ChatScreen extends StatefulWidget {
+  const ChatScreen({super.key});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+final class _ChatScreenState extends State<ChatScreen> {
+  final CupertinoFoundationModels _models = CupertinoFoundationModels();
+  late final FoundationModelsOrchestrator _orchestrator;
+  late final FoundationModelsChatSession _chat;
+
+  final TextEditingController _input = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  final List<ChatMessageView> _messages = <ChatMessageView>[];
+
+  ModelAvailability? _localAvailability;
+  PickedFoundationModelsFile? _pendingAttachment;
+  StreamSubscription<LiveTranscriptionEvent>? _liveTranscription;
+  bool _sending = false;
+  bool _listening = false;
+
+  static const String _instructions =
+      'You are a concise assistant inside a Flutter demo app. '
+      'Answer in English with short, helpful responses.';
+
+  @override
+  void initState() {
+    super.initState();
+    _orchestrator = FoundationModelsOrchestrator(
+      apple: _models,
+      externalProvider: geminiApiKey.isEmpty
+          ? null
+          : const GeminiExternalProvider(apiKey: geminiApiKey),
+      router: FoundationModelsRoutingPolicy.hybrid(
+        allowPrivateCloud: true,
+        allowExternalFallback: geminiApiKey.isNotEmpty,
+      ),
+      defaults: const FoundationModelsDefaults(
+        localeIdentifier: 'en_US',
+        options: GenerationOptions(maximumResponseTokens: 400),
+        tools: <ModelTool>[DeviceTimeTool()],
+      ),
+    );
+    _chat = _orchestrator.startChat(instructions: _instructions);
+    unawaited(_refreshAvailability());
+  }
 
   @override
   void dispose() {
-    _promptController.dispose();
-    _instructionsController.dispose();
-    _maxTokensController.dispose();
-    unawaited(_session?.dispose());
+    unawaited(_liveTranscription?.cancel());
+    unawaited(_chat.dispose());
+    _input.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  Future<void> _loadCapabilities() async {
-    await _run('Capabilities', () async {
-      final FoundationModelsCapabilities capabilities = await _models
-          .getCapabilities();
-      final bool fullPower = await _models.supportsFullPower(
-        cloudPolicy: _effectiveCloudPolicy(),
-      );
-      setState(() {
-        _capabilities = capabilities;
-      });
-      _log('Platform: ${capabilities.platform}');
-      _log('OS: ${capabilities.operatingSystemVersion}');
-      _log('SDK: ${capabilities.sdkVersion}');
-      _log('Preferred mode: ${capabilities.preferredMode.name}');
-      _log('Full power: $fullPower');
-      _log(
-        'Capabilities: ${capabilities.capabilities.map((ModelCapability value) => value.name).join(', ')}',
-      );
-    });
-  }
-
-  Future<void> _loadDiagnostics() async {
-    await _run('Diagnostics', () async {
-      final FoundationModelsDiagnostics diagnostics = await _models
-          .getDiagnostics(localeIdentifier: _exampleLocaleIdentifier);
-      setState(() {
-        _diagnostics = diagnostics;
-        _availability = diagnostics.localAvailability;
-      });
-      _log('Platform: ${diagnostics.platform}');
-      _log('OS: ${diagnostics.operatingSystemVersion}');
-      _log('SDK: ${diagnostics.sdkVersion}');
-      _log('Current locale: ${diagnostics.currentLocaleIdentifier}');
-      _log('Target locale: ${diagnostics.targetLocaleIdentifier}');
-      _log('Preferred languages: ${diagnostics.preferredLanguages.join(', ')}');
-      _log(
-        'Local supports current locale: ${diagnostics.localSupportsCurrentLocale}',
-      );
-      _log(
-        'Local supported languages: ${diagnostics.localSupportedLanguages.join(', ')}',
-      );
-      _logLanguageSupport(
-        'Local preferred support',
-        diagnostics.localPreferredLanguageSupport,
-      );
-      _logAvailability(diagnostics.localAvailability);
-      final ModelAvailability? privateCloud =
-          diagnostics.privateCloudAvailability;
-      if (privateCloud != null) {
-        _log(
-          'PCC supports current locale: ${diagnostics.privateCloudSupportsCurrentLocale}',
-        );
-        _log(
-          'PCC supported languages: ${diagnostics.privateCloudSupportedLanguages.join(', ')}',
-        );
-        _logLanguageSupport(
-          'PCC preferred support',
-          diagnostics.privateCloudPreferredLanguageSupport,
-        );
-        _logAvailability(privateCloud);
-      }
-    });
-  }
-
-  Future<void> _checkSelectedAvailability() async {
-    await _run('Availability ${_mode.name}', () async {
+  Future<void> _refreshAvailability() async {
+    try {
       final ModelAvailability availability = await _models.checkAvailability(
-        mode: _mode,
-        cloudPolicy: _effectiveCloudPolicy(),
-        localeIdentifier: _exampleLocaleIdentifier,
+        mode: ModelMode.local,
+        localeIdentifier: 'en_US',
       );
-      setState(() {
-        _availability = availability;
-      });
-      _logAvailability(availability);
-    });
-  }
-
-  Future<void> _pickAttachment(FoundationModelsFileKind kind) async {
-    await _run('Pick ${kind.name}', () async {
-      final PickedFoundationModelsFile? file = await _models.pickFile(
-        kind: kind,
-      );
-      if (file == null) {
-        _log('File picker cancelled.');
-        return;
+      if (mounted) {
+        setState(() => _localAvailability = availability);
       }
-      setState(() {
-        _attachments.add(file);
-      });
-      _log('Attachment added: ${file.name}');
-      _log('Path: ${file.path}');
-      _log('MIME: ${file.mimeType ?? 'unknown'}');
-    });
-  }
-
-  Future<void> _pickAudio() async {
-    await _run('Pick audio', () async {
-      final PickedFoundationModelsFile? file = await _models.pickFile(
-        kind: FoundationModelsFileKind.audio,
-      );
-      if (file == null) {
-        _log('Audio picker cancelled.');
-        return;
-      }
-      setState(() {
-        _audioFile = file;
-      });
-      _log('Audio selected: ${file.name}');
-      _log('Path: ${file.path}');
-    });
-  }
-
-  Future<void> _transcribeAudio(AudioTranscriptionMode mode) async {
-    final PickedFoundationModelsFile? audioFile = _audioFile;
-    if (audioFile == null) {
-      _showSnackBar('Pick an audio file first.');
-      return;
-    }
-
-    await _run('Transcribe ${mode.name}', () async {
-      final AudioTranscriptionResult result = await _models.transcribeAudio(
-        AudioTranscriptionRequest(filePath: audioFile.path, mode: mode),
-      );
-      setState(() {
-        _transcription = result;
-      });
-      _log('Transcription mode: ${result.usedMode.name}');
-      _log('Transcription final: ${result.isFinal}');
-      _log('Segments: ${result.segments.length}');
-      _log('Transcript: ${result.text}');
-    });
-  }
-
-  void _useTranscriptAsPrompt() {
-    final AudioTranscriptionResult? transcription = _transcription;
-    if (transcription == null || transcription.text.trim().isEmpty) {
-      _showSnackBar('No transcript available.');
-      return;
-    }
-    setState(() {
-      _promptController.text = transcription.text;
-    });
-    _showSnackBar('Transcript copied to prompt.');
-  }
-
-  Future<void> _respondSelected() async {
-    await _run('Respond ${_mode.name}', () async {
-      final ModelAvailability availability = await _selectedAvailability();
-      if (!availability.isAvailable) {
-        _log(
-          'Request skipped because ${availability.mode.name} is unavailable.',
+    } on FoundationModelsException catch (error) {
+      if (mounted) {
+        setState(
+          () => _localAvailability = ModelAvailability.fromMap(
+            <Object?, Object?>{
+              'status': 'unavailable',
+              'reason': error.message,
+            },
+          ),
         );
-        return;
       }
-
-      final Prompt prompt = _buildPrompt();
-      _logPrompt(prompt);
-      final ModelResponse response = await _models.respond(
-        prompt,
-        mode: _mode,
-        cloudPolicy: _effectiveCloudPolicy(),
-        instructions: _instructionsText,
-        options: _generationOptions(),
-      );
-      _log('Used mode: ${response.usedMode.name}');
-      _log('Response: ${response.text}');
-      _logMetadata(response.metadata);
-    });
+    }
   }
 
-  Future<void> _streamSelected() async {
-    await _run('Stream ${_mode.name}', () async {
-      final ModelAvailability availability = await _selectedAvailability();
-      if (!availability.isAvailable) {
-        _log(
-          'Request skipped because ${availability.mode.name} is unavailable.',
-        );
-        return;
-      }
+  Future<void> _send() async {
+    final String text = _input.text.trim();
+    if (text.isEmpty || _sending) {
+      return;
+    }
 
-      final Prompt prompt = _buildPrompt();
-      _logPrompt(prompt);
-      final FoundationModelSession session = await _models.createSession(
-        options: SessionOptions(
-          mode: _mode,
-          cloudPolicy: _effectiveCloudPolicy(),
-          instructions: _instructionsText,
-        ),
-      );
-      _session = session;
-      setState(() {
-        _liveStreamText = '';
-      });
-
-      await for (final SessionEvent event in session.stream(
-        prompt,
-        options: _generationOptions(),
-      )) {
-        switch (event) {
-          case TextDeltaEvent():
-            setState(() {
-              _liveStreamText = event.text;
-            });
-          case CompletionEvent():
-            _log('Stream used mode: ${event.response.usedMode.name}');
-            _log('Stream completed: ${event.response.text}');
-            _logMetadata(event.response.metadata);
-          case FailureEvent():
-            _log('Stream failed: ${event.code} ${event.message}');
-          case ToolCallEvent():
-            _log('Tool call: ${event.name}');
-          case UnknownSessionEvent():
-            _log('Unknown stream event: ${event.payload}');
-        }
-      }
-
-      await session.dispose();
-      if (identical(_session, session)) {
-        _session = null;
-      }
-    });
-  }
-
-  Future<ModelAvailability> _selectedAvailability() async {
-    final ModelAvailability availability = await _models.checkAvailability(
-      mode: _mode,
-      cloudPolicy: _effectiveCloudPolicy(),
-      localeIdentifier: _exampleLocaleIdentifier,
+    await _stopLiveTranscription();
+    final PickedFoundationModelsFile? attachment = _pendingAttachment;
+    final ChatMessageView reply = ChatMessageView(
+      isUser: false,
+      text: '',
+      isStreaming: true,
     );
     setState(() {
-      _availability = availability;
-    });
-    _logAvailability(availability);
-    return availability;
-  }
-
-  Prompt _buildPrompt() {
-    final List<PromptAttachment> promptAttachments = _attachments
-        .map(
-          (PickedFoundationModelsFile file) =>
-              file.toPromptAttachment(label: file.name),
+      _sending = true;
+      _pendingAttachment = null;
+      _messages
+        ..add(
+          ChatMessageView(
+            isUser: true,
+            text: text,
+            attachmentName: attachment?.name,
+          ),
         )
-        .toList(growable: false);
-    return Prompt(
-      text: _promptController.text.trim(),
-      attachments: promptAttachments,
-    );
-  }
-
-  GenerationOptions _generationOptions() {
-    final int? maximumResponseTokens = int.tryParse(
-      _maxTokensController.text.trim(),
-    );
-    return GenerationOptions(
-      samplingMode: _samplingMode,
-      temperature: _useTemperature ? _temperature : null,
-      maximumResponseTokens: maximumResponseTokens,
-      toolCallingPolicy: _toolCallingPolicy,
-      reasoningLevel: _reasoningLevel,
-      cloudPolicy: _effectiveCloudPolicy(),
-    );
-  }
-
-  CloudPolicy _effectiveCloudPolicy() {
-    if (_mode == ModelMode.privateCloudCompute) {
-      return CloudPolicy.whenExplicit;
-    }
-    if (_mode == ModelMode.automatic && _allowCloud) {
-      return CloudPolicy.whenExplicit;
-    }
-    return CloudPolicy.never;
-  }
-
-  String? get _instructionsText {
-    final String text = _instructionsController.text.trim();
-    if (text.isEmpty) {
-      return null;
-    }
-    return text;
-  }
-
-  void _logPrompt(Prompt prompt) {
-    _log('Prompt sent: ${prompt.text}');
-    if (prompt.attachments.isNotEmpty) {
-      _log('Attachments sent: ${prompt.attachments.length}');
-    }
-  }
-
-  void _logAvailability(ModelAvailability availability) {
-    _log('Mode: ${availability.mode.name}');
-    _log('Status: ${availability.status.name}');
-    _log('Available: ${availability.isAvailable}');
-    _log('Full power: ${availability.supportsFullPower}');
-    _log('Context size: ${availability.contextSize ?? 'unknown'}');
-    if (availability.reason != null) {
-      _log('Reason: ${availability.reason}');
-    }
-    if (availability.recoverySuggestion != null) {
-      _log('Recovery: ${availability.recoverySuggestion}');
-    }
-  }
-
-  void _logLanguageSupport(String title, List<LanguageSupport> support) {
-    if (support.isEmpty) {
-      _log('$title: unknown');
-      return;
-    }
-    final String summary = support
-        .map(
-          (LanguageSupport value) => '${value.identifier}=${value.isSupported}',
-        )
-        .join(', ');
-    _log('$title: $summary');
-  }
-
-  void _logMetadata(Map<String, Object?> metadata) {
-    if (metadata.isEmpty) {
-      return;
-    }
-    _log(
-      'Metadata: ${metadata.entries.map((MapEntry<String, Object?> entry) => '${entry.key}=${entry.value}').join(', ')}',
-    );
-  }
-
-  Future<void> _run(String title, Future<void> Function() operation) async {
-    if (_isBusy) {
-      return;
-    }
-
-    setState(() {
-      _isBusy = true;
+        ..add(reply);
+      _input.clear();
     });
-    _log('--- $title ---');
+    _scrollToEnd();
 
     try {
-      await operation();
-    } on FoundationModelsException catch (error) {
-      _log('FoundationModelsException: ${error.code.name}');
-      _log(error.message);
-      if (error.recoverySuggestion != null) {
-        _log('Recovery: ${error.recoverySuggestion}');
+      final Stream<OrchestratedChatEvent> stream = _chat.sendStream(
+        text,
+        attachments: <PromptAttachment>[
+          if (attachment != null)
+            attachment.toPromptAttachment(label: attachment.name),
+        ],
+      );
+      await for (final OrchestratedChatEvent event in stream) {
+        if (!mounted) {
+          return;
+        }
+        switch (event) {
+          case OrchestratedChatTextEvent():
+            setState(() {
+              reply
+                ..text = event.text
+                ..providerName = event.route.label;
+            });
+          case OrchestratedChatCompletionEvent():
+            setState(() {
+              reply
+                ..text = event.response.text
+                ..providerName = event.response.providerName
+                ..isStreaming = false;
+            });
+        }
+        _scrollToEnd();
       }
-    } on Object catch (error) {
-      _log('Error: $error');
-    } finally {
+    } on FoundationModelsException catch (error) {
       if (mounted) {
         setState(() {
-          _isBusy = false;
+          reply
+            ..text = error.recoverySuggestion ?? error.message
+            ..providerName = 'error: ${error.code.name}'
+            ..isStreaming = false;
         });
       }
+    } finally {
+      if (mounted) {
+        setState(() => _sending = false);
+      }
+      _scrollToEnd();
     }
   }
 
-  void _log(String message) {
-    setState(() {
-      _logs.insert(0, message);
-    });
-  }
-
-  void _clearLogs() {
-    setState(() {
-      _logs.clear();
-      _liveStreamText = '';
-    });
-  }
-
-  Future<void> _copyLogs() async {
-    final String logsText = _logsText;
-    if (logsText.isEmpty) {
-      _showSnackBar('No logs to copy.');
+  Future<void> _toggleLiveTranscription() async {
+    if (_listening) {
+      await _stopLiveTranscription();
       return;
     }
 
-    await Clipboard.setData(ClipboardData(text: logsText));
+    setState(() => _listening = true);
+    _liveTranscription = _models
+        .liveTranscription(
+          request: const LiveTranscriptionRequest(
+            mode: AudioTranscriptionMode.automatic,
+          ),
+        )
+        .listen(
+          (LiveTranscriptionEvent event) {
+            _input
+              ..text = event.text
+              ..selection = TextSelection.collapsed(offset: event.text.length);
+            if (event.isFinal && mounted) {
+              setState(() => _listening = false);
+            }
+          },
+          onError: (Object error) {
+            final String message = error is FoundationModelsException
+                ? (error.recoverySuggestion ?? error.message)
+                : error.toString();
+            _showSnack(message);
+            if (mounted) {
+              setState(() => _listening = false);
+            }
+          },
+          onDone: () {
+            if (mounted && _listening) {
+              setState(() => _listening = false);
+            }
+          },
+        );
+  }
+
+  Future<void> _stopLiveTranscription() async {
+    final StreamSubscription<LiveTranscriptionEvent>? subscription =
+        _liveTranscription;
+    _liveTranscription = null;
+    if (subscription != null) {
+      await subscription.cancel();
+    }
+    if (mounted && _listening) {
+      setState(() => _listening = false);
+    }
+  }
+
+  Future<void> _pickAttachment() async {
+    try {
+      final PickedFoundationModelsFile? file = await _models.pickFile(
+        kind: FoundationModelsFileKind.image,
+      );
+      if (file != null && mounted) {
+        setState(() => _pendingAttachment = file);
+      }
+    } on FoundationModelsException catch (error) {
+      _showSnack(error.recoverySuggestion ?? error.message);
+    }
+  }
+
+  Future<void> _resetChat() async {
+    await _chat.reset();
+    if (mounted) {
+      setState(_messages.clear);
+    }
+  }
+
+  Future<void> _showDiagnostics() async {
+    try {
+      final FoundationModelsDiagnostics diagnostics = await _models
+          .getDiagnostics(localeIdentifier: 'en_US');
+      final String runtimeContext = await _orchestrator
+          .buildRuntimePromptContext(refresh: true);
+      if (!mounted) {
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: const Text('Diagnostics'),
+            content: SingleChildScrollView(
+              child: Text(
+                'OS: ${diagnostics.platform} '
+                '${diagnostics.operatingSystemVersion}\n'
+                'Locale: ${diagnostics.currentLocaleIdentifier}\n'
+                'Local model: ${diagnostics.localAvailability.status.name}\n'
+                'PCC: '
+                '${diagnostics.privateCloudAvailability?.status.name ?? 'unknown'}'
+                '\n\n$runtimeContext',
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      );
+    } on FoundationModelsException catch (error) {
+      _showSnack(error.recoverySuggestion ?? error.message);
+    }
+  }
+
+  void _showSnack(String message) {
     if (!mounted) {
       return;
     }
-    _showSnackBar('Copied ${_logs.length} log entries.');
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _clearAttachments() {
-    setState(_attachments.clear);
-  }
-
-  String get _logsText {
-    return _logs.join('\n\n');
-  }
-
-  void _showSnackBar(String message) {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        unawaited(
+          _scroll.animateTo(
+            _scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          ),
+        );
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final ModelAvailability? availability = _localAvailability;
+    final bool localReady = availability?.isAvailable ?? false;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Foundation Models'),
+        title: const Text('Foundation Models Chat'),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Copy logs',
-            onPressed: _copyLogs,
-            icon: const Icon(Icons.copy_all_outlined),
+            tooltip: 'Diagnostics',
+            onPressed: _showDiagnostics,
+            icon: const Icon(Icons.info_outline),
           ),
           IconButton(
-            tooltip: 'Clear logs',
-            onPressed: _clearLogs,
-            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Reset conversation',
+            onPressed: _sending ? null : _resetChat,
+            icon: const Icon(Icons.refresh),
           ),
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
           children: <Widget>[
-            _StatusPanel(
-              isBusy: _isBusy,
-              allowCloud: _allowCloud,
-              capabilities: _capabilities,
-              availability: _availability,
-              diagnostics: _diagnostics,
-              liveStreamText: _liveStreamText,
-              onCloudChanged: (bool value) {
-                setState(() {
-                  _allowCloud = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            _ModelControls(
-              isBusy: _isBusy,
-              mode: _mode,
-              samplingMode: _samplingMode,
-              toolCallingPolicy: _toolCallingPolicy,
-              reasoningLevel: _reasoningLevel,
-              useTemperature: _useTemperature,
-              temperature: _temperature,
-              maxTokensController: _maxTokensController,
-              onModeChanged: (ModelMode value) {
-                setState(() {
-                  _mode = value;
-                });
-              },
-              onSamplingChanged: (SamplingMode value) {
-                setState(() {
-                  _samplingMode = value;
-                });
-              },
-              onToolCallingChanged: (ToolCallingPolicy value) {
-                setState(() {
-                  _toolCallingPolicy = value;
-                });
-              },
-              onReasoningChanged: (ReasoningLevel value) {
-                setState(() {
-                  _reasoningLevel = value;
-                });
-              },
-              onUseTemperatureChanged: (bool value) {
-                setState(() {
-                  _useTemperature = value;
-                });
-              },
-              onTemperatureChanged: (double value) {
-                setState(() {
-                  _temperature = value;
-                });
-              },
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _instructionsController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Instructions',
-                border: OutlineInputBorder(),
+            if (availability != null && !localReady)
+              MaterialBanner(
+                content: Text(
+                  'Apple on-device model unavailable: '
+                  '${availability.recoverySuggestion ?? availability.reason ?? availability.status.name}',
+                ),
+                leading: const Icon(Icons.warning_amber),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: _refreshAvailability,
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
+            Expanded(
+              child: _messages.isEmpty
+                  ? _EmptyChatHint(
+                      localReady: localReady,
+                      hasExternalProvider: geminiApiKey.isNotEmpty,
+                    )
+                  : ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.all(12),
+                      itemCount: _messages.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        return _MessageBubble(message: _messages[index]);
+                      },
+                    ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _promptController,
-              minLines: 3,
-              maxLines: 8,
-              decoration: const InputDecoration(
-                labelText: 'Prompt',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _AttachmentPanel(
-              attachments: _attachments,
-              audioFile: _audioFile,
-              transcription: _transcription,
-              onPickText: _isBusy
-                  ? null
-                  : () => _pickAttachment(FoundationModelsFileKind.text),
-              onPickImage: _isBusy
-                  ? null
-                  : () => _pickAttachment(FoundationModelsFileKind.image),
-              onPickAny: _isBusy
-                  ? null
-                  : () => _pickAttachment(FoundationModelsFileKind.any),
-              onPickAudio: _isBusy ? null : _pickAudio,
-              onTranscribeOnDevice: _isBusy
-                  ? null
-                  : () => _transcribeAudio(AudioTranscriptionMode.onDevice),
-              onTranscribeServer: _isBusy
-                  ? null
-                  : () => _transcribeAudio(AudioTranscriptionMode.server),
-              onUseTranscript: _isBusy ? null : _useTranscriptAsPrompt,
-              onClearAttachments: _attachments.isEmpty
-                  ? null
-                  : _clearAttachments,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                FilledButton(
-                  onPressed: _isBusy ? null : _loadCapabilities,
-                  child: const Text('Capabilities'),
-                ),
-                FilledButton(
-                  onPressed: _isBusy ? null : _loadDiagnostics,
-                  child: const Text('Diagnostics'),
-                ),
-                FilledButton.tonal(
-                  onPressed: _isBusy ? null : _checkSelectedAvailability,
-                  child: const Text('Availability'),
-                ),
-                FilledButton(
-                  onPressed: _isBusy ? null : _respondSelected,
-                  child: const Text('Respond'),
-                ),
-                OutlinedButton(
-                  onPressed: _isBusy ? null : _streamSelected,
-                  child: const Text('Stream'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'Logs',
-                    style: Theme.of(context).textTheme.titleMedium,
+            if (_pendingAttachment != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InputChip(
+                    avatar: const Icon(Icons.image_outlined, size: 18),
+                    label: Text(_pendingAttachment!.name),
+                    onDeleted: () => setState(() => _pendingAttachment = null),
                   ),
                 ),
-                TextButton.icon(
-                  onPressed: _copyLogs,
-                  icon: const Icon(Icons.copy_all_outlined),
-                  label: const Text('Copy all'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.outlineVariant,
-                ),
-                borderRadius: BorderRadius.circular(8),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: SelectableText(
-                  _logs.isEmpty ? 'No logs yet.' : _logsText,
-                ),
-              ),
+            _InputBar(
+              controller: _input,
+              sending: _sending,
+              listening: _listening,
+              onPickAttachment: _pickAttachment,
+              onToggleMicrophone: _toggleLiveTranscription,
+              onSend: _send,
             ),
           ],
         ),
@@ -661,67 +529,114 @@ final class _FoundationModelsExamplePageState
   }
 }
 
-final class _StatusPanel extends StatelessWidget {
-  const _StatusPanel({
-    required this.isBusy,
-    required this.allowCloud,
-    required this.capabilities,
-    required this.availability,
-    required this.diagnostics,
-    required this.liveStreamText,
-    required this.onCloudChanged,
+final class _EmptyChatHint extends StatelessWidget {
+  const _EmptyChatHint({
+    required this.localReady,
+    required this.hasExternalProvider,
   });
 
-  final bool isBusy;
-  final bool allowCloud;
-  final FoundationModelsCapabilities? capabilities;
-  final ModelAvailability? availability;
-  final FoundationModelsDiagnostics? diagnostics;
-  final String liveStreamText;
-  final ValueChanged<bool> onCloudChanged;
+  final bool localReady;
+  final bool hasExternalProvider;
 
   @override
   Widget build(BuildContext context) {
-    final String mode = capabilities?.preferredMode.name ?? 'unknown';
-    final String status = availability?.status.name ?? 'not checked';
-    final bool fullPower = capabilities?.supportsFullPower ?? false;
-    final String locale = diagnostics?.currentLocaleIdentifier ?? 'unknown';
-    final String targetLocale = diagnostics?.targetLocaleIdentifier ?? 'en_US';
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
-      ),
+    final String routes = <String>[
+      if (localReady) 'Apple on-device model',
+      'Private Cloud Compute (when available)',
+      if (hasExternalProvider) 'Gemini fallback',
+    ].join(' + ');
+    return Center(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.forum_outlined, size: 56),
+            const SizedBox(height: 12),
+            Text(
+              'Start chatting with $routes.\n\n'
+              'Use the mic for live transcription and the image button to '
+              'attach a picture to your prompt.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _MessageBubble extends StatelessWidget {
+  const _MessageBubble({required this.message});
+
+  final ChatMessageView message;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final bool isUser = message.isUser;
+    final String body = message.text.isEmpty && message.isStreaming
+        ? '…'
+        : message.text;
+
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.sizeOf(context).width * 0.8,
+        ),
+        decoration: BoxDecoration(
+          color: isUser ? colors.primary : colors.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    isBusy ? 'Running request' : 'Ready',
-                    style: Theme.of(context).textTheme.titleMedium,
+            if (message.attachmentName != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.attachment,
+                      size: 14,
+                      color: isUser ? colors.onPrimary : colors.onSurface,
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        message.attachmentName!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isUser ? colors.onPrimary : colors.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text(
+              body,
+              style: TextStyle(
+                color: isUser ? colors.onPrimary : colors.onSurface,
+              ),
+            ),
+            if (!isUser && message.providerName != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  message.isStreaming
+                      ? '${message.providerName} · streaming'
+                      : message.providerName!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
-                Switch(
-                  value: allowCloud,
-                  onChanged: isBusy ? null : onCloudChanged,
-                ),
-              ],
-            ),
-            Text('Cloud allowed in automatic: $allowCloud'),
-            Text('Preferred mode: $mode'),
-            Text('Availability: $status'),
-            Text('Full power: $fullPower'),
-            Text('Locale: $locale'),
-            Text('Target locale: $targetLocale'),
-            if (liveStreamText.isNotEmpty) ...<Widget>[
-              const SizedBox(height: 8),
-              SelectableText('Live stream: $liveStreamText'),
-            ],
+              ),
           ],
         ),
       ),
@@ -729,266 +644,79 @@ final class _StatusPanel extends StatelessWidget {
   }
 }
 
-final class _ModelControls extends StatelessWidget {
-  const _ModelControls({
-    required this.isBusy,
-    required this.mode,
-    required this.samplingMode,
-    required this.toolCallingPolicy,
-    required this.reasoningLevel,
-    required this.useTemperature,
-    required this.temperature,
-    required this.maxTokensController,
-    required this.onModeChanged,
-    required this.onSamplingChanged,
-    required this.onToolCallingChanged,
-    required this.onReasoningChanged,
-    required this.onUseTemperatureChanged,
-    required this.onTemperatureChanged,
+final class _InputBar extends StatelessWidget {
+  const _InputBar({
+    required this.controller,
+    required this.sending,
+    required this.listening,
+    required this.onPickAttachment,
+    required this.onToggleMicrophone,
+    required this.onSend,
   });
 
-  final bool isBusy;
-  final ModelMode mode;
-  final SamplingMode samplingMode;
-  final ToolCallingPolicy toolCallingPolicy;
-  final ReasoningLevel reasoningLevel;
-  final bool useTemperature;
-  final double temperature;
-  final TextEditingController maxTokensController;
-  final ValueChanged<ModelMode> onModeChanged;
-  final ValueChanged<SamplingMode> onSamplingChanged;
-  final ValueChanged<ToolCallingPolicy> onToolCallingChanged;
-  final ValueChanged<ReasoningLevel> onReasoningChanged;
-  final ValueChanged<bool> onUseTemperatureChanged;
-  final ValueChanged<double> onTemperatureChanged;
+  final TextEditingController controller;
+  final bool sending;
+  final bool listening;
+  final VoidCallback onPickAttachment;
+  final VoidCallback onToggleMicrophone;
+  final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: <Widget>[
-            _EnumDropdown<ModelMode>(
-              label: 'Mode',
-              value: mode,
-              values: ModelMode.values,
-              enabled: !isBusy,
-              onChanged: onModeChanged,
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: <Widget>[
+          IconButton(
+            tooltip: 'Attach image',
+            onPressed: sending ? null : onPickAttachment,
+            icon: const Icon(Icons.image_outlined),
+          ),
+          IconButton(
+            tooltip: listening
+                ? 'Stop live transcription'
+                : 'Start live transcription',
+            onPressed: sending ? null : onToggleMicrophone,
+            icon: Icon(
+              listening ? Icons.mic : Icons.mic_none,
+              color: listening ? colors.error : null,
             ),
-            const SizedBox(height: 12),
-            _EnumDropdown<SamplingMode>(
-              label: 'Sampling',
-              value: samplingMode,
-              values: SamplingMode.values,
-              enabled: !isBusy,
-              onChanged: onSamplingChanged,
-            ),
-            const SizedBox(height: 12),
-            _EnumDropdown<ToolCallingPolicy>(
-              label: 'Tool calling',
-              value: toolCallingPolicy,
-              values: ToolCallingPolicy.values,
-              enabled: !isBusy,
-              onChanged: onToolCallingChanged,
-            ),
-            const SizedBox(height: 12),
-            _EnumDropdown<ReasoningLevel>(
-              label: 'Reasoning',
-              value: reasoningLevel,
-              values: ReasoningLevel.values,
-              enabled: !isBusy,
-              onChanged: onReasoningChanged,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: maxTokensController,
-              enabled: !isBusy,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Maximum response tokens',
-                border: OutlineInputBorder(),
+          ),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              minLines: 1,
+              maxLines: 5,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => onSend(),
+              decoration: InputDecoration(
+                hintText: listening ? 'Listening…' : 'Message',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
               ),
             ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Temperature'),
-              subtitle: Text(
-                useTemperature ? temperature.toStringAsFixed(2) : 'Default',
-              ),
-              value: useTemperature,
-              onChanged: isBusy ? null : onUseTemperatureChanged,
-            ),
-            Slider(
-              value: temperature,
-              max: 2,
-              divisions: 20,
-              onChanged: isBusy || !useTemperature
-                  ? null
-                  : onTemperatureChanged,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 4),
+          IconButton.filled(
+            tooltip: 'Send',
+            onPressed: sending ? null : onSend,
+            icon: sending
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.arrow_upward),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-final class _AttachmentPanel extends StatelessWidget {
-  const _AttachmentPanel({
-    required this.attachments,
-    required this.audioFile,
-    required this.transcription,
-    required this.onPickText,
-    required this.onPickImage,
-    required this.onPickAny,
-    required this.onPickAudio,
-    required this.onTranscribeOnDevice,
-    required this.onTranscribeServer,
-    required this.onUseTranscript,
-    required this.onClearAttachments,
-  });
-
-  final List<PickedFoundationModelsFile> attachments;
-  final PickedFoundationModelsFile? audioFile;
-  final AudioTranscriptionResult? transcription;
-  final VoidCallback? onPickText;
-  final VoidCallback? onPickImage;
-  final VoidCallback? onPickAny;
-  final VoidCallback? onPickAudio;
-  final VoidCallback? onTranscribeOnDevice;
-  final VoidCallback? onTranscribeServer;
-  final VoidCallback? onUseTranscript;
-  final VoidCallback? onClearAttachments;
-
-  @override
-  Widget build(BuildContext context) {
-    final String attachmentText = attachments.isEmpty
-        ? 'No prompt attachments'
-        : attachments
-              .map(
-                (PickedFoundationModelsFile file) =>
-                    '${file.kind.name}: ${file.name}',
-              )
-              .join('\n');
-    final String audioText = audioFile == null
-        ? 'No audio selected'
-        : audioFile!.name;
-    final String transcriptText = transcription == null
-        ? 'No transcript'
-        : transcription!.text;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text('Inputs', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                OutlinedButton(
-                  onPressed: onPickText,
-                  child: const Text('Pick text'),
-                ),
-                OutlinedButton(
-                  onPressed: onPickImage,
-                  child: const Text('Pick image'),
-                ),
-                OutlinedButton(
-                  onPressed: onPickAny,
-                  child: const Text('Pick any'),
-                ),
-                TextButton(
-                  onPressed: onClearAttachments,
-                  child: const Text('Clear attachments'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SelectableText(attachmentText),
-            const Divider(height: 24),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: <Widget>[
-                OutlinedButton(
-                  onPressed: onPickAudio,
-                  child: const Text('Pick audio'),
-                ),
-                FilledButton.tonal(
-                  onPressed: onTranscribeOnDevice,
-                  child: const Text('Transcribe local'),
-                ),
-                FilledButton.tonal(
-                  onPressed: onTranscribeServer,
-                  child: const Text('Transcribe server'),
-                ),
-                TextButton(
-                  onPressed: onUseTranscript,
-                  child: const Text('Use transcript'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SelectableText('Audio: $audioText'),
-            const SizedBox(height: 8),
-            SelectableText('Transcript: $transcriptText'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-final class _EnumDropdown<T extends Enum> extends StatelessWidget {
-  const _EnumDropdown({
-    required this.label,
-    required this.value,
-    required this.values,
-    required this.enabled,
-    required this.onChanged,
-  });
-
-  final String label;
-  final T value;
-  final List<T> values;
-  final bool enabled;
-  final ValueChanged<T> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<T>(
-      initialValue: value,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      items: values
-          .map(
-            (T item) =>
-                DropdownMenuItem<T>(value: item, child: Text(item.name)),
-          )
-          .toList(growable: false),
-      onChanged: enabled
-          ? (T? selected) {
-              if (selected != null) {
-                onChanged(selected);
-              }
-            }
-          : null,
     );
   }
 }

@@ -103,6 +103,18 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   }
 
   @override
+  Stream<LiveTranscriptionEvent> liveTranscription({
+    required LiveTranscriptionRequest request,
+  }) {
+    calls.add('liveTranscription');
+    return Stream<LiveTranscriptionEvent>.fromIterable(
+      const <LiveTranscriptionEvent>[
+        LiveTranscriptionEvent(text: 'live', isFinal: true),
+      ],
+    );
+  }
+
+  @override
   Future<ModelResponse> respond({
     required String sessionId,
     required Prompt prompt,
