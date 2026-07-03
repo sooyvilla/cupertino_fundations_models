@@ -3,6 +3,7 @@ export 'src/cupertino_foundation_models.dart';
 export 'src/errors.dart';
 export 'src/file_selection.dart';
 export 'src/generation.dart';
+export 'src/orchestration.dart';
 export 'src/schema.dart';
 export 'src/session.dart';
 export 'src/tools.dart';

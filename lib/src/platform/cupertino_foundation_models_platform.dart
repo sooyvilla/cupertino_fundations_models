@@ -31,6 +31,10 @@ abstract interface class CupertinoFoundationModelsPlatform {
     required AudioTranscriptionRequest request,
   });
 
+  Stream<LiveTranscriptionEvent> liveTranscription({
+    required LiveTranscriptionRequest request,
+  });
+
   Future<ModelResponse> respond({
     required String sessionId,
     required Prompt prompt,

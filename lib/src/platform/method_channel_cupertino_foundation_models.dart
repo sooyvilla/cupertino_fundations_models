@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/services.dart';
 
@@ -8,6 +9,7 @@ import '../file_selection.dart';
 import '../generation.dart';
 import '../schema.dart';
 import '../session.dart';
+import '../tools.dart';
 import '../transcription.dart';
 import 'cupertino_foundation_models_platform.dart';
 
@@ -17,15 +19,26 @@ final class MethodChannelCupertinoFoundationModels
   MethodChannelCupertinoFoundationModels({
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
+    EventChannel? transcriptionEventChannel,
   }) : _methodChannel =
            methodChannel ??
            const MethodChannel('cupertino_fundations_models/methods'),
        _eventChannel =
            eventChannel ??
-           const EventChannel('cupertino_fundations_models/events');
+           const EventChannel('cupertino_fundations_models/events'),
+       _transcriptionEventChannel =
+           transcriptionEventChannel ??
+           const EventChannel(
+             'cupertino_fundations_models/transcription_events',
+           ) {
+    _methodChannel.setMethodCallHandler(_handleNativeCall);
+  }
 
   final MethodChannel _methodChannel;
   final EventChannel _eventChannel;
+  final EventChannel _transcriptionEventChannel;
+  final Map<String, FoundationModelSession> _liveSessions =
+      <String, FoundationModelSession>{};
 
   @override
   Future<FoundationModelsCapabilities> getCapabilities() async {
@@ -67,12 +80,16 @@ final class MethodChannelCupertinoFoundationModels
     final String sessionId = (map['sessionId'] as String?) ?? '';
     final String modeName = (map['mode'] as String?) ?? options.mode.name;
 
-    return FoundationModelSession(
+    final FoundationModelSession session = FoundationModelSession(
       id: sessionId,
       mode: _modeFromName(modeName),
       platform: this,
       tools: options.tools,
     );
+    if (options.tools.isNotEmpty) {
+      _liveSessions[sessionId] = session;
+    }
+    return session;
   }
 
   @override
@@ -94,6 +111,43 @@ final class MethodChannelCupertinoFoundationModels
   }) async {
     final Object? response = await _invoke('transcribeAudio', request.toMap());
     return AudioTranscriptionResult.fromMap(_asMap(response));
+  }
+
+  @override
+  Stream<LiveTranscriptionEvent> liveTranscription({
+    required LiveTranscriptionRequest request,
+  }) {
+    final Stream<Object?> nativeStream = _transcriptionEventChannel
+        .receiveBroadcastStream(request.toMap())
+        .cast<Object?>();
+    return nativeStream.transform<LiveTranscriptionEvent>(
+      StreamTransformer<Object?, LiveTranscriptionEvent>.fromHandlers(
+        handleData: (Object? event, EventSink<LiveTranscriptionEvent> sink) {
+          final LiveTranscriptionEvent parsed = LiveTranscriptionEvent.fromMap(
+            _asMap(event),
+          );
+          sink.add(parsed);
+          if (parsed.isFinal) {
+            sink.close();
+          }
+        },
+        handleError:
+            (
+              Object error,
+              StackTrace stackTrace,
+              EventSink<LiveTranscriptionEvent> sink,
+            ) {
+              if (error is PlatformException) {
+                sink.addError(
+                  FoundationModelsException.fromPlatformException(error),
+                  stackTrace,
+                );
+                return;
+              }
+              sink.addError(error, stackTrace);
+            },
+      ),
+    );
   }
 
   @override
@@ -188,9 +242,51 @@ final class MethodChannelCupertinoFoundationModels
 
   @override
   Future<void> disposeSession({required String sessionId}) async {
+    _liveSessions.remove(sessionId);
     await _invoke<void>('disposeSession', <String, Object?>{
       'sessionId': sessionId,
     });
+  }
+
+  /// Handles calls initiated by the native side, currently tool invocations.
+  Future<Object?> _handleNativeCall(MethodCall call) async {
+    if (call.method != 'toolCall') {
+      return null;
+    }
+
+    final Map<Object?, Object?> arguments = _asMap(call.arguments);
+    final String sessionId = (arguments['sessionId'] as String?) ?? '';
+    final String name = (arguments['name'] as String?) ?? '';
+    final FoundationModelSession? session = _liveSessions[sessionId];
+    if (session == null) {
+      return const ToolResult.failure(
+        'No live session with registered tools was found.',
+      ).toMap();
+    }
+
+    final ToolResult result = await session.resolveToolCall(
+      ToolCall(
+        id: (arguments['toolCallId'] as String?) ?? '',
+        name: name,
+        arguments: _decodeToolArguments(arguments['argumentsJson'] as String?),
+      ),
+    );
+    return result.toMap();
+  }
+
+  Map<String, Object?> _decodeToolArguments(String? argumentsJson) {
+    if (argumentsJson == null || argumentsJson.isEmpty) {
+      return <String, Object?>{};
+    }
+    try {
+      final Object? decoded = jsonDecode(argumentsJson);
+      if (decoded is Map<String, dynamic>) {
+        return decoded.cast<String, Object?>();
+      }
+      return <String, Object?>{'value': decoded};
+    } on FormatException {
+      return <String, Object?>{'raw': argumentsJson};
+    }
   }
 
   Future<T?> _invoke<T>(String method, [Object? arguments]) async {

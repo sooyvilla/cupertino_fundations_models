@@ -49,20 +49,28 @@ Implemented:
 - `stream()` through `FoundationModelSession`
 - `pickFile()`
 - `transcribeAudio()`
+- `liveTranscription()` streaming microphone speech-to-text with partial results; uses `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ and falls back to `SFSpeechRecognizer`.
+- Native tool calling: `SessionOptions.tools` registers Dart `ModelTool`s on the native session; the model calls back into Dart over the method channel (`toolCall`), with per-tool timeouts enforced in Dart.
+- Native guided structured generation: `generateStructured()` maps the Dart `StructuredSchema` to `DynamicGenerationSchema` and returns model-validated JSON in `structuredValue`.
+- `prewarm()` and `cancelActiveRequest()` are real native calls; cancellation maps to the `cancelled` error code.
+- `SessionOptions.useCase` selects the `contentTagging` on-device model variant.
+- `FoundationModelsOrchestrator` for Apple-first, external-first, local-only, and hybrid routing.
+- `FoundationModelsChatSession` through `orchestrator.startChat()`: multi-turn hybrid chat with shared history across Apple and external routes, `send()`, `sendStream()`, `reset()`, and `dispose()`.
+- External provider adapters through `FoundationModelsExternalProvider` (including `respondStream()` for streaming) and `FoundationModelsExternalTranscriptionProvider`.
 - Dart DTOs for prompts, attachments, options, schemas, responses, stream events, tools, diagnostics, file selection, transcription, and typed errors.
 - Native preflight availability checks before session creation.
 - Native prompt construction from text, text files, and iOS 27 image attachments.
 - iOS 27 `ContextOptions.reasoningLevel` mapping.
 - iOS 27 usage metadata when Apple exposes it.
+- Any feature that requires iOS 27 must be compiled with Xcode 27, either beta or official when available.
+- On the iOS 27 beta, Foundation Models currently require the device to be fully configured in English, including system language and Siri language.
 
 Pending:
 
-- Native tool calling execution bridge.
-- Native guided structured generation.
 - Direct Photos picker.
-- Live microphone transcription.
-- Dynamic Profiles.
-- External model providers.
+- Token counting (`tokenCount(for:)`, iOS 26.4+).
+- `SpeechAnalyzer` adoption for audio-file transcription (live already uses it).
+- Dynamic Profiles and the iOS 27 `LanguageModel` protocol bridge.
 
 ## Important Files
 
@@ -71,19 +79,24 @@ Pending:
 - `lib/src/availability.dart`: modes, cloud policies, capabilities, availability, quota, and diagnostics.
 - `lib/src/file_selection.dart`: file picker DTOs.
 - `lib/src/generation.dart`: prompt, attachments, generation options, responses, and stream events.
+- `lib/src/orchestration.dart`: optional high-level router for local/PCC/external hybrid apps.
 - `lib/src/session.dart`: session handle and lifecycle.
 - `lib/src/transcription.dart`: audio transcription contracts.
 - `lib/src/schema.dart`: runtime schema model for guided generation.
 - `lib/src/tools.dart`: Dart tool contracts.
 - `lib/src/errors.dart`: stable typed errors.
 - `lib/src/platform/method_channel_cupertino_foundation_models.dart`: MethodChannel and EventChannel implementation.
-- `ios/Classes/AvailabilityService.swift`: native capabilities and availability.
-- `ios/Classes/CupertinoFoundationModelsPlugin.swift`: Flutter plugin registration and method routing.
-- `ios/Classes/FileSelectionService.swift`: native `UIDocumentPickerViewController`.
-- `ios/Classes/SessionRegistry.swift`: actor that owns native model sessions.
-- `ios/Classes/SpeechTranscriptionService.swift`: `SFSpeechURLRecognitionRequest` transcription.
-- `ios/Classes/ErrorMapper.swift`: Swift error to `FlutterError` mapping.
-- `example/lib/main.dart`: manual validation console.
+- `ios/cupertino_fundations_models/Package.swift`: Swift Package Manager manifest; sources live under `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/` and the podspec points at the same files.
+- `.../Sources/cupertino_fundations_models/AvailabilityService.swift`: native capabilities and availability.
+- `.../Sources/cupertino_fundations_models/CupertinoFoundationModelsPlugin.swift`: Flutter plugin registration, method routing, and per-session request/stream task tracking for cancellation.
+- `.../Sources/cupertino_fundations_models/FileSelectionService.swift`: native `UIDocumentPickerViewController`.
+- `.../Sources/cupertino_fundations_models/SessionRegistry.swift`: actor that owns native model sessions, tools, prewarm, and structured generation.
+- `.../Sources/cupertino_fundations_models/SchemaMapper.swift`: Dart schema maps to `DynamicGenerationSchema`/`GenerationSchema`.
+- `.../Sources/cupertino_fundations_models/ToolBridge.swift`: forwards native tool calls to Dart and returns the result to the model.
+- `.../Sources/cupertino_fundations_models/SpeechTranscriptionService.swift`: `SFSpeechURLRecognitionRequest` file transcription.
+- `.../Sources/cupertino_fundations_models/LiveTranscriptionService.swift`: live microphone transcription; `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ with an `SFSpeechRecognizer` fallback, exposed through the `cupertino_fundations_models/transcription_events` event channel.
+- `.../Sources/cupertino_fundations_models/ErrorMapper.swift`: Swift error to `FlutterError` mapping, including `CancellationError` to `cancelled`.
+- `example/lib/main.dart`: chat example with hybrid orchestration, streaming, live transcription, tool calling, and attachments.
 
 ## Conversation Context
 
@@ -119,7 +132,7 @@ Context is not infinite. Apple documents context-window constraints, and the loc
 
 `ModelMode.local` uses the on-device model. Pair it with `CloudPolicy.never` for offline behavior.
 
-`ModelMode.privateCloudCompute` explicitly asks for Apple's Private Cloud Compute path. It requires iOS 27+, an SDK that exposes `PrivateCloudComputeLanguageModel`, Apple availability, network, quota, and entitlement.
+`ModelMode.privateCloudCompute` explicitly asks for Apple's Private Cloud Compute path. It requires iOS 27+, Xcode 27 beta or official, an SDK that exposes `PrivateCloudComputeLanguageModel`, Apple availability, network, quota, and entitlement.
 
 `ModelMode.automatic` uses the best path allowed by `CloudPolicy`. It must never send work to cloud when `CloudPolicy.never` is set.
 
@@ -130,6 +143,64 @@ Context is not infinite. Apple documents context-window constraints, and the loc
 `CloudPolicy.whenExplicit` allows cloud only when the caller explicitly asks for a cloud-capable mode.
 
 `CloudPolicy.automaticWithUserConsent` is reserved for apps that have their own durable user consent flow.
+
+## Hybrid Orchestration
+
+Use `FoundationModelsOrchestrator` when an app already has a larger AI layer and
+wants this package to act as primary, secondary, or local cost-saving route.
+
+```dart
+final FoundationModelsOrchestrator ai = FoundationModelsOrchestrator(
+  defaults: const FoundationModelsDefaults(
+    localeIdentifier: 'es_CO',
+    instructions: 'Respond in Spanish. Prefer Apple local routes when enough.',
+  ),
+  router: FoundationModelsRoutingPolicy.hybrid(
+    allowPrivateCloud: true,
+    allowExternalFallback: true,
+  ),
+  externalProvider: MyExternalProvider(),
+);
+
+final String context = await ai.buildRuntimePromptContext();
+final OrchestratedModelResponse response = await ai.respondText(
+  'Improve this user message.',
+  task: FoundationModelsTask.rewrite,
+);
+```
+
+Routing policy guidance:
+
+- `localOnly()`: use for strict offline behavior.
+- `appleFirst()`: use when Apple local/PCC should be primary and external models are fallback.
+- `externalFirst()`: use when the app's existing cloud model remains primary and Apple models are fallback.
+- `hybrid()`: use for cost optimization; simple tasks try Apple first, complex reasoning and tool routing try the external provider first.
+
+`buildRuntimePromptContext()` returns a short prompt block that can be injected
+into a larger model so it knows Apple local/PCC routes exist and when they are
+available. Do not log that block together with user prompts unless the host app
+has its own logging policy.
+
+For multi-turn conversations across routes, use the hybrid chat session:
+
+```dart
+final FoundationModelsChatSession chat = ai.startChat(
+  instructions: 'You are a concise assistant.',
+);
+
+final OrchestratedModelResponse first = await chat.send('Hello.');
+await for (final OrchestratedChatEvent event in chat.sendStream('More.')) {
+  // OrchestratedChatTextEvent carries cumulative snapshots;
+  // OrchestratedChatCompletionEvent carries the final response.
+}
+await chat.dispose();
+```
+
+Apple turns reuse one persistent native session. External turns receive the
+shared history through `FoundationModelsRequest.history`, so a stateless HTTP
+provider rebuilds the same conversation. If routing falls back and returns to
+Apple, the chat recreates the native session and replays the history in the
+prompt.
 
 ## Availability Workflow
 
@@ -253,7 +324,22 @@ final ModelResponse response = await models.respond(
 );
 ```
 
-The host app must include `NSSpeechRecognitionUsageDescription`. Keep `NSMicrophoneUsageDescription` when adding live microphone capture.
+Live microphone transcription streams partial results and stops when the
+subscription is cancelled:
+
+```dart
+final StreamSubscription<LiveTranscriptionEvent> dictation = models
+    .liveTranscription(
+      request: const LiveTranscriptionRequest(
+        mode: AudioTranscriptionMode.automatic,
+      ),
+    )
+    .listen((LiveTranscriptionEvent event) {
+      // event.text is a cumulative snapshot; event.isFinal closes the stream.
+    });
+```
+
+The host app must include `NSSpeechRecognitionUsageDescription`, and `NSMicrophoneUsageDescription` for live microphone transcription.
 
 ## SEO And Pub.dev Checklist
 
@@ -280,6 +366,8 @@ Run:
 cd example && /Users/villa/Developer/tools/flutter/bin/flutter analyze
 cd example && DEVELOPER_DIR=/Users/villa/Downloads/Xcode-beta.app/Contents/Developer /Users/villa/Developer/tools/flutter/bin/flutter build ios --no-codesign
 ```
+
+Use Xcode 27 beta or the official Xcode 27 release for every iOS 27 feature. During the iOS 27 beta, validate Foundation Models on a device fully configured in English.
 
 Before publishing, run:
 

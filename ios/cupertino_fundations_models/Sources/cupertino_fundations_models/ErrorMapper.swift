@@ -11,6 +11,9 @@ enum ErrorMapper {
     }
 
     static func flutterError(from error: Error) -> FlutterError {
+        if error is CancellationError {
+            return flutterError(code: "cancelled", message: "The request was cancelled.")
+        }
         if let nativeError: NativeSessionError = error as? NativeSessionError {
             switch nativeError {
             case .sessionNotFound:

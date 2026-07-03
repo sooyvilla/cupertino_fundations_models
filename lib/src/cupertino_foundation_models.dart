@@ -69,6 +69,17 @@ final class CupertinoFoundationModels {
     return _platform.transcribeAudio(request: request);
   }
 
+  /// Starts live microphone transcription through Apple's Speech framework.
+  ///
+  /// Events carry the best transcription snapshot recognized so far. The
+  /// stream closes after the first event marked `isFinal`, and cancelling the
+  /// subscription stops the microphone capture and finalizes recognition.
+  Stream<LiveTranscriptionEvent> liveTranscription({
+    LiveTranscriptionRequest request = const LiveTranscriptionRequest(),
+  }) {
+    return _platform.liveTranscription(request: request);
+  }
+
   Future<ModelResponse> respond(
     Prompt prompt, {
     ModelMode mode = ModelMode.automatic,

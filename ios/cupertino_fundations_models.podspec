@@ -7,7 +7,10 @@ Pod::Spec.new do |s|
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Sebastian Villa' => 'sooyvilla' }
   s.source           = { :path => '.' }
-  s.source_files     = 'Classes/**/*'
+  s.source_files     = 'cupertino_fundations_models/Sources/cupertino_fundations_models/**/*.swift'
+  s.resource_bundles = {
+    'cupertino_fundations_models_privacy' => ['cupertino_fundations_models/Sources/cupertino_fundations_models/PrivacyInfo.xcprivacy']
+  }
   s.dependency 'Flutter'
   s.platform         = :ios, '15.0'
   s.swift_version    = '5.0'

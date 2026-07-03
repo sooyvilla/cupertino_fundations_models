@@ -6,6 +6,11 @@ import FoundationModels
 
 actor SessionRegistry {
     private var sessions: [String: NativeSession] = [:]
+    private var toolBridge: ToolBridge?
+
+    func configure(toolBridge: ToolBridge) {
+        self.toolBridge = toolBridge
+    }
 
     func createSession(arguments: [String: Any]) throws -> [String: Any] {
         let id: String = UUID().uuidString
@@ -16,6 +21,8 @@ actor SessionRegistry {
             mode: mode,
             cloudPolicy: cloudPolicy,
             instructions: arguments["instructions"] as? String,
+            useCase: arguments["useCase"] as? String,
+            toolMaps: arguments["tools"] as? [[String: Any]] ?? [],
             metadata: arguments["metadata"] as? [String: Any] ?? [:]
         )
         sessions[id] = session
@@ -23,6 +30,61 @@ actor SessionRegistry {
             "sessionId": id,
             "mode": session.mode
         ]
+    }
+
+    func prewarm(arguments: [String: Any]) throws {
+        guard let id: String = arguments["sessionId"] as? String,
+              let session: NativeSession = sessions[id] else {
+            throw NativeSessionError.sessionNotFound
+        }
+
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *),
+           let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
+            if let promptMap: [String: Any] = arguments["promptPrefix"] as? [String: Any] {
+                let prompt: Prompt = try makePrompt(promptMap: promptMap)
+                languageSession.prewarm(promptPrefix: prompt)
+            } else {
+                languageSession.prewarm()
+            }
+        }
+        #endif
+    }
+
+    func respondStructured(arguments: [String: Any]) async throws -> [String: Any] {
+        guard let id: String = arguments["sessionId"] as? String,
+              let session: NativeSession = sessions[id] else {
+            throw NativeSessionError.sessionNotFound
+        }
+
+        let promptMap: [String: Any] = arguments["prompt"] as? [String: Any] ?? [:]
+
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *),
+           let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
+            let prompt: Prompt = try makePrompt(promptMap: promptMap)
+            let optionsMap: [String: Any] = arguments["options"] as? [String: Any] ?? [:]
+            let options: GenerationOptions = makeGenerationOptions(arguments: optionsMap)
+            let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] ?? [:]
+            let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
+            let includeSchemaInPrompt: Bool = optionsMap["includeSchemaInPrompt"] as? Bool ?? true
+            let response = try await languageSession.respond(
+                to: prompt,
+                schema: schema,
+                includeSchemaInPrompt: includeSchemaInPrompt,
+                options: options
+            )
+            let jsonString: String = response.content.jsonString
+            return [
+                "text": jsonString,
+                "usedMode": session.mode,
+                "structuredValue": SchemaMapper.structuredValue(fromJsonString: jsonString),
+                "metadata": [:]
+            ]
+        }
+        #endif
+
+        throw NativeSessionError.foundationModelsUnavailable
     }
 
     func respond(arguments: [String: Any]) async throws -> [String: Any] {
@@ -155,10 +217,14 @@ actor SessionRegistry {
         mode: String,
         cloudPolicy: String,
         instructions: String?,
+        useCase: String?,
+        toolMaps: [[String: Any]],
         metadata: [String: Any]
     ) throws -> NativeSession {
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
+            let tools: [any Tool] = try makeTools(id: id, toolMaps: toolMaps)
+
             if mode == "privateCloudCompute" || mode == "automatic" && cloudPolicy != "never" {
                 #if compiler(>=6.4)
                 if #available(iOS 27.0, *) {
@@ -166,6 +232,7 @@ actor SessionRegistry {
                     if case .available = privateCloud.availability {
                         let languageSession: LanguageModelSession = makePrivateCloudSession(
                             model: privateCloud,
+                            tools: tools,
                             instructions: instructions
                         )
                         return NativeSession(
@@ -201,10 +268,14 @@ actor SessionRegistry {
                 #endif
             }
 
-            let model: SystemLanguageModel = SystemLanguageModel.default
+            let model: SystemLanguageModel = useCase == "contentTagging"
+                ? SystemLanguageModel(useCase: .contentTagging)
+                : SystemLanguageModel.default
             switch model.availability {
             case .available:
                 let languageSession: LanguageModelSession = makeLocalSession(
+                    model: model,
+                    tools: tools,
                     instructions: instructions
                 )
                 return NativeSession(
@@ -240,23 +311,54 @@ actor SessionRegistry {
 
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
-    private func makeLocalSession(instructions: String?) -> LanguageModelSession {
-        if let instructions, !instructions.isEmpty {
-            return LanguageModelSession(instructions: instructions)
+    private func makeTools(id: String, toolMaps: [[String: Any]]) throws -> [any Tool] {
+        guard let toolBridge, !toolMaps.isEmpty else {
+            return []
         }
-        return LanguageModelSession()
+        var tools: [any Tool] = []
+        for toolMap in toolMaps {
+            guard let name: String = toolMap["name"] as? String, !name.isEmpty else {
+                continue
+            }
+            let parametersMap: [String: Any] = toolMap["parameters"] as? [String: Any]
+                ?? ["type": "object", "properties": [:]]
+            let parameters: GenerationSchema = try SchemaMapper.generationSchema(from: parametersMap)
+            tools.append(
+                DynamicTool(
+                    name: name,
+                    description: toolMap["description"] as? String ?? "",
+                    parameters: parameters,
+                    sessionId: id,
+                    bridge: toolBridge
+                )
+            )
+        }
+        return tools
+    }
+
+    @available(iOS 26.0, *)
+    private func makeLocalSession(
+        model: SystemLanguageModel,
+        tools: [any Tool],
+        instructions: String?
+    ) -> LanguageModelSession {
+        if let instructions, !instructions.isEmpty {
+            return LanguageModelSession(model: model, tools: tools, instructions: instructions)
+        }
+        return LanguageModelSession(model: model, tools: tools)
     }
 
     #if compiler(>=6.4)
         @available(iOS 27.0, *)
         private func makePrivateCloudSession(
             model: PrivateCloudComputeLanguageModel,
+            tools: [any Tool],
             instructions: String?
         ) -> LanguageModelSession {
             if let instructions, !instructions.isEmpty {
-                return LanguageModelSession(model: model, instructions: instructions)
+                return LanguageModelSession(model: model, tools: tools, instructions: instructions)
             }
-            return LanguageModelSession(model: model)
+            return LanguageModelSession(model: model, tools: tools)
         }
     #endif
     #endif
@@ -503,6 +605,26 @@ actor SessionRegistry {
     }
     #endif
 }
+
+#if canImport(FoundationModels)
+/// Tool declared in Dart and executed through the ToolBridge.
+@available(iOS 26.0, *)
+struct DynamicTool: Tool {
+    let name: String
+    let description: String
+    let parameters: GenerationSchema
+    let sessionId: String
+    let bridge: ToolBridge
+
+    func call(arguments: GeneratedContent) async throws -> String {
+        await bridge.callTool(
+            sessionId: sessionId,
+            name: name,
+            argumentsJson: arguments.jsonString
+        )
+    }
+}
+#endif
 
 struct NativeSession {
     let id: String

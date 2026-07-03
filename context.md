@@ -11,6 +11,7 @@ Crear un puente Flutter nativo para Apple Foundation Models, priorizando:
 - Acceso local a `SystemLanguageModel` cuando el dispositivo y Apple Intelligence lo permitan.
 - Acceso online mediante Private Cloud Compute (PCC) solo cuando la API, version del sistema, entitlement, red y cuota lo permitan.
 - Tool calling, structured generation, streaming, sesiones con historial y utilidades de disponibilidad.
+- Orquestacion opcional para apps que combinan Apple local/PCC con un proveedor externo propio.
 - API publica estable en Dart, con degradacion por capacidades para no romper apps en dispositivos o SDKs sin soporte.
 - Cero dependencias runtime de terceros. Usar solo Flutter, Dart core y APIs nativas Apple.
 
@@ -78,7 +79,7 @@ Core AI es otra tecnologia: sirve para ejecutar modelos propios `.aimodel` en Ap
 | PCC | `PrivateCloudComputeLanguageModel` | iOS 27.0 beta | Experimental con entitlement |
 | Reasoning level | `ContextOptions.ReasoningLevel` | iOS 27.0 beta | Experimental |
 | Dynamic profiles | `DynamicProfile`, `Profile` | iOS 27.0 beta | Experimental |
-| Provider externo | `LanguageModel`, `LanguageModelExecutor` | iOS 27.0 beta | Extension futura |
+| Provider externo | Adapter Dart de la app | N/A | Capa opcional de orquestacion; el paquete no incluye clientes de terceros |
 | Core AI | `CoreAI` | iOS 27.0 beta | Fuera del core inicial |
 
 ## Principios de arquitectura
@@ -105,7 +106,7 @@ Core AI es otra tecnologia: sirve para ejecutar modelos propios `.aimodel` en Ap
 ## Patrones de diseno
 
 - Facade: `CupertinoFoundationModels` como entrada simple para apps Flutter.
-- Strategy: `ModelSelectionPolicy` decide `local`, `privateCloudCompute`, `automatic` o futuro `externalProvider`.
+- Strategy: `FoundationModelsRoutingPolicy` decide `appleLocal`, `applePrivateCloud`, `appleAutomatic` o `external`.
 - Adapter: Swift adapta Foundation Models a payloads Dart; Dart adapta DTOs a channel messages.
 - Repository/Registry: `SessionRegistry` nativo conserva sesiones por `sessionId`.
 - Actor model: Swift `actor` para aislar sesiones, tools, streaming y cancelaciones.
@@ -126,6 +127,7 @@ Archivos objetivo:
 - `lib/src/availability.dart`: availability, capabilities, unavailable reasons.
 - `lib/src/session.dart`: session handle, lifecycle, transcript summary.
 - `lib/src/generation.dart`: prompt, response, stream chunks, options.
+- `lib/src/orchestration.dart`: fachada opcional para rutas Apple/local/PCC/proveedor externo.
 - `lib/src/schema.dart`: schema dinamico compatible con `GenerationSchema`.
 - `lib/src/tools.dart`: `ModelTool`, `ToolDefinition`, `ToolCall`, `ToolResult`.
 - `lib/src/errors.dart`: errores tipados.
@@ -136,7 +138,7 @@ No exponer `MethodChannel` al usuario. No imponer singleton obligatorio. Permiti
 
 ### Capa nativa Swift
 
-Archivos objetivo:
+Archivos objetivo (desde 2026-07-03 la capa nativa vive en `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/`, layout hibrido SPM + CocoaPods; los subdirectorios listados abajo son organizacion aspiracional):
 
 - `ios/Classes/CupertinoFoundationModelsPlugin.swift`: registro Flutter y routing.
 - `ios/Classes/Core/SessionRegistry.swift`: `actor` con almacenamiento de sesiones.
@@ -223,7 +225,7 @@ PCC es una capacidad experimental iOS 27 beta en junio de 2026. Reglas:
 - Si PCC falla por red, intentar fallback local solo si la politica lo permite.
 - Informar en eventos/metadata cuando una respuesta uso PCC.
 - No almacenar prompts ni transcripts en el paquete.
-- No incluir proveedores externos en el core inicial. Si luego se soportan, deben vivir como adapters opcionales separados.
+- No incluir clientes concretos de proveedores externos en el paquete. La capa Dart solo define adapters opcionales para que la app conecte Gemini, OpenAI, Anthropic o backend propio.
 
 ## Seguridad y privacidad
 
@@ -339,14 +341,18 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - `lib/src/tools.dart`: contratos `ModelTool`, `ToolDefinition`, `ToolCall` y `ToolResult`.
 - `lib/src/platform/cupertino_foundation_models_platform.dart`: contrato interno de plataforma.
 - `lib/src/platform/method_channel_cupertino_foundation_models.dart`: implementacion MethodChannel/EventChannel.
-- `ios/cupertino_fundations_models.podspec`: podspec del plugin iOS.
-- `ios/Classes/CupertinoFoundationModelsPlugin.swift`: registro Flutter y routing de metodos/eventos.
-- `ios/Classes/AvailabilityService.swift`: capabilities y availability iOS 26/27, con runtime check local si Foundation Models esta disponible.
-- `ios/Classes/FileSelectionService.swift`: `UIDocumentPickerViewController` para seleccionar texto, imagen, audio o cualquier archivo sin dependencias externas.
-- `ios/Classes/SessionRegistry.swift`: actor de sesiones, generacion local basica y streaming local basico.
-- `ios/Classes/SpeechTranscriptionService.swift`: transcripcion de archivos de audio con `SFSpeechURLRecognitionRequest`, on-device o servidor Apple Speech.
-- `ios/Classes/MessageCodec.swift`: conversion basica de payloads Flutter.
-- `ios/Classes/ErrorMapper.swift`: conversion de errores nativos a `FlutterError`.
+- `ios/cupertino_fundations_models.podspec`: podspec del plugin iOS (ruta CocoaPods; apunta a las fuentes del layout SPM).
+- `ios/cupertino_fundations_models/Package.swift`: manifiesto Swift Package Manager (soporte hibrido SPM + CocoaPods) con dependencia `FlutterFramework`.
+- `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/`: fuentes Swift del plugin (antes `ios/Classes/`):
+  - `CupertinoFoundationModelsPlugin.swift`: registro Flutter y routing de metodos/eventos.
+  - `AvailabilityService.swift`: capabilities y availability iOS 26/27, con runtime check local si Foundation Models esta disponible.
+  - `FileSelectionService.swift`: `UIDocumentPickerViewController` para seleccionar texto, imagen, audio o cualquier archivo sin dependencias externas.
+  - `SessionRegistry.swift`: actor de sesiones, generacion local basica y streaming local basico.
+  - `SpeechTranscriptionService.swift`: transcripcion de archivos de audio con `SFSpeechURLRecognitionRequest`, on-device o servidor Apple Speech.
+  - `LiveTranscriptionService.swift`: transcripcion en vivo con `AVAudioEngine` + Apple Speech.
+  - `MessageCodec.swift`: conversion basica de payloads Flutter.
+  - `ErrorMapper.swift`: conversion de errores nativos a `FlutterError`.
+  - `PrivacyInfo.xcprivacy`: manifiesto de privacidad del SDK (sin tracking ni APIs con required reason declaradas).
 - `implementation_for_agents.md`: guia operativa tipo skill para agentes que implementen o integren la libreria.
 - `example/pubspec.yaml`: app Flutter de ejemplo creada con `flutter create --platforms=ios .` y dependencia path al paquete.
 - `example/lib/main.dart`: UI manual para probar capabilities, diagnostics, availability, full power, respond local/automatic y streaming local.
@@ -467,6 +473,41 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - `analysis_options.yaml` keeps strict typing but no longer requires `public_member_api_docs` for every member, avoiding analyzer noise until the API docs pass is done.
 - `dart pub publish --dry-run` for `0.0.2` packages only public files plus the advanced example and reports one expected warning: the git tree has uncommitted/staged changes.
 - Note for publishing: pub.dev verified publisher status cannot be configured from this repository; it must be configured in the pub.dev admin UI using an owned domain.
+
+## Implemented on 2026-07-03, hybrid chat, live transcription, 0.1.0
+
+- Research: confirmed via Apple doc JSON API that iOS 27 beta 2 Foundation Models news are the `LanguageModel` protocol + `LanguageModelExecutor` (official path to plug external LLM providers into the framework), `PrivateCloudComputeLanguageModel` (32K context, greedy decoding in this beta, may fail on simulator), `GenerationOptions.ToolCallingMode`, multimodal image prompts with Vision tools, Dynamic Profiles, and the `foundation-models-utilities` Swift package workaround for `model(_:)`. `SpeechAnalyzer`/`SpeechTranscriber` (Speech framework) is stable since iOS 26 and is the modern path for live transcription; adopting it remains pending.
+- Added live microphone transcription: `CupertinoFoundationModels.liveTranscription()` returns `Stream<LiveTranscriptionEvent>`; new `LiveTranscriptionRequest`/`LiveTranscriptionEvent` DTOs in `lib/src/transcription.dart`; new `ios/Classes/LiveTranscriptionService.swift` using `AVAudioEngine` + `SFSpeechAudioBufferRecognitionRequest` behind the dedicated `cupertino_fundations_models/transcription_events` event channel (registered in the plugin). Cancelling the Dart subscription stops capture; minimum iOS 13 for the Speech path.
+- Improved hybrid orchestration in `lib/src/orchestration.dart`: `FoundationModelsChatMessage`/`FoundationModelsChatRole`, `FoundationModelsRequest.history` (external providers receive the conversation), `FoundationModelsExternalProvider.respondStream()` (default single snapshot), and `FoundationModelsChatSession` via `orchestrator.startChat()` with `send()`, `sendStream()` (emits `OrchestratedChatTextEvent`/`OrchestratedChatCompletionEvent`), `reset()`, `dispose()`. Apple turns reuse a persistent native session; when history and native transcript diverge (external turn or route change), the session is recreated and history is replayed in the prompt preamble.
+- Rewrote `example/lib/main.dart` as a chat app: hybrid orchestrator + chat session with streaming bubbles, live transcription mic button feeding the input, image attachment via document picker, availability banner, diagnostics dialog, and an app-side `GeminiExternalProvider` (dart:io HttpClient, enabled with `--dart-define=GEMINI_API_KEY`). No third-party dependencies.
+- Version set to 0.1.0 (additive changes only, no breaking API). CHANGELOG rewritten: unpublished 0.0.3 entry folded into 0.1.0.
+- SEO for pub.dev (research: name weighs most in search, description 0.90, first 5000 README chars 0.75; ranking = text match x (50% pub points + 50% likes/downloads)): tuned `pubspec.yaml` description under 180 chars with key terms, topics now `apple-intelligence, foundation-models, on-device-ai, ai, speech-to-text`, README front-loaded with search terms. Open decision: the package name typo (`fundations` vs `foundations`) hurts exact-name matches for "foundation models"; renaming requires publishing a new package.
+- Updated `README.md`, `example/README.md`, and `implementation_for_agents.md` for chat, live transcription, and hybrid streaming.
+- test/src/test_helpers.dart fake platform gained a `liveTranscription` stub (tests already existed in repo; none were added).
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta (`/Applications/Xcode-beta.app`) succeeded. Flutter warns the plugin lacks Swift Package Manager support; adding SPM support is pending.
+
+## Implemented on 2026-07-03, Swift Package Manager hybrid support
+
+- Migrated the iOS plugin to the hybrid CocoaPods + Swift Package Manager layout per the official Flutter guide: Swift sources moved (with git history) from `ios/Classes/` to `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/`.
+- Added `ios/cupertino_fundations_models/Package.swift` (swift-tools-version 5.9, iOS 15 platform, product `cupertino-fundations-models`). The Flutter beta toolchain requires the package to depend on `FlutterFramework` (`.package(name: "FlutterFramework", path: "../FlutterFramework")` + target product); that package is generated ephemerally by the Flutter tool at build time, nothing is committed for it.
+- Added `PrivacyInfo.xcprivacy` (no tracking, no collected data, no required-reason APIs declared) processed as an SPM resource and exposed to CocoaPods via `resource_bundles` (`cupertino_fundations_models_privacy`).
+- Updated `ios/cupertino_fundations_models.podspec`: `source_files` now points at the SPM sources path, so CocoaPods consumers keep working unchanged.
+- The Flutter tool auto-migrated `example/ios/Runner.xcodeproj` and the Runner scheme to add the `FlutterGeneratedPluginSwiftPackage` integration; those example changes must be kept. The example still has CocoaPods integration (Flutter prints an optional cleanup hint; removing it is a manual, optional step).
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` in example with Xcode 27 beta succeeded twice (first run surfaced the `FlutterFramework` dependency requirement, second run clean). The pub.dev "SPM support" warning from `flutter run` is resolved.
+- No tests were created.
+
+## Implemented on 2026-07-03, native full-power pass: tools, structured, prewarm, cancel, SpeechAnalyzer
+
+- Native tool calling (iOS 26+): new `ToolBridge.swift` forwards model tool calls to Dart via `invokeMethod("toolCall")` and returns the Dart result as the tool output (errors become readable failure text so generation can continue). New `DynamicTool: Tool` in `SessionRegistry.swift` uses `GeneratedContent` arguments and a `GenerationSchema` built from the Dart tool definition. `SessionRegistry.makeSession` now registers tools on local and PCC `LanguageModelSession`s. Dart side: `MethodChannelCupertinoFoundationModels` sets a method-call handler, keeps a live-session map (sessions with tools only), decodes `argumentsJson`, and `FoundationModelSession.resolveToolCall` enforces the per-tool timeout.
+- Native guided structured generation (iOS 26+): new `SchemaMapper.swift` maps the Dart `StructuredSchema` payload (object/string/enum/integer/number/boolean/array, requiredProperties) to `DynamicGenerationSchema` and `GenerationSchema`; `SessionRegistry.respondStructured` calls `respond(to:schema:includeSchemaInPrompt:options:)` and returns `GeneratedContent.jsonString` parsed into `structuredValue`. The plugin now routes `generateStructured` to it (previously it silently ran plain `respond`).
+- `prewarm` (iOS 26+): `SessionRegistry.prewarm` calls `languageSession.prewarm(promptPrefix:)`; the plugin method is no longer a no-op.
+- `cancelActiveRequest`: the plugin tracks respond/structured tasks (`requestTasks`) and stream tasks (`streamTasks`) per sessionId; cancel and dispose cancel them, and Swift `CancellationError` maps to the stable `cancelled` code in `ErrorMapper`. This also fixed concurrent streams clobbering the previous single `streamTask` var.
+- Content tagging (iOS 26+): `SessionOptions.useCase` (`FoundationModelsUseCase.general|contentTagging` in `lib/src/session.dart`) selects `SystemLanguageModel(useCase: .contentTagging)` for local sessions.
+- Live transcription upgraded: `LiveTranscriptionService.swift` now prefers `SpeechAnalyzer` + `SpeechTranscriber` on iOS 26+ (supported-locale check, `AssetInventory` install, `bestAvailableAudioFormat` + `AVAudioConverter`, `AsyncStream<AnalyzerInput>`, volatile results merged as finalized+volatile snapshots) and falls back to `SFSpeechRecognizer` on older systems, unsupported locales, analyzer setup failure, or explicit `server` mode. Event metadata includes `engine: speechAnalyzer|sfSpeech`. File transcription still uses SFSpeech (SpeechAnalyzer adoption pending there).
+- Example: added demo `DeviceTimeTool` (`get_current_time`) wired through `FoundationModelsDefaults.tools` so the chat exercises native tool calling.
+- Docs: README gained Tool Calling, Structured Output, and Performance sections and an updated capability matrix; `implementation_for_agents.md` file map updated to the SPM paths; CHANGELOG 0.1.0 extended with Added/Fixed entries for this pass.
+- Pending after this pass: direct Photos picker, `tokenCount(for:)` (iOS 26.4, API shape unverified), SpeechAnalyzer for file transcription, Dynamic Profiles, iOS 27 `LanguageModel` protocol bridge.
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta succeeded; `dart pub publish --dry-run` only warns about the dirty git tree. No tests were created.
 
 ## Regla de mantenimiento de contexto
 

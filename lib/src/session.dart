@@ -6,6 +6,15 @@ import 'platform/cupertino_foundation_models_platform.dart';
 import 'schema.dart';
 import 'tools.dart';
 
+/// Specialized on-device model variant requested for a session.
+enum FoundationModelsUseCase {
+  /// The general-purpose Apple on-device model.
+  general,
+
+  /// The content-tagging model variant for categorizing and tagging text.
+  contentTagging,
+}
+
 /// Options used when creating a native model session.
 final class SessionOptions {
   const SessionOptions({
@@ -13,6 +22,7 @@ final class SessionOptions {
     this.cloudPolicy = CloudPolicy.never,
     this.instructions,
     this.tools = const <ModelTool>[],
+    this.useCase = FoundationModelsUseCase.general,
     this.metadata = const <String, Object?>{},
   });
 
@@ -20,6 +30,10 @@ final class SessionOptions {
   final CloudPolicy cloudPolicy;
   final String? instructions;
   final List<ModelTool> tools;
+
+  /// On-device model variant. `contentTagging` applies to local sessions only.
+  final FoundationModelsUseCase useCase;
+
   final Map<String, Object?> metadata;
 
   Map<String, Object?> toMap() {
@@ -34,6 +48,7 @@ final class SessionOptions {
       'tools': definitions
           .map((ToolDefinition value) => value.toMap())
           .toList(growable: false),
+      'useCase': useCase.name,
       'metadata': metadata,
     };
   }
@@ -108,9 +123,14 @@ final class FoundationModelSession {
     }
 
     try {
-      final FutureOr<Object?> value = tool.call(call.arguments);
-      final Object? resolved = await Future<Object?>.value(value);
+      final Object? resolved = await Future<Object?>.value(
+        tool.call(call.arguments),
+      ).timeout(tool.timeout);
       return ToolResult.success(resolved);
+    } on TimeoutException {
+      return ToolResult.failure(
+        'Tool ${call.name} timed out after ${tool.timeout.inMilliseconds}ms.',
+      );
     } on Object catch (error) {
       return ToolResult.failure(error.toString());
     }

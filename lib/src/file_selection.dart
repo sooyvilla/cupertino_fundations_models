@@ -1,8 +1,11 @@
 import 'generation.dart';
 
+/// File category requested from the native iOS document picker.
 enum FoundationModelsFileKind { any, image, audio, text }
 
+/// File selected through the native iOS document picker.
 final class PickedFoundationModelsFile {
+  /// Creates a selected-file descriptor.
   const PickedFoundationModelsFile({
     required this.path,
     required this.name,
@@ -10,6 +13,7 @@ final class PickedFoundationModelsFile {
     required this.kind,
   });
 
+  /// Creates a selected-file descriptor from a platform-channel payload.
   factory PickedFoundationModelsFile.fromMap(Map<Object?, Object?> map) {
     return PickedFoundationModelsFile(
       path: (map['path'] as String?) ?? '',
@@ -19,11 +23,19 @@ final class PickedFoundationModelsFile {
     );
   }
 
+  /// Absolute path to the temporary file available to the native plugin.
   final String path;
+
+  /// Display name reported by the document picker.
   final String name;
+
+  /// MIME type reported for the file, when available.
   final String? mimeType;
+
+  /// File category inferred or requested for the picker result.
   final FoundationModelsFileKind kind;
 
+  /// Converts this file into a prompt attachment.
   PromptAttachment toPromptAttachment({String? label}) {
     return PromptAttachment.file(
       path: path,
