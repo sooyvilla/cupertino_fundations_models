@@ -509,6 +509,40 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - Pending after this pass: direct Photos picker, `tokenCount(for:)` (iOS 26.4, API shape unverified), SpeechAnalyzer for file transcription, Dynamic Profiles, iOS 27 `LanguageModel` protocol bridge.
 - Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta succeeded; `dart pub publish --dry-run` only warns about the dirty git tree. No tests were created.
 
+## Implemented on 2026-07-03, fix: streaming EventChannel never closed (chat stuck after first message)
+
+- Bug: `SessionRegistry.stream` (Swift) emitted the `completed` event but never sent `FlutterEndOfEventStream`, so the Dart `EventChannel` stream never closed. `FoundationModelsChatSession.sendStream` awaited the native stream forever, the `OrchestratedChatCompletionEvent` never fired, and the example chat stayed in `_sending = true` after the first message (input blocked, bubble stuck streaming). Error paths had the same leak.
+- Fix in `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/SessionRegistry.swift`: emit `FlutterEndOfEventStream` after `completed`, after every error emission (session-not-found, modelUnavailable, catch), matching the pattern `LiveTranscriptionService.swift` already used.
+- Defensive fix in `lib/src/platform/method_channel_cupertino_foundation_models.dart` `stream()`: the transformer now closes the sink when a `CompletionEvent` or `FailureEvent` arrives (mirrors the `isFinal` close in `liveTranscription`), so Dart unblocks even if a native path forgets end-of-stream; closing also cancels the EventChannel subscription (native `onCancel`).
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta. No tests were created.
+
+## Implemented on 2026-07-03, UX pass: refusals/short answers, backend selector, SpeechAnalyzer locale matching
+
+- Reported symptoms: the demo model refused creative requests and answered in short English one-liners; PCC was never used (local always won); no way to verify live transcription used the SpeechAnalyzer AI model vs legacy SFSpeech.
+- Root causes: the example's session instructions literally demanded "concise ... short responses" in English with `maximumResponseTokens: 400`; the `hybrid` routing policy tries `appleLocal` first so PCC is unreachable while local is available; `LiveTranscriptionService` required an exact BCP-47 locale match (regional locales like `es_CO` silently fell back to SFSpeech) and the example never passed a locale (native default `en_US`).
+- `lib/src/orchestration.dart`: new `FoundationModelsRoutingPolicy.privateCloudFirst({allowLocalFallback, allowExternalFallback})` factory (PCC route first). PCC still requires iOS 27 (`PrivateCloudComputeLanguageModel` in `SessionRegistry.swift`).
+- `LiveTranscriptionService.swift`: locale matching now falls back to any supported variant of the same language (exact BCP-47 first), so regional Spanish/English locales keep the SpeechAnalyzer engine; only truly unsupported languages fall back to SFSpeech. Event metadata already reports `engine`.
+- `example/lib/main.dart`: rewrote instructions (same-language, creative requests allowed, complete answers), raised `maximumResponseTokens` to 2000, `Platform.localeName` used for orchestrator defaults, availability, diagnostics, and live transcription; new `ChatBackend` enum + AppBar popup selector (Auto hybrid / Apple on-device / Private Cloud Compute / Gemini, Gemini disabled without API key) that rebuilds orchestrator+chat and clears history; AppBar subtitle shows active backend; while listening, a caption under the chat shows locale + engine (`speechAnalyzer` vs `sfSpeech`); removed hardcoded `en_US` MaterialApp locale.
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta. No tests were created.
+
+## Implemented on 2026-07-03, example: disable LLDB debugging for wireless iOS runs
+
+- `example/pubspec.yaml`: added `flutter.config.enable-lldb-debugging: false` because LLDB attach over Wi-Fi on iOS 27 stalls `flutter run` at "Installing and launching..."; Flutter falls back to the Xcode-automation launch path. Dart-side debugging (hot reload, DevTools, Dart breakpoints) is unaffected; only native LLDB attach is skipped. Remove the flag (or use USB) when native breakpoints are needed.
+- The "CocoaPods integration" hint printed by `flutter run` remains the known optional cleanup from the SPM migration; the example Podfile is non-standard so the migration is manual and still pending by choice.
+
+## Implemented on 2026-07-06, fix: GenerationOptions init label differs per compiler (sampling: vs samplingMode:)
+
+- Bug: `makeGenerationOptions` in `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/SessionRegistry.swift` had a shared fallback that called `GenerationOptions(samplingMode:...)` outside any compiler guard. Xcode 27 beta (Swift compiler 6.4 / iOS 27 SDK) renamed the init label from `sampling:` to `samplingMode:`, so the old label breaks on Xcode 27 and the new label breaks on Xcode 26.
+- Fix: the whole return path is now split by `#if compiler(>=6.4)` — under 6.4 the iOS 27 runtime branch adds `toolCallingMode:` and the runtime fallback uses `samplingMode:`; under older compilers the single return uses the iOS 26 SDK label `sampling:`. Same conditional-compilation pattern already shipped in the app-repo vendored copy of 0.0.3 (see release-pipeline.md there); publish as 0.0.4/0.1.0 to retire that vendored override.
+- Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta succeeded (the `#else` branch could not be compiled locally — only Xcode-beta is installed — but it matches the documented iOS 26 SDK signature and the app-repo build that already passed). No tests were created.
+- Release: `pubspec.yaml` bumped 0.1.0 → 0.1.1 (0.1.0 was never published to pub.dev; both ship together as 0.1.1) and `CHANGELOG.md` got a `## 0.1.1` Fixed entry describing the dual-toolchain compilation fix. Publishing 0.1.1 retires the vendored 0.0.3 copy + `dependency_overrides` in the app repo.
+
+## Implemented on 2026-07-07, docs: complete 0.1.1 release notes before publishing
+
+- `CHANGELOG.md` 0.1.1 previously only documented the Xcode 26/27 compilation fix; added the missing entries: `privateCloudFirst()` routing policy (Added), SpeechAnalyzer language-variant locale matching and example backend-selector UX pass (Changed), and the streaming end-of-stream hang fix (Fixed).
+- `README.md`: added `privateCloudFirst()` to the built-in policies list.
+- Validations: `flutter analyze` clean at root and example; `dart pub publish --dry-run` clean. Published 0.1.1 to pub.dev, committed and pushed. No tests were created.
+
 ## Regla de mantenimiento de contexto
 
 Cada cambio futuro debe actualizar esta seccion con:

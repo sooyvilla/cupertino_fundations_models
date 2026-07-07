@@ -184,7 +184,11 @@ final class MethodChannelCupertinoFoundationModels
     return nativeStream.transform<SessionEvent>(
       StreamTransformer<Object?, SessionEvent>.fromHandlers(
         handleData: (Object? event, EventSink<SessionEvent> sink) {
-          sink.add(SessionEvent.fromMap(_asMap(event)));
+          final SessionEvent parsed = SessionEvent.fromMap(_asMap(event));
+          sink.add(parsed);
+          if (parsed is CompletionEvent || parsed is FailureEvent) {
+            sink.close();
+          }
         },
         handleError:
             (

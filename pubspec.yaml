@@ -1,6 +1,6 @@
 name: cupertino_fundations_models
 description: "Apple Intelligence Foundation Models for Flutter: on-device AI, streaming, live speech-to-text, Private Cloud Compute, and hybrid routing to Gemini or ChatGPT."
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/sooyvilla/cupertino_fundations_models
 repository: https://github.com/sooyvilla/cupertino_fundations_models
 issue_tracker: https://github.com/sooyvilla/cupertino_fundations_models/issues

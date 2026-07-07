@@ -84,16 +84,28 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
     private func startAnalyzer(arguments: [String: Any], localeIdentifier: String) async -> Bool {
         let locale: Locale = Locale(identifier: localeIdentifier)
         let supportedLocales: [Locale] = await SpeechTranscriber.supportedLocales
-        let isSupported: Bool = supportedLocales.contains { supported in
-            supported.identifier(.bcp47) == locale.identifier(.bcp47)
+        let requestedTag: String = locale.identifier(.bcp47)
+        // Exact BCP-47 match first, then any variant of the same language so
+        // regional locales (es_CO, en_AU, ...) still use SpeechAnalyzer instead
+        // of silently falling back to the legacy SFSpeech engine.
+        var matchedLocale: Locale? = supportedLocales.first { supported in
+            supported.identifier(.bcp47) == requestedTag
         }
-        guard isSupported else {
+        if matchedLocale == nil {
+            let requestedLanguage: String = requestedTag
+                .split(separator: "-").first.map(String.init) ?? requestedTag
+            matchedLocale = supportedLocales.first { supported in
+                supported.identifier(.bcp47)
+                    .split(separator: "-").first.map(String.init) == requestedLanguage
+            }
+        }
+        guard let analyzerLocale: Locale = matchedLocale else {
             return false
         }
 
         let reportPartials: Bool = arguments["reportPartialResults"] as? Bool ?? true
         let transcriber: SpeechTranscriber = SpeechTranscriber(
-            locale: locale,
+            locale: analyzerLocale,
             transcriptionOptions: [],
             reportingOptions: reportPartials ? [.volatileResults] : [],
             attributeOptions: []

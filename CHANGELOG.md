@@ -1,3 +1,19 @@
+## 0.1.1
+
+### Added
+
+- `FoundationModelsRoutingPolicy.privateCloudFirst()`: prefers Apple Private Cloud Compute (iOS 27+) with optional fallback to the Apple local model and to the external provider.
+
+### Changed
+
+- Live transcription locale matching: regional locales such as `es_CO` or `en_AU` now match any supported variant of the same language, so they keep the modern `SpeechAnalyzer` engine instead of silently falling back to the legacy `SFSpeechRecognizer` engine. Only truly unsupported languages fall back.
+- Example app: added a backend selector in the AppBar (Auto hybrid / Apple on-device / Private Cloud Compute / Gemini), rewrote the session instructions to allow complete same-language answers, raised the token limit, and used the device locale for orchestration and live transcription defaults with an on-screen caption showing the active speech engine.
+
+### Fixed
+
+- Streaming generation no longer hangs after the first completion. The native event channel never emitted end-of-stream, so `FoundationModelsChatSession.sendStream()` awaited forever and chat UIs stayed locked in a sending state. The native side now closes the event channel after completion and error events, and the Dart stream also closes defensively when a completion or failure event arrives.
+- The iOS plugin now compiles with both Xcode 26 and Xcode 27 beta. The Swift 6.4 compiler (iOS 27 SDK) renamed the `GenerationOptions` initializer label from `sampling:` to `samplingMode:`, and the plugin previously used a single label unconditionally, so the build failed on the toolchain that did not match it. The initializer call is now selected with `#if compiler(>=6.4)`: Xcode 27 builds use `samplingMode:` (plus `toolCallingMode:` when running on iOS 27), and older toolchains keep the iOS 26 SDK label `sampling:`. No Dart API changes; generation options (sampling mode, temperature, and maximum response tokens) behave the same on every supported toolchain.
+
 ## 0.1.0
 
 Hybrid orchestration and live speech release. All changes are additive; no existing public API changed.

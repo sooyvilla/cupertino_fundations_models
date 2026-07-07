@@ -144,6 +144,7 @@ actor SessionRegistry {
                     ),
                     to: eventSink
                 )
+                emit(FlutterEndOfEventStream, to: eventSink)
                 return
             }
 
@@ -189,6 +190,7 @@ actor SessionRegistry {
                         "metadata": [:]
                     ]
                 ], to: eventSink)
+                emit(FlutterEndOfEventStream, to: eventSink)
                 return
             }
             #endif
@@ -200,8 +202,10 @@ actor SessionRegistry {
                 ),
                 to: eventSink
             )
+            emit(FlutterEndOfEventStream, to: eventSink)
         } catch {
             emit(ErrorMapper.flutterError(from: error), to: eventSink)
+            emit(FlutterEndOfEventStream, to: eventSink)
         }
     }
 
@@ -409,13 +413,18 @@ actor SessionRegistry {
                 toolCallingMode: toolCallingMode
             )
         }
-        #endif
-
         return GenerationOptions(
             samplingMode: samplingMode,
             temperature: temperature,
             maximumResponseTokens: maximumResponseTokens
         )
+        #else
+        return GenerationOptions(
+            sampling: samplingMode,
+            temperature: temperature,
+            maximumResponseTokens: maximumResponseTokens
+        )
+        #endif
     }
 
     @available(iOS 26.0, *)

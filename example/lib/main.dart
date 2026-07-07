@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 /// flutter run --dart-define=GEMINI_API_KEY=your_key
 const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
+/// Backend selection exposed in the example UI.
+enum ChatBackend { auto, local, privateCloud, gemini }
+
 void main() {
   runApp(const ExampleApp());
 }
@@ -23,7 +26,6 @@ final class ExampleApp extends StatelessWidget {
     return MaterialApp(
       title: 'Foundation Models Chat',
       debugShowCheckedModeBanner: false,
-      locale: const Locale('en', 'US'),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0A84FF)),
       ),
@@ -170,8 +172,8 @@ final class ChatScreen extends StatefulWidget {
 
 final class _ChatScreenState extends State<ChatScreen> {
   final CupertinoFoundationModels _models = CupertinoFoundationModels();
-  late final FoundationModelsOrchestrator _orchestrator;
-  late final FoundationModelsChatSession _chat;
+  late FoundationModelsOrchestrator _orchestrator;
+  late FoundationModelsChatSession _chat;
 
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -182,31 +184,73 @@ final class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<LiveTranscriptionEvent>? _liveTranscription;
   bool _sending = false;
   bool _listening = false;
+  ChatBackend _backend = ChatBackend.auto;
+  String? _transcriptionEngine;
 
   static const String _instructions =
-      'You are a concise assistant inside a Flutter demo app. '
-      'Answer in English with short, helpful responses.';
+      'You are a helpful, versatile assistant. Always answer in the same '
+      'language the user writes in. Fulfill creative requests such as '
+      'stories, poems, or brainstorming. Give complete, well-developed '
+      'answers; only be brief when the user asks for brevity.';
+
+  static final String _deviceLocale = Platform.localeName;
 
   @override
   void initState() {
     super.initState();
+    _configureChat();
+    unawaited(_refreshAvailability());
+  }
+
+  void _configureChat() {
     _orchestrator = FoundationModelsOrchestrator(
       apple: _models,
       externalProvider: geminiApiKey.isEmpty
           ? null
           : const GeminiExternalProvider(apiKey: geminiApiKey),
-      router: FoundationModelsRoutingPolicy.hybrid(
-        allowPrivateCloud: true,
-        allowExternalFallback: geminiApiKey.isNotEmpty,
-      ),
-      defaults: const FoundationModelsDefaults(
-        localeIdentifier: 'en_US',
-        options: GenerationOptions(maximumResponseTokens: 400),
-        tools: <ModelTool>[DeviceTimeTool()],
+      router: switch (_backend) {
+        ChatBackend.auto => FoundationModelsRoutingPolicy.hybrid(
+          allowPrivateCloud: true,
+          allowExternalFallback: geminiApiKey.isNotEmpty,
+        ),
+        ChatBackend.local => FoundationModelsRoutingPolicy.localOnly(),
+        ChatBackend.privateCloud =>
+          FoundationModelsRoutingPolicy.privateCloudFirst(
+            allowLocalFallback: false,
+          ),
+        ChatBackend.gemini => FoundationModelsRoutingPolicy.externalFirst(
+          allowAppleFallback: false,
+        ),
+      },
+      defaults: FoundationModelsDefaults(
+        localeIdentifier: _deviceLocale,
+        options: const GenerationOptions(maximumResponseTokens: 2000),
+        tools: const <ModelTool>[DeviceTimeTool()],
       ),
     );
     _chat = _orchestrator.startChat(instructions: _instructions);
-    unawaited(_refreshAvailability());
+  }
+
+  Future<void> _switchBackend(ChatBackend backend) async {
+    if (backend == _backend) {
+      return;
+    }
+    final FoundationModelsChatSession previous = _chat;
+    setState(() {
+      _backend = backend;
+      _messages.clear();
+      _configureChat();
+    });
+    await previous.dispose();
+  }
+
+  String _backendLabel(ChatBackend backend) {
+    return switch (backend) {
+      ChatBackend.auto => 'Auto (hybrid)',
+      ChatBackend.local => 'Apple on-device',
+      ChatBackend.privateCloud => 'Private Cloud Compute',
+      ChatBackend.gemini => 'Gemini',
+    };
   }
 
   @override
@@ -222,7 +266,7 @@ final class _ChatScreenState extends State<ChatScreen> {
     try {
       final ModelAvailability availability = await _models.checkAvailability(
         mode: ModelMode.local,
-        localeIdentifier: 'en_US',
+        localeIdentifier: _deviceLocale,
       );
       if (mounted) {
         setState(() => _localAvailability = availability);
@@ -322,10 +366,14 @@ final class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    setState(() => _listening = true);
+    setState(() {
+      _listening = true;
+      _transcriptionEngine = null;
+    });
     _liveTranscription = _models
         .liveTranscription(
-          request: const LiveTranscriptionRequest(
+          request: LiveTranscriptionRequest(
+            localeIdentifier: _deviceLocale,
             mode: AudioTranscriptionMode.automatic,
           ),
         )
@@ -334,6 +382,10 @@ final class _ChatScreenState extends State<ChatScreen> {
             _input
               ..text = event.text
               ..selection = TextSelection.collapsed(offset: event.text.length);
+            final String? engine = event.metadata['engine'] as String?;
+            if (mounted && engine != null && engine != _transcriptionEngine) {
+              setState(() => _transcriptionEngine = engine);
+            }
             if (event.isFinal && mounted) {
               setState(() => _listening = false);
             }
@@ -390,7 +442,7 @@ final class _ChatScreenState extends State<ChatScreen> {
   Future<void> _showDiagnostics() async {
     try {
       final FoundationModelsDiagnostics diagnostics = await _models
-          .getDiagnostics(localeIdentifier: 'en_US');
+          .getDiagnostics(localeIdentifier: _deviceLocale);
       final String runtimeContext = await _orchestrator
           .buildRuntimePromptContext(refresh: true);
       if (!mounted) {
@@ -456,8 +508,36 @@ final class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Foundation Models Chat'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text('Foundation Models Chat'),
+            Text(
+              _backendLabel(_backend),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
         actions: <Widget>[
+          PopupMenuButton<ChatBackend>(
+            tooltip: 'Model backend',
+            icon: const Icon(Icons.cloud_outlined),
+            onSelected: (ChatBackend backend) =>
+                unawaited(_switchBackend(backend)),
+            itemBuilder: (BuildContext context) {
+              return <PopupMenuEntry<ChatBackend>>[
+                for (final ChatBackend backend in ChatBackend.values)
+                  CheckedPopupMenuItem<ChatBackend>(
+                    value: backend,
+                    checked: backend == _backend,
+                    enabled:
+                        backend != ChatBackend.gemini ||
+                        geminiApiKey.isNotEmpty,
+                    child: Text(_backendLabel(backend)),
+                  ),
+              ];
+            },
+          ),
           IconButton(
             tooltip: 'Diagnostics',
             onPressed: _showDiagnostics,
@@ -511,6 +591,20 @@ final class _ChatScreenState extends State<ChatScreen> {
                     avatar: const Icon(Icons.image_outlined, size: 18),
                     label: Text(_pendingAttachment!.name),
                     onDeleted: () => setState(() => _pendingAttachment = null),
+                  ),
+                ),
+              ),
+            if (_listening)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _transcriptionEngine == null
+                        ? 'Listening ($_deviceLocale)…'
+                        : 'Listening ($_deviceLocale, '
+                              'engine: $_transcriptionEngine)',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
               ),
