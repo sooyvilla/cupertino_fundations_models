@@ -194,6 +194,8 @@ The built-in policies are:
 
 - `localOnly()`: only Apple on-device models.
 - `appleFirst()`: Apple local first, then optional PCC or external fallback.
+- `privateCloudFirst()`: Private Cloud Compute first (iOS 27+), with optional
+  local and external fallbacks.
 - `externalFirst()`: external provider first, with optional Apple fallback.
 - `hybrid()`: local-first for simple work, external-first for complex reasoning
   and tool-routing tasks.

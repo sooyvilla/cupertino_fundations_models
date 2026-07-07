@@ -17,3 +17,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  config:
+    # LLDB attach over Wi-Fi on iOS 26+ is extremely slow; without it Flutter
+    # falls back to launching/debugging through Xcode automation.
+    enable-lldb-debugging: false

@@ -431,6 +431,23 @@ final class FoundationModelsRoutingPolicy extends FoundationModelsRouter {
     );
   }
 
+  /// Prefers Apple Private Cloud Compute and falls back to the local model.
+  ///
+  /// Requires iOS 27 or later at runtime; on older systems the private cloud
+  /// route reports unavailable and the fallbacks (if any) are attempted.
+  factory FoundationModelsRoutingPolicy.privateCloudFirst({
+    bool allowLocalFallback = true,
+    bool allowExternalFallback = false,
+  }) {
+    return FoundationModelsRoutingPolicy(
+      routes: <FoundationModelsRoute>[
+        const FoundationModelsRoute.applePrivateCloud(),
+        if (allowLocalFallback) const FoundationModelsRoute.appleLocal(),
+        if (allowExternalFallback) const FoundationModelsRoute.external(),
+      ],
+    );
+  }
+
   factory FoundationModelsRoutingPolicy.externalFirst({
     bool allowAppleFallback = true,
     bool allowPrivateCloudFallback = false,
