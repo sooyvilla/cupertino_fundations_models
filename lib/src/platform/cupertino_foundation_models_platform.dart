@@ -9,6 +9,8 @@ import '../transcription.dart';
 abstract interface class CupertinoFoundationModelsPlatform {
   Future<FoundationModelsCapabilities> getCapabilities();
 
+  Future<List<FoundationModelsLanguage>> getSupportedLanguages();
+
   Future<FoundationModelsDiagnostics> getDiagnostics({
     required String? localeIdentifier,
   });

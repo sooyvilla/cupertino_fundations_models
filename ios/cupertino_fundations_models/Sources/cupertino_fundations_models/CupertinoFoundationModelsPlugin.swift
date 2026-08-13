@@ -43,6 +43,11 @@ public final class CupertinoFoundationModelsPlugin: NSObject, FlutterPlugin, Flu
         switch call.method {
         case "getCapabilities":
             result(availabilityService.capabilities())
+        case "getSupportedLanguages":
+            Task { [weak self] in
+                let languages: [[String: Any]] = await self?.availabilityService.supportedLanguages() ?? []
+                self?.complete(result, languages)
+            }
         case "getDiagnostics":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
             result(availabilityService.diagnostics(arguments: arguments))

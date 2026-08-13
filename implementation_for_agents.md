@@ -44,6 +44,7 @@ Audio transcription uses `Speech.framework`, not Foundation Models. On iOS 26+, 
 Implemented:
 
 - `getCapabilities()`
+- `getSupportedLanguages()` returns locales shared by the on-device model and `SpeechTranscriber`, including speech-asset installation state.
 - `getDiagnostics()`
 - `checkAvailability()`
 - `supportsFullPower()`
@@ -64,7 +65,7 @@ Implemented:
 - External provider adapters through `FoundationModelsExternalProvider` (including `respondStream()` for streaming) and `FoundationModelsExternalTranscriptionProvider`.
 - Dart DTOs for prompts, attachments, options, schemas, responses, stream events, tools, diagnostics, file selection, transcription, and typed errors.
 - Native preflight availability checks before session creation.
-- Native prompt construction from text, text files, and iOS 27 image attachments.
+- Native prompt construction from text, validated UTF-8/PDF files, and safe Vision-preprocessed image context on iOS 27 beta 5.
 - iOS 27 `ContextOptions.reasoningLevel` mapping.
 - iOS 27 typed response usage when Apple exposes it.
 - Any feature that requires iOS 27 must be compiled with Xcode 27, either beta or official when available.
@@ -270,9 +271,10 @@ final ModelResponse response = await models.respond(
 
 Current native behavior:
 
-- Text attachments are read as UTF-8 and inserted into the prompt.
-- Image attachments use `Attachment<ImageAttachmentContent>` on iOS 27+.
-- Audio must be transcribed first and then sent as text.
+- UTF-8 text, Markdown, JSON, and CSV attachments are validated and inserted into the prompt; text-based PDFs are extracted with PDFKit.
+- iOS 27 beta 5 image files and byte attachments are decoded, downsampled, and processed with local Vision OCR, classification, and barcode detection. Do not call `Attachment<ImageAttachmentContent>` on that runtime: device crash reports show an uncatchable null-page termination in the attachment ABI.
+- Audio must be transcribed first and then sent as text. Unsupported or corrupt files must produce a typed error and must never be silently discarded.
+- Preserve the source display name separately from the UUID-prefixed temporary path. iOS has no native Office Open XML text importer, so `.doc` and `.docx` must return an actionable conversion message rather than a generic routing failure.
 
 ## Streaming
 

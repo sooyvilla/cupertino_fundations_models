@@ -833,16 +833,9 @@ final class FoundationModelsOrchestrator {
       }
     }
 
-    throw FoundationModelsException(
-      code: FoundationModelsErrorCode.modelUnavailable,
+    throw _routeExhaustedException(
+      attempts: attempts,
       message: 'No configured model route could handle this request.',
-      recoverySuggestion:
-          'Check Apple model availability, cloud policy, or configure an external provider.',
-      details: <String, Object?>{
-        'attempts': attempts
-            .map((FoundationModelsRouteAttempt value) => value.toMap())
-            .toList(growable: false),
-      },
     );
   }
 
@@ -1029,6 +1022,40 @@ final class FoundationModelsOrchestrator {
     return FoundationModelsException(
       code: FoundationModelsErrorCode.nativeFailure,
       message: error.toString(),
+    );
+  }
+
+  FoundationModelsException _routeExhaustedException({
+    required List<FoundationModelsRouteAttempt> attempts,
+    required String message,
+  }) {
+    for (final FoundationModelsRouteAttempt attempt in attempts.reversed) {
+      final FoundationModelsErrorCode? code = attempt.errorCode;
+      if (code == FoundationModelsErrorCode.invalidRequest ||
+          code == FoundationModelsErrorCode.unsupportedTranscriptContent ||
+          code == FoundationModelsErrorCode.unsupportedGenerationGuide ||
+          code == FoundationModelsErrorCode.contextSizeExceeded) {
+        return FoundationModelsException(
+          code: code!,
+          message: attempt.message ?? message,
+          details: <String, Object?>{
+            'attempts': attempts
+                .map((FoundationModelsRouteAttempt value) => value.toMap())
+                .toList(growable: false),
+          },
+        );
+      }
+    }
+    return FoundationModelsException(
+      code: FoundationModelsErrorCode.modelUnavailable,
+      message: message,
+      recoverySuggestion:
+          'Check Apple model availability, cloud policy, or configure an external provider.',
+      details: <String, Object?>{
+        'attempts': attempts
+            .map((FoundationModelsRouteAttempt value) => value.toMap())
+            .toList(growable: false),
+      },
     );
   }
 }
@@ -1479,16 +1506,9 @@ final class FoundationModelsChatSession {
   FoundationModelsException _noRouteException(
     List<FoundationModelsRouteAttempt> attempts,
   ) {
-    return FoundationModelsException(
-      code: FoundationModelsErrorCode.modelUnavailable,
+    return _orchestrator._routeExhaustedException(
+      attempts: attempts,
       message: 'No configured model route could handle this chat message.',
-      recoverySuggestion:
-          'Check Apple model availability, cloud policy, or configure an external provider.',
-      details: <String, Object?>{
-        'attempts': attempts
-            .map((FoundationModelsRouteAttempt value) => value.toMap())
-            .toList(growable: false),
-      },
     );
   }
 

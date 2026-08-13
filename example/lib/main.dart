@@ -14,6 +14,8 @@ const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 /// Backend selection exposed in the example UI.
 enum ChatBackend { auto, local, privateCloud, gemini }
 
+enum _ChatAction { diagnostics, reset }
+
 void main() {
   runApp(const ExampleApp());
 }
@@ -186,20 +188,36 @@ final class _ChatScreenState extends State<ChatScreen> {
   bool _listening = false;
   ChatBackend _backend = ChatBackend.auto;
   String? _transcriptionEngine;
-
-  static const String _instructions =
-      'You are a helpful, versatile assistant. Always answer in the same '
-      'language the user writes in. Fulfill creative requests such as '
-      'stories, poems, or brainstorming. Give complete, well-developed '
-      'answers; only be brief when the user asks for brevity.';
+  late FoundationModelsLanguage _selectedLanguage;
+  List<FoundationModelsLanguage> _supportedLanguages =
+      <FoundationModelsLanguage>[];
+  bool _loadingLanguages = true;
+  String? _languageLoadError;
 
   static final String _deviceLocale = Platform.localeName;
+
+  String get _selectedLocaleIdentifier => _selectedLanguage.identifier;
+
+  String get _instructions =>
+      'You are a helpful, versatile assistant. Always respond in '
+      '${_selectedLanguage.displayName} using locale '
+      '${_selectedLanguage.identifier}, unless the user explicitly asks for '
+      'another language. Fulfill creative requests such as stories, poems, '
+      'or brainstorming. Give complete, well-developed answers; only be '
+      'brief when the user asks for brevity.';
 
   @override
   void initState() {
     super.initState();
+    _selectedLanguage = FoundationModelsLanguage(
+      identifier: _deviceLocale,
+      languageCode: _languageCode(_deviceLocale),
+      displayName: _deviceLocale,
+      nativeDisplayName: _deviceLocale,
+      isTranscriptionAssetInstalled: false,
+    );
     _configureChat();
-    unawaited(_refreshAvailability());
+    unawaited(_loadSupportedLanguages());
   }
 
   void _configureChat() {
@@ -223,12 +241,142 @@ final class _ChatScreenState extends State<ChatScreen> {
         ),
       },
       defaults: FoundationModelsDefaults(
-        localeIdentifier: _deviceLocale,
+        localeIdentifier: _selectedLocaleIdentifier,
         options: const GenerationOptions(maximumResponseTokens: 2000),
         tools: const <ModelTool>[DeviceTimeTool()],
       ),
     );
     _chat = _orchestrator.startChat(instructions: _instructions);
+  }
+
+  Future<void> _loadSupportedLanguages() async {
+    try {
+      final List<FoundationModelsLanguage> languages = await _models
+          .getSupportedLanguages();
+      if (!mounted) {
+        return;
+      }
+
+      if (languages.isEmpty) {
+        setState(() {
+          _supportedLanguages = <FoundationModelsLanguage>[];
+          _loadingLanguages = false;
+          _languageLoadError =
+              'No language is currently shared by Apple Intelligence and '
+              'live transcription on this device.';
+        });
+        await _refreshAvailability();
+        return;
+      }
+
+      final String deviceLocale = _normalizedLocale(_deviceLocale);
+      final String deviceLanguage = _languageCode(_deviceLocale);
+      FoundationModelsLanguage? preferred;
+      for (final FoundationModelsLanguage language in languages) {
+        if (_normalizedLocale(language.identifier) == deviceLocale) {
+          preferred = language;
+          break;
+        }
+      }
+      if (preferred == null) {
+        for (final FoundationModelsLanguage language in languages) {
+          if (language.languageCode.toLowerCase() == deviceLanguage) {
+            preferred = language;
+            break;
+          }
+        }
+      }
+      preferred ??= languages.first;
+
+      final FoundationModelsChatSession previous = _chat;
+      setState(() {
+        _supportedLanguages = languages;
+        _selectedLanguage = preferred!;
+        _loadingLanguages = false;
+        _languageLoadError = null;
+        _configureChat();
+      });
+      await previous.dispose();
+      await _refreshAvailability();
+    } on FoundationModelsException catch (error) {
+      if (mounted) {
+        setState(() {
+          _loadingLanguages = false;
+          _languageLoadError = error.recoverySuggestion ?? error.message;
+        });
+        await _refreshAvailability();
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          _loadingLanguages = false;
+          _languageLoadError = 'Could not load languages: $error';
+        });
+        await _refreshAvailability();
+      }
+    }
+  }
+
+  Future<void> _showLanguagePicker() async {
+    if (_loadingLanguages) {
+      _showSnack('Loading available languages…');
+      return;
+    }
+    if (_supportedLanguages.isEmpty) {
+      _showSnack(
+        _languageLoadError ?? 'No compatible languages are available.',
+      );
+      return;
+    }
+
+    final FoundationModelsLanguage? language =
+        await showModalBottomSheet<FoundationModelsLanguage>(
+          context: context,
+          isScrollControlled: true,
+          showDragHandle: true,
+          builder: (BuildContext context) {
+            return _LanguagePickerSheet(
+              languages: _supportedLanguages,
+              selectedIdentifier: _selectedLocaleIdentifier,
+            );
+          },
+        );
+    if (language != null) {
+      await _switchLanguage(language);
+    }
+  }
+
+  Future<void> _switchLanguage(FoundationModelsLanguage language) async {
+    if (_normalizedLocale(language.identifier) ==
+        _normalizedLocale(_selectedLocaleIdentifier)) {
+      return;
+    }
+
+    await _stopLiveTranscription();
+    if (!mounted) {
+      return;
+    }
+    final FoundationModelsChatSession previous = _chat;
+    setState(() {
+      _selectedLanguage = language;
+      _messages.clear();
+      _transcriptionEngine = null;
+      _configureChat();
+    });
+    await previous.dispose();
+    await _refreshAvailability();
+    _showSnack(
+      'Language changed to ${language.nativeDisplayName}. '
+      'A new conversation was started.',
+    );
+  }
+
+  static String _normalizedLocale(String identifier) {
+    return identifier.replaceAll('_', '-').toLowerCase();
+  }
+
+  static String _languageCode(String identifier) {
+    return _normalizedLocale(identifier).split('-').first;
   }
 
   Future<void> _switchBackend(ChatBackend backend) async {
@@ -266,7 +414,7 @@ final class _ChatScreenState extends State<ChatScreen> {
     try {
       final ModelAvailability availability = await _models.checkAvailability(
         mode: ModelMode.local,
-        localeIdentifier: _deviceLocale,
+        localeIdentifier: _selectedLocaleIdentifier,
       );
       if (mounted) {
         setState(() => _localAvailability = availability);
@@ -274,18 +422,21 @@ final class _ChatScreenState extends State<ChatScreen> {
     } on FoundationModelsException catch (error) {
       if (mounted) {
         setState(
-          () => _localAvailability = ModelAvailability.fromMap(
-            <Object?, Object?>{
-              'status': 'unavailable',
-              'reason': error.message,
-            },
-          ),
+          () =>
+              _localAvailability = ModelAvailability.fromMap(<Object?, Object?>{
+                'status': 'unavailable',
+                'reason': error.message,
+              }),
         );
       }
     }
   }
 
   Future<void> _send() async {
+    if (_loadingLanguages) {
+      _showSnack('Wait while compatible languages are loaded.');
+      return;
+    }
     final String text = _input.text.trim();
     if (text.isEmpty || _sending) {
       return;
@@ -370,6 +521,10 @@ final class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _toggleLiveTranscription() async {
+    if (_loadingLanguages) {
+      _showSnack('Wait while compatible languages are loaded.');
+      return;
+    }
     if (_listening) {
       await _stopLiveTranscription();
       return;
@@ -382,7 +537,7 @@ final class _ChatScreenState extends State<ChatScreen> {
     _liveTranscription = _models
         .liveTranscription(
           request: LiveTranscriptionRequest(
-            localeIdentifier: _deviceLocale,
+            localeIdentifier: _selectedLocaleIdentifier,
             mode: AudioTranscriptionMode.automatic,
           ),
         )
@@ -430,9 +585,7 @@ final class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _pickAttachment() async {
     try {
-      final PickedFoundationModelsFile? file = await _models.pickFile(
-        kind: FoundationModelsFileKind.image,
-      );
+      final PickedFoundationModelsFile? file = await _models.pickFile();
       if (file != null && mounted) {
         setState(() => _pendingAttachment = file);
       }
@@ -451,7 +604,7 @@ final class _ChatScreenState extends State<ChatScreen> {
   Future<void> _showDiagnostics() async {
     try {
       final FoundationModelsDiagnostics diagnostics = await _models
-          .getDiagnostics(localeIdentifier: _deviceLocale);
+          .getDiagnostics(localeIdentifier: _selectedLocaleIdentifier);
       final String runtimeContext = await _orchestrator
           .buildRuntimePromptContext(refresh: true);
       if (!mounted) {
@@ -466,7 +619,8 @@ final class _ChatScreenState extends State<ChatScreen> {
               child: Text(
                 'OS: ${diagnostics.platform} '
                 '${diagnostics.operatingSystemVersion}\n'
-                'Locale: ${diagnostics.currentLocaleIdentifier}\n'
+                'Device locale: ${diagnostics.currentLocaleIdentifier}\n'
+                'Selected locale: ${diagnostics.targetLocaleIdentifier}\n'
                 'Local model: ${diagnostics.localAvailability.status.name}\n'
                 'PCC: '
                 '${diagnostics.privateCloudAvailability?.status.name ?? 'unknown'}'
@@ -522,15 +676,29 @@ final class _ChatScreenState extends State<ChatScreen> {
           children: <Widget>[
             const Text('Foundation Models Chat'),
             Text(
-              _backendLabel(_backend),
+              '${_backendLabel(_backend)} · '
+              '${_selectedLanguage.nativeDisplayName}',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
         actions: <Widget>[
+          IconButton(
+            tooltip: _loadingLanguages
+                ? 'Loading languages'
+                : 'Language: ${_selectedLanguage.nativeDisplayName}',
+            onPressed: _sending ? null : _showLanguagePicker,
+            icon: _loadingLanguages
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.language),
+          ),
           PopupMenuButton<ChatBackend>(
             tooltip: 'Model backend',
             icon: const Icon(Icons.cloud_outlined),
+            enabled: !_sending && !_loadingLanguages,
             onSelected: (ChatBackend backend) =>
                 unawaited(_switchBackend(backend)),
             itemBuilder: (BuildContext context) {
@@ -547,15 +715,35 @@ final class _ChatScreenState extends State<ChatScreen> {
               ];
             },
           ),
-          IconButton(
-            tooltip: 'Diagnostics',
-            onPressed: _showDiagnostics,
-            icon: const Icon(Icons.info_outline),
-          ),
-          IconButton(
-            tooltip: 'Reset conversation',
-            onPressed: _sending ? null : _resetChat,
-            icon: const Icon(Icons.refresh),
+          PopupMenuButton<_ChatAction>(
+            tooltip: 'More actions',
+            onSelected: (_ChatAction action) {
+              switch (action) {
+                case _ChatAction.diagnostics:
+                  unawaited(_showDiagnostics());
+                case _ChatAction.reset:
+                  unawaited(_resetChat());
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              return <PopupMenuEntry<_ChatAction>>[
+                const PopupMenuItem<_ChatAction>(
+                  value: _ChatAction.diagnostics,
+                  child: ListTile(
+                    leading: Icon(Icons.info_outline),
+                    title: Text('Diagnostics'),
+                  ),
+                ),
+                PopupMenuItem<_ChatAction>(
+                  value: _ChatAction.reset,
+                  enabled: !_sending,
+                  child: const ListTile(
+                    leading: Icon(Icons.refresh),
+                    title: Text('Reset conversation'),
+                  ),
+                ),
+              ];
+            },
           ),
         ],
       ),
@@ -610,8 +798,8 @@ final class _ChatScreenState extends State<ChatScreen> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     _transcriptionEngine == null
-                        ? 'Listening ($_deviceLocale)…'
-                        : 'Listening ($_deviceLocale, '
+                        ? 'Listening ($_selectedLocaleIdentifier)…'
+                        : 'Listening ($_selectedLocaleIdentifier, '
                               'engine: $_transcriptionEngine)',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
@@ -624,6 +812,117 @@ final class _ChatScreenState extends State<ChatScreen> {
               onPickAttachment: _pickAttachment,
               onToggleMicrophone: _toggleLiveTranscription,
               onSend: _send,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _LanguagePickerSheet extends StatefulWidget {
+  const _LanguagePickerSheet({
+    required this.languages,
+    required this.selectedIdentifier,
+  });
+
+  final List<FoundationModelsLanguage> languages;
+  final String selectedIdentifier;
+
+  @override
+  State<_LanguagePickerSheet> createState() => _LanguagePickerSheetState();
+}
+
+final class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
+  String _query = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final String normalizedQuery = _query.trim().toLowerCase();
+    final List<FoundationModelsLanguage> visibleLanguages = widget.languages
+        .where((FoundationModelsLanguage language) {
+          if (normalizedQuery.isEmpty) {
+            return true;
+          }
+          return language.nativeDisplayName.toLowerCase().contains(
+                normalizedQuery,
+              ) ||
+              language.displayName.toLowerCase().contains(normalizedQuery) ||
+              language.identifier.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
+
+    return SafeArea(
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * 0.72,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    'Choose language',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Applies to AI responses and live transcription.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SearchBar(
+                    hintText: 'Search languages',
+                    leading: const Icon(Icons.search),
+                    onChanged: (String value) => setState(() => _query = value),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: visibleLanguages.isEmpty
+                  ? const Center(child: Text('No languages match your search.'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      itemCount: visibleLanguages.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final FoundationModelsLanguage language =
+                            visibleLanguages[index];
+                        final bool selected =
+                            _ChatScreenState._normalizedLocale(
+                              language.identifier,
+                            ) ==
+                            _ChatScreenState._normalizedLocale(
+                              widget.selectedIdentifier,
+                            );
+                        final String details = <String>[
+                          if (language.displayName !=
+                              language.nativeDisplayName)
+                            language.displayName,
+                          language.identifier,
+                          if (!language.isTranscriptionAssetInstalled)
+                            'Speech download required',
+                        ].join(' · ');
+                        return ListTile(
+                          leading: Icon(
+                            language.isTranscriptionAssetInstalled
+                                ? Icons.record_voice_over_outlined
+                                : Icons.cloud_download_outlined,
+                          ),
+                          title: Text(language.nativeDisplayName),
+                          subtitle: Text(details),
+                          trailing: selected
+                              ? const Icon(Icons.check_circle)
+                              : null,
+                          selected: selected,
+                          onTap: () => Navigator.of(context).pop(language),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

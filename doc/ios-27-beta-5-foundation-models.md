@@ -29,10 +29,14 @@ Speech transcription is a separate Apple framework from Foundation Models, but i
 
 The package now uses `AssetInputSequenceProvider` for on-device file transcription and `CaptureInputSequenceProvider` for live microphone capture on iOS 27. iOS 26 keeps a guarded buffer-conversion path, and older systems or explicit server requests keep the legacy recognizer. The live fallback validates sample rate and channel count before installing an audio tap because AVFoundation can terminate the process for an invalid format instead of returning a recoverable Swift error.
 
+Language selection uses runtime capability data rather than a hardcoded list. `SystemLanguageModel.supportsLocale(_:)` validates model support with Apple's regional fallbacks, `SpeechTranscriber.supportedLocales` provides installed and downloadable speech locales, and `SpeechTranscriber.installedLocales` identifies the assets already present. `CupertinoFoundationModels.getSupportedLanguages()` exposes their intersection so one locale can safely drive both generation and real-time transcription.
+
 Official Speech sources:
 
 - [Speech framework](https://developer.apple.com/documentation/speech)
 - [SpeechAnalyzer](https://developer.apple.com/documentation/speech/speechanalyzer)
+- [SpeechTranscriber](https://developer.apple.com/documentation/speech/speechtranscriber)
+- [Foundation Models language and locale support](https://developer.apple.com/documentation/foundationmodels/supporting-languages-and-locales-with-foundation-models)
 - [AssetInputSequenceProvider](https://developer.apple.com/documentation/speech/assetinputsequenceprovider)
 - [CaptureInputSequenceProvider](https://developer.apple.com/documentation/speech/captureinputsequenceprovider)
 - [WWDC25: Bring advanced speech-to-text to your app with SpeechAnalyzer](https://developer.apple.com/videos/play/wwdc2025/277/)
@@ -77,7 +81,7 @@ Sources:
 
 ### Multimodal and context management
 
-- Image prompt attachments use `Attachment<ImageAttachmentContent>`.
+- Image prompt attachments are documented as `Attachment<ImageAttachmentContent>`. Physical-device evidence on iOS 27 beta 5 build `24A5408d` shows that `Attachment(imageURL:)`, `label(_:)`, and the generic prompt representation can terminate through a null page before Swift can throw. The package therefore uses Vision preprocessing on this beta runtime and keeps the native API disabled until a runtime-safe implementation is verified.
 - Apple documents Vision's OCR and barcode-reader tools for image-analysis workflows.
 - The on-device context remains 4,096 tokens. `SystemLanguageModel.tokenCount(for:)` is available from iOS 26.4 for prompts, instructions, tools, schemas, and transcript entries.
 - iOS 27 responses expose input, cached-input, output, reasoning, and total token usage.

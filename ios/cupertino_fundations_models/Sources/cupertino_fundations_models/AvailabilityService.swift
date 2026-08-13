@@ -2,6 +2,9 @@ import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
+#if canImport(Speech)
+import Speech
+#endif
 
 final class AvailabilityService {
     func capabilities() -> [String: Any] {
@@ -47,21 +50,15 @@ final class AvailabilityService {
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
             let localModel: SystemLanguageModel = SystemLanguageModel.default
-            if localModel.capabilities.contains(.vision) {
-                capabilities.append("imageInput")
-            }
             if localModel.capabilities.contains(.reasoning) {
                 capabilities.append("reasoning")
             }
             let privateCloudModel: PrivateCloudComputeLanguageModel =
                 PrivateCloudComputeLanguageModel()
-            if privateCloudModel.capabilities.contains(.vision) {
-                capabilities.append("imageInput")
-            }
-            if privateCloudModel.capabilities.contains(.reasoning) {
-                capabilities.append("reasoning")
-            }
-            let privateCloud: [String: Any] = privateCloudAvailability(mode: "privateCloudCompute")
+            let privateCloud: [String: Any] = privateCloudAvailability(
+                model: privateCloudModel,
+                mode: "privateCloudCompute"
+            )
             supportsFullPower = privateCloud["isAvailable"] as? Bool ?? false
             preferredMode = supportsFullPower ? "privateCloudCompute" : "local"
         } else {
@@ -82,9 +79,54 @@ final class AvailabilityService {
             "supportedLanguages": supportedLanguages,
             "details": [
                 "foundationModelsRuntime": majorVersion >= 26,
-                "ios27PrimaryRuntime": majorVersion >= 27
+                "ios27PrimaryRuntime": majorVersion >= 27,
+                "nativeImageAttachmentsUsable": false,
+                "imageFallback": "visionPreprocessing"
             ]
         ]
+    }
+
+    func supportedLanguages() async -> [[String: Any]] {
+        #if canImport(FoundationModels) && canImport(Speech)
+        if #available(iOS 26.0, *) {
+            let model: SystemLanguageModel = SystemLanguageModel.default
+            let speechLocales: [Locale] = await SpeechTranscriber.supportedLocales
+            let installedLocales: [Locale] = await SpeechTranscriber.installedLocales
+            let installedIdentifiers: Set<String> = Set(
+                installedLocales.map { normalizedLocaleIdentifier($0.identifier) }
+            )
+            let displayLocale: Locale = Locale.current
+            var languagesByIdentifier: [String: [String: Any]] = [:]
+
+            for locale in speechLocales where model.supportsLocale(locale) {
+                let identifier: String = normalizedLocaleIdentifier(locale.identifier)
+                let nativeLocale: Locale = Locale(identifier: identifier)
+                let displayName: String = displayLocale.localizedString(
+                    forIdentifier: identifier
+                ) ?? identifier
+                let nativeDisplayName: String = nativeLocale.localizedString(
+                    forIdentifier: identifier
+                ) ?? displayName
+                languagesByIdentifier[identifier.lowercased()] = [
+                    "identifier": identifier,
+                    "languageCode": locale.language.languageCode?.identifier ?? identifier,
+                    "displayName": displayName,
+                    "nativeDisplayName": nativeDisplayName,
+                    "isTranscriptionAssetInstalled": installedIdentifiers.contains(
+                        normalizedLocaleIdentifier(identifier)
+                    )
+                ]
+            }
+
+            return languagesByIdentifier.values.sorted { first, second in
+                let firstName: String = first["displayName"] as? String ?? ""
+                let secondName: String = second["displayName"] as? String ?? ""
+                return firstName.localizedStandardCompare(secondName) == .orderedAscending
+            }
+        }
+        #endif
+
+        return []
     }
 
     func diagnostics(arguments: [String: Any]) -> [String: Any] {
@@ -115,15 +157,10 @@ final class AvailabilityService {
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
             let privateCloud: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
-            privateCloudAvailabilityValue = privateCloudAvailability(mode: "privateCloudCompute")
-            privateCloudSupportedLanguages = languageIdentifiers(from: privateCloud.supportedLanguages)
-            privateCloudSupportsCurrentLocale = privateCloud.supportsLocale(targetLocale)
-            privateCloudPreferredLanguageSupport = Locale.preferredLanguages.map { identifier in
-                return [
-                    "identifier": identifier,
-                    "isSupported": privateCloud.supportsLocale(Locale(identifier: identifier))
-                ]
-            }
+            privateCloudAvailabilityValue = privateCloudAvailability(
+                model: privateCloud,
+                mode: "privateCloudCompute"
+            )
         } else if majorVersion >= 27 {
             privateCloudAvailabilityValue = unavailable(
                 mode: "privateCloudCompute",
@@ -153,7 +190,8 @@ final class AvailabilityService {
             "details": [
                 "foundationModelsRuntime": majorVersion >= 26,
                 "ios27PrimaryRuntime": majorVersion >= 27,
-                "canReadSiriLanguage": false
+                "canReadSiriLanguage": false,
+                "canReadPrivateCloudLanguageSupport": false
             ]
         ]
     }
@@ -185,7 +223,10 @@ final class AvailabilityService {
             #if canImport(FoundationModels)
             #if compiler(>=6.4)
             if #available(iOS 27.0, *) {
-                return privateCloudAvailability(mode: "privateCloudCompute")
+                return privateCloudAvailability(
+                    model: PrivateCloudComputeLanguageModel(),
+                    mode: "privateCloudCompute"
+                )
             }
             #endif
             #endif
@@ -202,7 +243,10 @@ final class AvailabilityService {
             #if canImport(FoundationModels)
             #if compiler(>=6.4)
             if #available(iOS 27.0, *) {
-                let privateCloud: [String: Any] = privateCloudAvailability(mode: "privateCloudCompute")
+                let privateCloud: [String: Any] = privateCloudAvailability(
+                    model: PrivateCloudComputeLanguageModel(),
+                    mode: "privateCloudCompute"
+                )
                 if privateCloud["isAvailable"] as? Bool ?? false {
                     return privateCloud
                 }
@@ -273,8 +317,10 @@ final class AvailabilityService {
 
     #if canImport(FoundationModels) && compiler(>=6.4)
     @available(iOS 27.0, *)
-    private func privateCloudAvailability(mode: String) -> [String: Any] {
-        let model: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
+    private func privateCloudAvailability(
+        model: PrivateCloudComputeLanguageModel,
+        mode: String
+    ) -> [String: Any] {
         switch model.availability {
         case .available:
             let quota: [String: Any] = privateCloudQuota(model.quotaUsage)
@@ -408,6 +454,10 @@ final class AvailabilityService {
         #else
         return "unknown"
         #endif
+    }
+
+    private func normalizedLocaleIdentifier(_ identifier: String) -> String {
+        return identifier.replacingOccurrences(of: "_", with: "-")
     }
 
     #if canImport(FoundationModels)

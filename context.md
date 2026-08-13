@@ -564,6 +564,39 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - Validaciones permitidas: `dart format lib`; `flutter analyze` limpio en raiz y `example`; `flutter build ios --no-codesign` desde `example/` con Xcode 27 beta 5 build `27A5194q` exitoso y `Runner.app` de 16.8 MB; `git diff --check` limpio; `dart pub publish --dry-run` valido el paquete y solo aviso que el arbol Git tiene cambios sin commit. No se ejecutaron tests, app, simulador ni dispositivo. La comprobacion definitiva del cierre reportado y la latencia real requiere reproduccion manual en el dispositivo afectado o un crash log `.ips`; el codigo y el build por si solos no prueban comportamiento runtime.
 - Pendientes ajenos a esta correccion: Dynamic Profiles, bridge nativo arbitrario de `LanguageModelExecutor`, selector directo de Photos y migracion opcional del ejemplo para retirar la integracion CocoaPods residual.
 
+## Iteracion 2026-08-12 - Crash nativo de diagnosticos PCC en iOS 27 beta 5
+
+- Evidencia de dispositivo: los incidentes `93FB4FC2-46CD-47E1-88A0-A4EEAD3D5EFB`, `5FDE2A28-5A57-46CC-9744-2413528DFA90` y `E21C1254-1AB1-4872-8141-C7AEE2760FAB` terminaron el `Example` con `EXC_BAD_ACCESS/SIGSEGV` en `AvailabilityService.diagnostics(arguments:)`, simbolicado en `AvailabilityService.swift:119`, al leer `PrivateCloudComputeLanguageModel.supportedLanguages`.
+- Un primer guard por `PrivateCloudComputeLanguageModel.availability == .available` no fue suficiente: los incidentes posteriores de las 21:47 terminaron con `EXC_BAD_ACCESS/SIGBUS` en la misma propiedad, simbolicada en la nueva linea 130. Esto prueba un fallo del runtime de iOS 27 beta 5, no una excepcion Swift recuperable.
+- `AvailabilityService.swift` ya no consulta `supportedLanguages`, `supportsLocale` ni `capabilities` sobre PCC. Conserva `availability` y cuota, que completaron correctamente antes del fallo, y devuelve `canReadPrivateCloudLanguageSupport: false`; el diagnostico local sigue reportando idiomas normalmente.
+- Validacion en el iPhone fisico `iPhone Sebas` con iOS 27 beta 5 `24A5408d`: build release con Xcode 27 beta 5 exitoso, instalacion y lanzamiento exitosos, consulta automatica de diagnosticos sin nuevo reporte `.ips`, y proceso exacto del bundle `com.example.cupertinoFundationsModelsExample` vivo. La app se dejo abierta para reproducir manualmente envio Hybrid/Offline y transcripcion; esos flujos requieren interaccion del usuario para confirmar si existe una segunda pila independiente.
+- No se ejecutaron ni crearon tests. No se hizo commit, push, publicacion ni cambio de version para esta correccion.
+
+## Iteracion 2026-08-12 - Adjuntos y fallback seguro de imagenes
+
+- Evidencia de dispositivo: el incidente `90EBF955-2ACF-4858-9B73-01048EF5393F` termino con `KERN_PROTECTION_FAILURE` en `Attachment(imageURL:)`; `7503E9F2-AFE3-4A27-AA53-291F2C1E4D2B` avanzo hasta `Attachment.label(_:)`; `A2055753-75D3-4A7E-856C-6FFDB0A599E0` termino al convertir `Attachment<ImageAttachmentContent>` en `Prompt`. Las tres rutas apuntan a una pagina nula antes de que Swift pueda lanzar una excepcion recuperable.
+- `SessionRegistry.swift` ya no invoca el ABI multimodal nativo defectuoso de iOS 27 beta 5. Las imagenes se validan por contenido, se limitan a 50 MB, se reducen a 4096 px y Vision extrae OCR, clasificaciones y codigos de barras como contexto seguro para Foundation Models.
+- Los adjuntos de bytes aceptan tanto `FlutterStandardTypedData` como listas de enteros del codec. Texto, Markdown, JSON y CSV requieren UTF-8 y un maximo de 5 MB; PDFKit extrae PDFs con texto; audio y binarios no compatibles devuelven un error tipado. Ningun adjunto invalido se descarta silenciosamente.
+- `AvailabilityService.swift` deja de anunciar el ABI nativo de imagen y reporta `nativeImageAttachmentsUsable: false` junto con `imageFallback: visionPreprocessing`. El ejemplo permite seleccionar cualquier archivo, no solo imagenes.
+- El selector conserva el nombre original para UI aunque la copia temporal use UUID. Los errores deterministas de adjuntos sobreviven al agotamiento de rutas Hybrid; `.doc` y `.docx` informan que iOS no tiene importador Office Open XML y piden exportar como PDF con texto o UTF-8, en vez de mostrarse como `modelUnavailable`.
+- Validacion en iPhone fisico con iOS 27 beta 5 `24A5408d`: build release con Xcode 27 beta 5 exitoso, instalacion y lanzamiento exitosos, sin un nuevo `.ips` durante la ventana solicitada para reintentar la imagen, y proceso exacto del bundle vivo como PID 1470. La respuesta visual final requiere confirmacion del usuario. No se ejecutaron ni crearon tests; no se hizo commit, push, publicacion ni cambio de version.
+
+## Iteracion 2026-08-12 - Idioma unificado para IA y transcripcion en vivo
+
+- Se agrego `CupertinoFoundationModels.getSupportedLanguages()` y el DTO `FoundationModelsLanguage`. La API nativa calcula en runtime la interseccion entre `SystemLanguageModel.supportsLocale(_:)` y `SpeechTranscriber.supportedLocales`, y marca los recursos ya presentes mediante `SpeechTranscriber.installedLocales`; no existe una lista de idiomas codificada a mano.
+- `AvailabilityService.swift` concentra la consulta de compatibilidad y nombres localizados. El MethodChannel, la interfaz de plataforma y la fachada Dart exponen el resultado tipado sin dependencias adicionales.
+- El `Example` incluye un selector buscable en el AppBar. El locale elegido configura instrucciones y defaults del orquestador para Apple local, PCC/Hybrid y proveedor externo, ademas de availability, diagnostics y `LiveTranscriptionRequest`.
+- Cambiar idioma detiene una transcripcion activa, descarta la sesion anterior y limpia los mensajes para impedir que el transcript del idioma previo condicione la nueva respuesta. La hoja indica cuando Speech debe descargar el recurso en el primer uso.
+- Documentacion sincronizada en `README.md`, `example/README.md`, `CHANGELOG.md`, `implementation_for_agents.md` y `doc/ios-27-beta-5-foundation-models.md`.
+- Validaciones realizadas sin tests: formato Dart, `flutter analyze` limpio, `git diff --check` limpio y build iOS release firmado con Xcode 27 beta 5 exitoso. La compilacion se instalo y se lanzo mediante CoreDevice en `iPhone Sebas` con iOS 27 beta 5; el proceso exacto del bundle siguio vivo como PID 882 y no aparecio un nuevo crash log de Runner durante la comprobacion. El dispositivo estaba bloqueado al capturar la pantalla, por lo que la revision visual de la hoja y el cambio manual de idioma quedan pendientes al desbloquearlo.
+
+## Iteracion 2026-08-12 - Release 0.2.1
+
+- Se preparo la version patch `0.2.1` para distribuir conjuntamente las correcciones de crashes de diagnostics PCC, adjuntos de imagen/archivo, concurrencia y timeouts, Speech moderno y la seleccion unificada de idioma.
+- `pubspec.yaml`, el podspec iOS, la dependencia mostrada en `README.md` y `CHANGELOG.md` quedaron sincronizados con `0.2.1`.
+- La entrega autorizada tiene como destino directo `main`, `origin/main` y pub.dev. No incluye pruebas nuevas ni ejecucion de tests por la regla del repositorio.
+- Validaciones de la candidata: `dart format` sin cambios, `flutter analyze` limpio, `git diff --check` limpio, build iOS release sin firma con Xcode 27 beta 5 exitoso (`Runner.app` de 16.9 MB) y `dart pub publish --dry-run` valido el archivo comprimido de 102 KB. Antes del commit, el unico aviso del dry-run fue el arbol Git modificado esperado.
+
 ## Regla de mantenimiento de contexto
 
 Cada cambio futuro debe actualizar esta seccion con:

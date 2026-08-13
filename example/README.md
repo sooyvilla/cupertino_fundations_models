@@ -7,6 +7,7 @@ The app demonstrates:
 - Hybrid chat through `FoundationModelsOrchestrator.startChat()` with streaming message bubbles.
 - Conversation context that survives fallback between Apple local, Private Cloud Compute, and an optional Gemini provider.
 - Live microphone transcription with `CupertinoFoundationModels.liveTranscription()` feeding the chat input while you speak.
+- A searchable language selector backed by `getSupportedLanguages()`; one locale controls model responses and live transcription.
 - Image attachments through the native document picker.
 - Availability checks and runtime diagnostics.
 
@@ -18,6 +19,7 @@ The full example lives in [`lib/main.dart`](lib/main.dart). The code shows how t
 - `FoundationModelsChatSession.sendStream()` with `OrchestratedChatTextEvent` and `OrchestratedChatCompletionEvent`
 - A custom `FoundationModelsExternalProvider` (Gemini REST adapter, no third-party packages)
 - `CupertinoFoundationModels.liveTranscription()`
+- `CupertinoFoundationModels.getSupportedLanguages()`
 - `CupertinoFoundationModels.pickFile()` and prompt attachments
 - `CupertinoFoundationModels.checkAvailability()` and `getDiagnostics()`
 
@@ -45,6 +47,6 @@ DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer flutter run -d <io
 
 Apple Intelligence must be enabled, the device language and Siri language must be supported, and model assets must finish downloading before local generation is available.
 
-When testing on the iOS 27 beta, Foundation Models currently work only when the device is fully configured in English, including system language and Siri language.
+The language button shows only locales supported by both the on-device model and modern live transcription. A speech icon means the transcription asset is installed; a download icon means iOS may download it on first use. Apple Intelligence availability can still depend on the device and Siri language configuration.
 
 Live transcription and speech features require the microphone and speech recognition permissions already declared in this example's `Info.plist`.
