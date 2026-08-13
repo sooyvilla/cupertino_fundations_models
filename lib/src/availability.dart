@@ -34,6 +34,57 @@ enum AvailabilityStatus {
   unknown,
 }
 
+/// A locale supported by both Apple Foundation Models and live transcription.
+final class FoundationModelsLanguage {
+  const FoundationModelsLanguage({
+    required this.identifier,
+    required this.languageCode,
+    required this.displayName,
+    required this.nativeDisplayName,
+    required this.isTranscriptionAssetInstalled,
+  });
+
+  factory FoundationModelsLanguage.fromMap(Map<Object?, Object?> map) {
+    final String identifier = (map['identifier'] as String?) ?? 'und';
+    return FoundationModelsLanguage(
+      identifier: identifier,
+      languageCode: (map['languageCode'] as String?) ?? identifier,
+      displayName: (map['displayName'] as String?) ?? identifier,
+      nativeDisplayName:
+          (map['nativeDisplayName'] as String?) ??
+          (map['displayName'] as String?) ??
+          identifier,
+      isTranscriptionAssetInstalled:
+          (map['isTranscriptionAssetInstalled'] as bool?) ?? false,
+    );
+  }
+
+  /// BCP-47 locale identifier accepted by model and transcription requests.
+  final String identifier;
+
+  /// Primary ISO language code, such as `en` or `es`.
+  final String languageCode;
+
+  /// Locale name localized for the device's current language.
+  final String displayName;
+
+  /// Locale name localized in the represented language.
+  final String nativeDisplayName;
+
+  /// Whether the SpeechTranscriber asset is already installed on this device.
+  final bool isTranscriptionAssetInstalled;
+
+  Map<String, Object?> toMap() {
+    return <String, Object?>{
+      'identifier': identifier,
+      'languageCode': languageCode,
+      'displayName': displayName,
+      'nativeDisplayName': nativeDisplayName,
+      'isTranscriptionAssetInstalled': isTranscriptionAssetInstalled,
+    };
+  }
+}
+
 /// Describes the native platform and Apple Foundation Models support.
 final class FoundationModelsCapabilities {
   const FoundationModelsCapabilities({

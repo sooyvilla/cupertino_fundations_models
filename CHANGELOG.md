@@ -1,3 +1,25 @@
+## Unreleased
+
+## 0.2.1
+
+iOS 27 beta 5 crash hardening for diagnostics, image and file prompts, hybrid routing, generation concurrency, and Speech transcription. This release also adds runtime language selection shared by Foundation Models and live transcription.
+
+### Changed
+
+- The example now offers a searchable language selector. One selected locale controls Foundation Models instructions, Hybrid/external-provider defaults, availability diagnostics, and live `SpeechTranscriber` requests; changing it stops dictation and starts a clean conversation.
+- Image and file selection in the example now accepts any document instead of images only. UTF-8 text, Markdown, JSON, CSV, and text-based PDF files are converted into prompt context; unsupported, corrupt, inaccessible, or oversized files return a typed error.
+- Image input on iOS 27 beta 5 uses local Vision OCR, classification, and barcode preprocessing before generation. Native `Attachment<ImageAttachmentContent>` remains disabled because the beta 5 runtime terminates the process before Swift can throw an error.
+
+### Added
+
+- `CupertinoFoundationModels.getSupportedLanguages()` and `FoundationModelsLanguage`, exposing locales accepted by both `SystemLanguageModel.supportsLocale(_:)` and `SpeechTranscriber.supportedLocales`, plus whether each transcription asset is installed.
+
+### Fixed
+
+- Foundation Models diagnostics no longer read unsafe PCC language and capability properties that caused repeatable `EXC_BAD_ACCESS` crashes on iOS 27 beta 5.
+- Image paths no longer call the crashing `Attachment(imageURL:)` or `Attachment.label(_:)` APIs. Image bytes and files are decoded, validated, downsampled, and handled without an unrecoverable native crash.
+- File picker results preserve the original display name instead of exposing the UUID used by the temporary copy. Deterministic attachment errors also survive Hybrid route exhaustion instead of being replaced with `modelUnavailable`.
+
 ## 0.2.0
 
 iOS 27 beta 5 API alignment. This is a breaking release from `0.1.x`.

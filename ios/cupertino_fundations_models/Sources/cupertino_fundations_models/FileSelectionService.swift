@@ -53,7 +53,7 @@ final class FileSelectionService: NSObject, UIDocumentPickerDelegate {
             let copiedURL: URL = try copyToTemporaryDirectory(url: url)
             result([
                 "path": copiedURL.path,
-                "name": copiedURL.lastPathComponent,
+                "name": url.lastPathComponent,
                 "mimeType": mimeType(for: copiedURL),
                 "kind": pendingKind
             ])

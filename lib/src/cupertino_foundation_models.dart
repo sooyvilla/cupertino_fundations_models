@@ -18,6 +18,11 @@ final class CupertinoFoundationModels {
     return _platform.getCapabilities();
   }
 
+  /// Returns locales supported by both the on-device model and live speech.
+  Future<List<FoundationModelsLanguage>> getSupportedLanguages() {
+    return _platform.getSupportedLanguages();
+  }
+
   Future<FoundationModelsDiagnostics> getDiagnostics({
     String? localeIdentifier,
   }) {

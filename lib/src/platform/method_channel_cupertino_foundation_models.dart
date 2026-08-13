@@ -47,6 +47,18 @@ final class MethodChannelCupertinoFoundationModels
   }
 
   @override
+  Future<List<FoundationModelsLanguage>> getSupportedLanguages() async {
+    final Object? response = await _invoke('getSupportedLanguages');
+    final List<Object?> values = response is List<Object?>
+        ? response
+        : <Object?>[];
+    return values
+        .whereType<Map<Object?, Object?>>()
+        .map(FoundationModelsLanguage.fromMap)
+        .toList(growable: false);
+  }
+
+  @override
   Future<FoundationModelsDiagnostics> getDiagnostics({
     required String? localeIdentifier,
   }) async {

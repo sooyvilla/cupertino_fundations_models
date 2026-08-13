@@ -50,7 +50,7 @@ This Flutter plugin currently supports iOS only. The `platforms` field in `pubsp
 | Guided structured output | `DynamicGenerationSchema`, `GenerationSchema` | iOS 26+ | Runtime schemas built from Dart; the model returns validated JSON. |
 | Content tagging | `SystemLanguageModel(useCase: .contentTagging)` | iOS 26+ | Specialized on-device model for categorizing text. |
 | Session prewarm | `prewarm(promptPrefix:)` | iOS 26+ | Preloads model resources for lower first-token latency. |
-| Image prompts | `Attachment<ImageAttachmentContent>` | iOS 27+ | Requires building with Xcode 27, beta or official. Experimental in the iOS 27 SDK. |
+| Image prompts | Vision preprocessing; `Attachment<ImageAttachmentContent>` when runtime-safe | iOS 27+ | iOS 27 beta 5 crashes before throwing when its native attachment ABI is called, so this package uses local OCR, classification, and barcode context on that runtime. |
 | Reasoning options | `ContextOptions.ReasoningLevel` | iOS 27+ | Requires building with Xcode 27, beta or official. Mapped from Dart `ReasoningLevel`. |
 | Private Cloud Compute | `PrivateCloudComputeLanguageModel` | iOS 27+ | Requires building with Xcode 27, beta or official, plus Apple availability, network, quota, and entitlement. |
 | Audio transcription | `SpeechAnalyzer`, `AssetInputSequenceProvider` | iOS 26+ (fallback iOS 13+) | Accurate on-device file transcription; beta 5 uses the native asset input provider on iOS 27. Explicit server mode uses `SFSpeechRecognizer`. |
@@ -97,7 +97,7 @@ Add the package to your Flutter app:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.2.0
+  cupertino_fundations_models: ^0.2.1
 ```
 
 Then import it:
@@ -158,6 +158,35 @@ print(diagnostics.currentLocaleIdentifier);
 print(diagnostics.localAvailability.status.name);
 print(diagnostics.localSupportedLanguages);
 ```
+
+Use the same compatible locale for model generation and transcription:
+
+```dart
+final List<FoundationModelsLanguage> languages =
+    await models.getSupportedLanguages();
+final FoundationModelsLanguage spanish = languages.firstWhere(
+  (FoundationModelsLanguage language) => language.languageCode == 'es',
+);
+
+final FoundationModelsOrchestrator ai = FoundationModelsOrchestrator(
+  defaults: FoundationModelsDefaults(
+    localeIdentifier: spanish.identifier,
+    instructions: 'Respond in ${spanish.displayName}.',
+  ),
+);
+
+final Stream<LiveTranscriptionEvent> dictation = models.liveTranscription(
+  request: LiveTranscriptionRequest(
+    localeIdentifier: spanish.identifier,
+  ),
+);
+```
+
+`getSupportedLanguages()` returns the runtime intersection of locales accepted
+by `SystemLanguageModel.supportsLocale(_:)` and
+`SpeechTranscriber.supportedLocales`. Each entry reports whether its speech
+asset is already installed; the first transcription may take longer when the
+asset still needs to download.
 
 ## Hybrid Orchestration
 
@@ -424,9 +453,12 @@ final ModelResponse response = await models.respond(
 
 Current attachment behavior:
 
-- Text files are read as UTF-8 and inserted into the prompt.
-- Image files use Foundation Models image attachments on iOS 27+.
-- Audio files are not attached directly to Foundation Models; transcribe them first.
+- UTF-8 text, Markdown, JSON, and CSV files are inserted into the prompt, up to 5 MB.
+- Text-based PDFs are extracted locally with PDFKit and inserted into the prompt. Scanned PDFs need OCR first.
+- Images up to 50 MB are decoded and downsampled locally. On iOS 27 beta 5, Vision OCR, classification, and barcode results are inserted as safe prompt context because the published native Foundation Models attachment API terminates the process before Swift can catch an error.
+- Audio files are not attached directly to Foundation Models; transcribe them first with `transcribeAudio()`.
+- Word `.doc` and `.docx` files are not natively readable on iOS. Export them as a text-based PDF or UTF-8 text before attaching them.
+- Unsupported, corrupt, empty, inaccessible, or oversized files return a typed error instead of being silently ignored.
 
 ## Audio Transcription
 
@@ -487,6 +519,11 @@ await subscription.cancel();
 
 Live transcription requires `NSMicrophoneUsageDescription` and
 `NSSpeechRecognitionUsageDescription` in your app `Info.plist`.
+
+The example's language button lists only locales shared by the Apple model and
+live transcription. Selecting one updates both features, stops any active
+dictation, and opens a new chat session so the previous language does not remain
+in the model transcript.
 
 Only one generation request may run on a `FoundationModelSession` or `FoundationModelsChatSession` at a time. Concurrent calls now fail with `concurrentRequests` instead of racing the native session. `GenerationOptions.timeout` is enforced for both one-shot and streaming generation and cancels the native request on timeout.
 

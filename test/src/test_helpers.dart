@@ -44,6 +44,12 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   }
 
   @override
+  Future<List<FoundationModelsLanguage>> getSupportedLanguages() async {
+    calls.add('getSupportedLanguages');
+    return <FoundationModelsLanguage>[];
+  }
+
+  @override
   Future<FoundationModelsDiagnostics> getDiagnostics({
     required String? localeIdentifier,
   }) async {
