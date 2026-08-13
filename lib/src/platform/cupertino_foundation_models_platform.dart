@@ -23,6 +23,10 @@ abstract interface class CupertinoFoundationModelsPlatform {
     required SessionOptions options,
   });
 
+  Future<int> countTokens({required Prompt prompt});
+
+  Future<int> countSessionTokens({required String sessionId});
+
   Future<PickedFoundationModelsFile?> pickFile({
     required FoundationModelsFileKind kind,
   });

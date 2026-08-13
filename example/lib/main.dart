@@ -291,7 +291,6 @@ final class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    await _stopLiveTranscription();
     final PickedFoundationModelsFile? attachment = _pendingAttachment;
     final ChatMessageView reply = ChatMessageView(
       isUser: false,
@@ -315,6 +314,7 @@ final class _ChatScreenState extends State<ChatScreen> {
     _scrollToEnd();
 
     try {
+      await _stopLiveTranscription();
       final Stream<OrchestratedChatEvent> stream = _chat.sendStream(
         text,
         attachments: <PromptAttachment>[
@@ -349,6 +349,15 @@ final class _ChatScreenState extends State<ChatScreen> {
           reply
             ..text = error.recoverySuggestion ?? error.message
             ..providerName = 'error: ${error.code.name}'
+            ..isStreaming = false;
+        });
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() {
+          reply
+            ..text = 'Unexpected request failure: $error'
+            ..providerName = 'error'
             ..isStreaming = false;
         });
       }

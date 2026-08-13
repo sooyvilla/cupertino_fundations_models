@@ -12,6 +12,7 @@ public final class CupertinoFoundationModelsPlugin: NSObject, FlutterPlugin, Flu
     private let liveTranscriptionService: LiveTranscriptionService = LiveTranscriptionService()
     private var requestTasks: [String: Task<Void, Never>] = [:]
     private var streamTasks: [String: Task<Void, Never>] = [:]
+    private var transcriptionTasks: [String: Task<Void, Never>] = [:]
 
     public static func register(with registrar: FlutterPluginRegistrar) {
         let instance: CupertinoFoundationModelsPlugin = CupertinoFoundationModelsPlugin()
@@ -58,19 +59,45 @@ public final class CupertinoFoundationModelsPlugin: NSObject, FlutterPlugin, Flu
                     complete(result, ErrorMapper.flutterError(from: error))
                 }
             }
+        case "countTokens":
+            let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
+            Task {
+                do {
+                    let count: Int = try await registry.countTokens(arguments: arguments)
+                    complete(result, count)
+                } catch {
+                    complete(result, ErrorMapper.flutterError(from: error))
+                }
+            }
         case "pickFile":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
             fileSelectionService.pickFile(arguments: arguments, result: result)
         case "transcribeAudio":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
-            Task {
+            let requestId: String = arguments["requestId"] as? String ?? UUID().uuidString
+            let task: Task<Void, Never> = Task { [weak self] in
                 do {
-                    let response: [String: Any] = try await speechTranscriptionService.transcribeAudio(arguments: arguments)
-                    complete(result, response)
+                    guard let self else {
+                        return
+                    }
+                    let response: [String: Any] = try await self.speechTranscriptionService.transcribeAudio(
+                        arguments: arguments
+                    )
+                    self.complete(result, response)
                 } catch {
-                    complete(result, ErrorMapper.flutterError(from: error))
+                    self?.complete(result, ErrorMapper.flutterError(from: error))
+                }
+                DispatchQueue.main.async {
+                    self?.transcriptionTasks.removeValue(forKey: requestId)
                 }
             }
+            transcriptionTasks[requestId]?.cancel()
+            transcriptionTasks[requestId] = task
+        case "cancelTranscription":
+            let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
+            let requestId: String = arguments["requestId"] as? String ?? ""
+            transcriptionTasks.removeValue(forKey: requestId)?.cancel()
+            result(nil)
         case "respond":
             runSessionRequest(call: call, result: result) { registry, arguments in
                 try await registry.respond(arguments: arguments)

@@ -1,5 +1,6 @@
 import Foundation
 import Flutter
+import UIKit
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -22,6 +23,7 @@ actor SessionRegistry {
             cloudPolicy: cloudPolicy,
             instructions: arguments["instructions"] as? String,
             useCase: arguments["useCase"] as? String,
+            transcriptErrorHandlingPolicy: arguments["transcriptErrorHandlingPolicy"] as? String,
             toolMaps: arguments["tools"] as? [[String: Any]] ?? [],
             metadata: arguments["metadata"] as? [String: Any] ?? [:]
         )
@@ -51,6 +53,41 @@ actor SessionRegistry {
         #endif
     }
 
+    func countTokens(arguments: [String: Any]) async throws -> Int {
+        #if canImport(FoundationModels) && compiler(>=6.4)
+        if #available(iOS 26.4, *) {
+            let model: SystemLanguageModel = SystemLanguageModel.default
+            switch arguments["target"] as? String {
+            case "prompt":
+                let promptMap: [String: Any] = arguments["prompt"] as? [String: Any] ?? [:]
+                return try await model.tokenCount(for: makePrompt(promptMap: promptMap))
+            case "transcript":
+                guard let id: String = arguments["sessionId"] as? String,
+                      let session: NativeSession = sessions[id] else {
+                    throw NativeSessionError.sessionNotFound
+                }
+                guard session.mode == "local",
+                      let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession else {
+                    throw NativeSessionError.modelUnavailable(
+                        code: "unsupportedCapability",
+                        message: "Transcript token counting is available only for local SystemLanguageModel sessions.",
+                        recoverySuggestion: "Count the prompt before sending it or create a local session."
+                    )
+                }
+                return try await model.tokenCount(for: languageSession.transcript)
+            default:
+                throw NativeSessionError.invalidRequest("A supported token count target is required.")
+            }
+        }
+        #endif
+
+        throw NativeSessionError.modelUnavailable(
+            code: "unsupportedOsVersion",
+            message: "Token counting requires iOS 26.4 or later and a build made with Xcode 27.",
+            recoverySuggestion: "Build with Xcode 27 and run on iOS 26.4 or later."
+        )
+    }
+
     func respondStructured(arguments: [String: Any]) async throws -> [String: Any] {
         guard let id: String = arguments["sessionId"] as? String,
               let session: NativeSession = sessions[id] else {
@@ -67,6 +104,27 @@ actor SessionRegistry {
             let options: GenerationOptions = makeGenerationOptions(arguments: optionsMap)
             let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] ?? [:]
             let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
+            #if compiler(>=6.4)
+            if #available(iOS 27.0, *) {
+                let response = try await languageSession.respond(
+                    to: prompt,
+                    schema: schema,
+                    options: options,
+                    contextOptions: makeContextOptions(arguments: optionsMap)
+                )
+                let jsonString: String = response.content.jsonString
+                return [
+                    "text": jsonString,
+                    "usedMode": session.mode,
+                    "structuredValue": SchemaMapper.structuredValue(fromJsonString: jsonString),
+                    "metadata": [
+                        "rawContent": String(describing: response.rawContent)
+                    ],
+                    "usage": responseUsage(response.usage)
+                ]
+            }
+            #endif
+
             let includeSchemaInPrompt: Bool = optionsMap["includeSchemaInPrompt"] as? Bool ?? true
             let response = try await languageSession.respond(
                 to: prompt,
@@ -79,7 +137,8 @@ actor SessionRegistry {
                 "text": jsonString,
                 "usedMode": session.mode,
                 "structuredValue": SchemaMapper.structuredValue(fromJsonString: jsonString),
-                "metadata": [:]
+                "metadata": [:],
+                "usage": NSNull()
             ]
         }
         #endif
@@ -113,7 +172,10 @@ actor SessionRegistry {
                     "text": response.content,
                     "usedMode": session.mode,
                     "structuredValue": NSNull(),
-                    "metadata": responseMetadata(response: response)
+                    "metadata": [
+                        "rawContent": String(describing: response.rawContent)
+                    ],
+                    "usage": responseUsage(response.usage)
                 ]
             }
             #endif
@@ -125,7 +187,8 @@ actor SessionRegistry {
                 "structuredValue": NSNull(),
                 "metadata": [
                     "rawContent": String(describing: response.rawContent)
-                ]
+                ],
+                "usage": NSNull()
             ]
         }
         #endif
@@ -172,10 +235,16 @@ actor SessionRegistry {
                 stream = languageSession.streamResponse(to: prompt, options: options)
                 #endif
                 var latestText: String = ""
+                var latestUsage: Any = NSNull()
                 for try await response in stream {
                     latestText = response.content
+                    #if compiler(>=6.4)
+                    if #available(iOS 27.0, *) {
+                        latestUsage = responseUsage(response.usage)
+                    }
+                    #endif
                     emit([
-                        "type": "textDelta",
+                        "type": "textSnapshot",
                         "requestId": requestId,
                         "text": response.content
                     ], to: eventSink)
@@ -187,7 +256,8 @@ actor SessionRegistry {
                         "text": latestText,
                         "usedMode": session.mode,
                         "structuredValue": NSNull(),
-                        "metadata": [:]
+                        "metadata": [:],
+                        "usage": latestUsage
                     ]
                 ], to: eventSink)
                 emit(FlutterEndOfEventStream, to: eventSink)
@@ -222,6 +292,7 @@ actor SessionRegistry {
         cloudPolicy: String,
         instructions: String?,
         useCase: String?,
+        transcriptErrorHandlingPolicy: String?,
         toolMaps: [[String: Any]],
         metadata: [String: Any]
     ) throws -> NativeSession {
@@ -238,6 +309,10 @@ actor SessionRegistry {
                             model: privateCloud,
                             tools: tools,
                             instructions: instructions
+                        )
+                        applyTranscriptErrorHandlingPolicy(
+                            transcriptErrorHandlingPolicy,
+                            to: languageSession
                         )
                         return NativeSession(
                             id: id,
@@ -282,6 +357,14 @@ actor SessionRegistry {
                     tools: tools,
                     instructions: instructions
                 )
+                #if compiler(>=6.4)
+                if #available(iOS 27.0, *) {
+                    applyTranscriptErrorHandlingPolicy(
+                        transcriptErrorHandlingPolicy,
+                        to: languageSession
+                    )
+                }
+                #endif
                 return NativeSession(
                     id: id,
                     mode: "local",
@@ -364,6 +447,21 @@ actor SessionRegistry {
             }
             return LanguageModelSession(model: model, tools: tools)
         }
+
+        @available(iOS 27.0, *)
+        private func applyTranscriptErrorHandlingPolicy(
+            _ name: String?,
+            to session: LanguageModelSession
+        ) {
+            switch name {
+            case "revertTranscript":
+                session.transcriptErrorHandlingPolicy = .revertTranscript
+            case "preserveTranscript":
+                session.transcriptErrorHandlingPolicy = .preserveTranscript
+            default:
+                session.transcriptErrorHandlingPolicy = nil
+            }
+        }
     #endif
     #endif
 
@@ -394,7 +492,7 @@ actor SessionRegistry {
     @available(iOS 26.0, *)
     private nonisolated func makeGenerationOptions(arguments: [String: Any]) -> GenerationOptions {
         let samplingMode: GenerationOptions.SamplingMode? = makeSamplingMode(
-            name: arguments["samplingMode"] as? String
+            arguments: arguments
         )
         let temperature: Double? = doubleValue(from: arguments["temperature"])
         let maximumResponseTokens: Int? = intValue(
@@ -404,7 +502,7 @@ actor SessionRegistry {
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
             let toolCallingMode: GenerationOptions.ToolCallingMode? = makeToolCallingMode(
-                name: arguments["toolCallingPolicy"] as? String
+                name: arguments["toolCallingMode"] as? String
             )
             return GenerationOptions(
                 samplingMode: samplingMode,
@@ -428,14 +526,35 @@ actor SessionRegistry {
     }
 
     @available(iOS 26.0, *)
-    private nonisolated func makeSamplingMode(name: String?) -> GenerationOptions.SamplingMode? {
-        switch name {
+    private nonisolated func makeSamplingMode(
+        arguments: [String: Any]
+    ) -> GenerationOptions.SamplingMode? {
+        let seedValue: Int? = intValue(from: arguments["samplingSeed"])
+        let seed: UInt64? = seedValue.flatMap { value in
+            value >= 0 ? UInt64(value) : nil
+        }
+        switch arguments["samplingMode"] as? String {
         case "greedy":
             return .greedy
         case "randomTopK":
-            return .random(top: 40)
+            let top: Int = max(1, intValue(from: arguments["samplingTopK"]) ?? 40)
+            #if compiler(>=6.4)
+            return .random(top: top, seed: seed)
+            #else
+            return .random(top: top)
+            #endif
         case "randomProbabilityThreshold":
-            return .random(probabilityThreshold: 0.95)
+            let threshold: Double = doubleValue(
+                from: arguments["samplingProbabilityThreshold"]
+            ) ?? 0.95
+            #if compiler(>=6.4)
+            return .random(
+                probabilityThreshold: min(max(threshold, 0), 1),
+                seed: seed
+            )
+            #else
+            return .random(probabilityThreshold: min(max(threshold, 0), 1))
+            #endif
         default:
             return nil
         }
@@ -445,6 +564,8 @@ actor SessionRegistry {
     @available(iOS 27.0, *)
     private nonisolated func makeToolCallingMode(name: String?) -> GenerationOptions.ToolCallingMode? {
         switch name {
+        case "allowed":
+            return .allowed
         case "required":
             return .required
         case "disallowed":
@@ -528,14 +649,18 @@ actor SessionRegistry {
     @available(iOS 27.0, *)
     private nonisolated func makeImageAttachmentPrompt(attachment: [String: Any]) throws -> Prompt? {
         let mimeType: String = attachment["mimeType"] as? String ?? ""
-        guard let path: String = attachment["path"] as? String,
-              isImageAttachment(path: path, mimeType: mimeType) else {
+        let label: String? = attachment["label"] as? String
+        var imageAttachment: Attachment<ImageAttachmentContent>
+        if let path: String = attachment["path"] as? String,
+           isImageAttachment(path: path, mimeType: mimeType) {
+            imageAttachment = Attachment(imageURL: URL(fileURLWithPath: path))
+        } else if let data: FlutterStandardTypedData = attachment["bytes"] as? FlutterStandardTypedData,
+                  let image: UIImage = UIImage(data: data.data),
+                  let cgImage = image.cgImage {
+            imageAttachment = Attachment(cgImage)
+        } else {
             return nil
         }
-
-        let url: URL = URL(fileURLWithPath: path)
-        let label: String? = attachment["label"] as? String
-        var imageAttachment: Attachment<ImageAttachmentContent> = Attachment(imageURL: url)
         if let label, !label.isEmpty {
             imageAttachment = imageAttachment.label(label)
         }
@@ -558,7 +683,7 @@ actor SessionRegistry {
     private nonisolated func makeContextOptions(arguments: [String: Any]) -> ContextOptions {
         let includeSchemaInPrompt: Bool? = arguments["includeSchemaInPrompt"] as? Bool
         let reasoningLevel: ContextOptions.ReasoningLevel? = makeReasoningLevel(
-            name: arguments["reasoningLevel"] as? String
+            arguments: arguments
         )
         return ContextOptions(
             includeSchemaInPrompt: includeSchemaInPrompt,
@@ -567,28 +692,35 @@ actor SessionRegistry {
     }
 
     @available(iOS 27.0, *)
-    private nonisolated func makeReasoningLevel(name: String?) -> ContextOptions.ReasoningLevel? {
-        switch name {
-        case "low":
+    private nonisolated func makeReasoningLevel(
+        arguments: [String: Any]
+    ) -> ContextOptions.ReasoningLevel? {
+        switch arguments["reasoningLevel"] as? String {
+        case "light":
             return .light
-        case "medium":
+        case "moderate":
             return .moderate
-        case "high":
+        case "deep":
             return .deep
+        case "custom":
+            guard let value: String = arguments["customReasoningLevel"] as? String,
+                  !value.isEmpty else {
+                return nil
+            }
+            return .custom(value)
         default:
             return nil
         }
     }
 
     @available(iOS 27.0, *)
-    private nonisolated func responseMetadata(response: LanguageModelSession.Response<String>) -> [String: Any] {
+    private nonisolated func responseUsage(_ usage: LanguageModelSession.Usage) -> [String: Any] {
         return [
-            "rawContent": String(describing: response.rawContent),
-            "inputTotalTokenCount": response.usage.input.totalTokenCount,
-            "inputCachedTokenCount": response.usage.input.cachedTokenCount,
-            "outputTotalTokenCount": response.usage.output.totalTokenCount,
-            "outputReasoningTokenCount": response.usage.output.reasoningTokenCount,
-            "totalTokenCount": response.usage.totalTokenCount
+            "inputTokenCount": usage.input.totalTokenCount,
+            "cachedInputTokenCount": usage.input.cachedTokenCount,
+            "outputTokenCount": usage.output.totalTokenCount,
+            "reasoningTokenCount": usage.output.reasoningTokenCount,
+            "totalTokenCount": usage.totalTokenCount
         ]
     }
     #endif
@@ -654,5 +786,6 @@ struct NativeSession {
 enum NativeSessionError: Error {
     case sessionNotFound
     case foundationModelsUnavailable
+    case invalidRequest(String)
     case modelUnavailable(code: String, message: String, recoverySuggestion: String)
 }

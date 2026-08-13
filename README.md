@@ -19,19 +19,20 @@ Implemented:
 - Native guided structured generation with runtime JSON-like schemas.
 - Hybrid orchestration and multi-turn hybrid chat across Apple local, Private Cloud Compute, and app-provided external providers.
 - Text and image prompt attachments.
-- Audio file transcription through `Speech.framework`.
-- Live microphone transcription with `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ and an `SFSpeechRecognizer` fallback.
+- Audio file transcription with `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ and an `SFSpeechRecognizer` fallback.
+- Live microphone transcription with the iOS 27 capture provider, the iOS 26 `SpeechAnalyzer` pipeline, and an `SFSpeechRecognizer` fallback.
 - Session prewarm and in-flight request cancellation.
 - Content-tagging on-device model variant.
 - Explicit local, automatic, and Private Cloud Compute mode selection.
 - Stable Dart error codes with recovery suggestions.
+- Prompt and local transcript token counting through Apple's tokenizer.
+- Typed iOS 27 response usage, PCC quota state, and transcript error policy.
 - Swift Package Manager and CocoaPods support.
 - iOS chat example app with streaming, live transcription, tool calling, and attachments.
 
 In progress:
 
 - Direct Photos picker.
-- Token counting (`tokenCount(for:)`, iOS 26.4+).
 - Dynamic Profiles and the iOS 27 `LanguageModel` protocol bridge.
 
 ## Platform Support
@@ -44,6 +45,7 @@ This Flutter plugin currently supports iOS only. The `platforms` field in `pubsp
 | Conversation context | `LanguageModelSession` transcript | iOS 26+ | Reuse the same `FoundationModelSession`; one-shot calls are stateless. |
 | Streaming | `streamResponse` | iOS 26+ | Emits model text updates and completion events. |
 | Context size diagnostics | `contextSize` | iOS 26+ | Local model context is limited; manage long conversations. |
+| Token counting | `tokenCount(for:)` | iOS 26.4+ | Counts a prompt or the transcript of a local session. Requires an Xcode 27 build in this package release. |
 | Tool calling | `Tool` | iOS 26+ | Dart `ModelTool` implementations are called by the native model. |
 | Guided structured output | `DynamicGenerationSchema`, `GenerationSchema` | iOS 26+ | Runtime schemas built from Dart; the model returns validated JSON. |
 | Content tagging | `SystemLanguageModel(useCase: .contentTagging)` | iOS 26+ | Specialized on-device model for categorizing text. |
@@ -51,8 +53,8 @@ This Flutter plugin currently supports iOS only. The `platforms` field in `pubsp
 | Image prompts | `Attachment<ImageAttachmentContent>` | iOS 27+ | Requires building with Xcode 27, beta or official. Experimental in the iOS 27 SDK. |
 | Reasoning options | `ContextOptions.ReasoningLevel` | iOS 27+ | Requires building with Xcode 27, beta or official. Mapped from Dart `ReasoningLevel`. |
 | Private Cloud Compute | `PrivateCloudComputeLanguageModel` | iOS 27+ | Requires building with Xcode 27, beta or official, plus Apple availability, network, quota, and entitlement. |
-| Audio transcription | `SFSpeechURLRecognitionRequest` | iOS 13+ | Uses Speech, not Foundation Models. On-device mode requires locale support. |
-| Live microphone transcription | `SpeechAnalyzer`, `SpeechTranscriber` | iOS 26+ (fallback iOS 13+) | Modern on-device pipeline with asset management; falls back to `SFSpeechRecognizer`. Requires microphone and speech permissions. |
+| Audio transcription | `SpeechAnalyzer`, `AssetInputSequenceProvider` | iOS 26+ (fallback iOS 13+) | Accurate on-device file transcription; beta 5 uses the native asset input provider on iOS 27. Explicit server mode uses `SFSpeechRecognizer`. |
+| Live microphone transcription | `SpeechAnalyzer`, `CaptureInputSequenceProvider` | iOS 26+ (fallback iOS 13+) | iOS 27 uses Apple's native capture provider; iOS 26 uses a validated audio-buffer pipeline. Requires microphone and speech permissions. |
 
 ## Conversation Context
 
@@ -95,7 +97,7 @@ Add the package to your Flutter app:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.1.0
+  cupertino_fundations_models: ^0.2.0
 ```
 
 Then import it:
@@ -123,7 +125,7 @@ Features that require iOS 27 must be compiled with Xcode 27, either the beta or 
 DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer flutter build ios
 ```
 
-When testing on the iOS 27 beta, Foundation Models currently work only when the device is fully configured in English, including system language and Siri language.
+Always use `checkAvailability()` and `supportsLocale()` diagnostics at runtime. Availability depends on Apple Intelligence settings, downloaded model assets, device eligibility, and the selected model's supported languages.
 
 ## Availability First
 
@@ -268,7 +270,7 @@ try {
     options: const GenerationOptions(maximumResponseTokens: 180),
   )) {
     switch (event) {
-      case TextDeltaEvent():
+      case TextSnapshotEvent():
         print(event.text);
       case CompletionEvent():
         print(event.response.text);
@@ -285,7 +287,7 @@ try {
 }
 ```
 
-Treat `TextDeltaEvent.text` as the latest text snapshot emitted by the native stream.
+Treat `TextSnapshotEvent.text` as the latest cumulative text snapshot emitted by the native stream.
 
 ## Tool Calling
 
@@ -328,9 +330,9 @@ final FoundationModelSession session = await models.createSession(
 );
 ```
 
-Keep tool names and descriptions short: they consume context-window tokens. On
-the iOS 27 beta, combining tool calling with guided generation can trigger
-excessive tool calls; adjust instructions if you hit that.
+Keep tool names and descriptions short: they consume context-window tokens.
+iOS 27 beta 5 fixes the excessive tool-call issue Apple documented for earlier
+betas when tool calling and guided generation were used together.
 
 ## Structured Output
 
@@ -352,8 +354,11 @@ final ModelResponse response = await models.generateStructured(
   mode: ModelMode.local,
 );
 
-print(response.structuredValue); // Map<String, Object?> validated by the model
+print(response.structuredValue); // Object?, List<Object?>, or Map<String, Object?>
 ```
+
+Root arrays and scalar schemas now preserve their real value instead of being
+dropped when the result isn't a JSON object.
 
 ## Performance
 
@@ -369,6 +374,28 @@ print(response.structuredValue); // Map<String, Object?> validated by the model
   surfaces as the `cancelled` error code.
 - Use `FoundationModelsUseCase.contentTagging` for tagging/categorization
   workloads instead of prompting the general model.
+
+## Token Counts And Usage
+
+Count a prompt before sending it on iOS 26.4 or later:
+
+```dart
+final int promptTokens = await models.countTokens(
+  const Prompt.text('Summarize this note.'),
+);
+```
+
+For a local multi-turn session, inspect the whole current transcript:
+
+```dart
+final int transcriptTokens = await session.countTokens();
+```
+
+On iOS 27, completed responses expose typed usage through `response.usage`,
+including input, cached input, output, reasoning, and total token counts.
+Use `ReasoningLevel.light`, `.moderate`, `.deep`, or
+`ReasoningLevel.custom('provider-level')` when the selected iOS 27 model
+documents a custom reasoning level.
 
 ## Image And Text Attachments
 
@@ -431,6 +458,8 @@ final ModelResponse response = await models.respond(
 
 Use `AudioTranscriptionMode.onDevice` to require local speech recognition. Use `server` only when your app allows Apple Speech's remote path.
 
+On iOS 26 or later, file transcription uses `SpeechAnalyzer`, the modern long-form on-device engine. On iOS 27 beta 5 it also uses `AssetInputSequenceProvider` so Speech performs file decoding, audio conversion, and backpressure. `AudioTranscriptionRequest.timeout` cancels the native task and reports `transcriptionTimeout` instead of leaving work running in the background. The first request for a locale can still take longer while Apple downloads its speech assets.
+
 ## Live Microphone Transcription
 
 Stream speech-to-text from the microphone while the user talks. Each event is
@@ -458,6 +487,8 @@ await subscription.cancel();
 
 Live transcription requires `NSMicrophoneUsageDescription` and
 `NSSpeechRecognitionUsageDescription` in your app `Info.plist`.
+
+Only one generation request may run on a `FoundationModelSession` or `FoundationModelsChatSession` at a time. Concurrent calls now fail with `concurrentRequests` instead of racing the native session. `GenerationOptions.timeout` is enforced for both one-shot and streaming generation and cancels the native request on timeout.
 
 ## Private Cloud Compute
 
@@ -509,9 +540,19 @@ Important error codes:
 - `privateCloudUnavailable`
 - `networkUnavailable`
 - `quotaExceeded`
-- `contextExceeded`
+- `contextSizeExceeded`
+- `rateLimited`
+- `guardrailViolation`
+- `refusal`
+- `unsupportedCapability`
+- `unsupportedGenerationGuide`
+- `generationTimeout`
+- `concurrentRequests`
+- `transcriptMutationWhileResponding`
+- `parsingFailure`
 - `speechRecognitionDenied`
 - `speechRecognitionUnavailable`
+- `transcriptionTimeout`
 
 ## Example App
 
@@ -540,6 +581,7 @@ Full example source:
 ## Documentation
 
 - [`implementation_for_agents.md`](implementation_for_agents.md): integration guide for agents and maintainers.
+- [`doc/ios-27-beta-5-foundation-models.md`](doc/ios-27-beta-5-foundation-models.md): official Apple beta 5 research, SDK findings, and the `0.2.0` migration table.
 - [Apple Foundation Models documentation](https://developer.apple.com/documentation/FoundationModels)
 - [Dart package publishing documentation](https://dart.dev/tools/pub/publishing)
 

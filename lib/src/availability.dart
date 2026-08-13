@@ -15,7 +15,6 @@ enum ModelCapability {
   privateCloudCompute,
   reasoning,
   dynamicProfiles,
-  externalProvider,
   fullPower,
 }
 
@@ -314,12 +313,15 @@ final class ModelAvailability {
 }
 
 /// Daily quota details for Private Cloud Compute when Apple exposes them.
+enum PrivateCloudQuotaStatus { belowLimit, limitReached, unknown }
+
 final class PrivateCloudQuota {
   const PrivateCloudQuota({
     required this.status,
     required this.isLimitReached,
+    required this.isApproachingLimit,
+    required this.canRequestLimitIncrease,
     this.resetDate,
-    this.limitIncreaseSuggestion,
     this.details = const <String, Object?>{},
   });
 
@@ -328,26 +330,30 @@ final class PrivateCloudQuota {
         (map['details'] as Map<Object?, Object?>?) ?? <Object?, Object?>{};
 
     return PrivateCloudQuota(
-      status: (map['status'] as String?) ?? 'unknown',
+      status: _quotaStatusFromName((map['status'] as String?) ?? 'unknown'),
       isLimitReached: (map['isLimitReached'] as bool?) ?? false,
+      isApproachingLimit: (map['isApproachingLimit'] as bool?) ?? false,
+      canRequestLimitIncrease:
+          (map['canRequestLimitIncrease'] as bool?) ?? false,
       resetDate: _dateFromMilliseconds(map['resetDate']),
-      limitIncreaseSuggestion: map['limitIncreaseSuggestion'] as String?,
       details: rawDetails.cast<String, Object?>(),
     );
   }
 
-  final String status;
+  final PrivateCloudQuotaStatus status;
   final bool isLimitReached;
+  final bool isApproachingLimit;
+  final bool canRequestLimitIncrease;
   final DateTime? resetDate;
-  final String? limitIncreaseSuggestion;
   final Map<String, Object?> details;
 
   Map<String, Object?> toMap() {
     return <String, Object?>{
-      'status': status,
+      'status': status.name,
       'isLimitReached': isLimitReached,
+      'isApproachingLimit': isApproachingLimit,
+      'canRequestLimitIncrease': canRequestLimitIncrease,
       'resetDate': resetDate?.millisecondsSinceEpoch,
-      'limitIncreaseSuggestion': limitIncreaseSuggestion,
       'details': details,
     };
   }
@@ -385,6 +391,15 @@ DateTime? _dateFromMilliseconds(Object? value) {
     return DateTime.fromMillisecondsSinceEpoch(value);
   }
   return null;
+}
+
+PrivateCloudQuotaStatus _quotaStatusFromName(String name) {
+  for (final PrivateCloudQuotaStatus value in PrivateCloudQuotaStatus.values) {
+    if (value.name == name) {
+      return value;
+    }
+  }
+  return PrivateCloudQuotaStatus.unknown;
 }
 
 List<LanguageSupport> _languageSupportListFromValues(List<Object?> values) {

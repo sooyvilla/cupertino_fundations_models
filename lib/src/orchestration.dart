@@ -175,7 +175,7 @@ abstract class FoundationModelsExternalProvider {
   /// Streams the response as cumulative text snapshots.
   ///
   /// Each emitted string replaces the previous one, matching the semantics of
-  /// Apple `TextDeltaEvent`. Override this when the provider supports server
+  /// Apple `TextSnapshotEvent`. Override this when the provider supports server
   /// streaming; the default emits a single snapshot from [respond].
   Stream<String> respondStream(FoundationModelsRequest request) async* {
     final FoundationModelsProviderResponse response = await respond(request);
@@ -205,7 +205,7 @@ final class FoundationModelsProviderResponse {
   });
 
   final String text;
-  final Map<String, Object?>? structuredValue;
+  final Object? structuredValue;
   final Map<String, Object?> metadata;
 }
 
@@ -328,6 +328,7 @@ final class OrchestratedModelResponse {
     required this.attempts,
     this.usedMode,
     this.structuredValue,
+    this.usage,
     this.metadata = const <String, Object?>{},
   });
 
@@ -336,7 +337,8 @@ final class OrchestratedModelResponse {
   final String providerName;
   final FoundationModelsRoute route;
   final ModelMode? usedMode;
-  final Map<String, Object?>? structuredValue;
+  final Object? structuredValue;
+  final ModelUsage? usage;
   final Map<String, Object?> metadata;
   final List<FoundationModelsRouteAttempt> attempts;
 }
@@ -883,6 +885,7 @@ final class FoundationModelsOrchestrator {
         route: route,
         usedMode: response.usedMode,
         structuredValue: response.structuredValue,
+        usage: response.usage,
         metadata: response.metadata,
         attempts: <FoundationModelsRouteAttempt>[
           ...attempts,
@@ -1006,9 +1009,12 @@ final class FoundationModelsOrchestrator {
 
     return GenerationOptions(
       samplingMode: options.samplingMode,
+      samplingTopK: options.samplingTopK,
+      samplingProbabilityThreshold: options.samplingProbabilityThreshold,
+      samplingSeed: options.samplingSeed,
       temperature: options.temperature,
       maximumResponseTokens: options.maximumResponseTokens,
-      toolCallingPolicy: options.toolCallingPolicy,
+      toolCallingMode: options.toolCallingMode,
       reasoningLevel: options.reasoningLevel,
       cloudPolicy: cloudPolicy,
       includeSchemaInPrompt: options.includeSchemaInPrompt,
@@ -1062,6 +1068,7 @@ final class FoundationModelsChatSession {
   String? _appleRouteLabel;
   int _appleHistorySynced = 0;
   bool _needsBackfill = false;
+  bool _requestActive = false;
   bool _disposed = false;
 
   /// Conversation turns so far, oldest first.
@@ -1075,44 +1082,209 @@ final class FoundationModelsChatSession {
     List<PromptAttachment> attachments = const <PromptAttachment>[],
     GenerationOptions? options,
   }) async {
-    _checkNotDisposed();
-    final FoundationModelsRequest request = _chatRequest(
-      text: text,
-      task: task,
-      attachments: attachments,
-      options: options,
-    );
-    final FoundationModelsRuntimeContext context = await _orchestrator
-        .getRuntimeContext(localeIdentifier: request.localeIdentifier);
-    final List<FoundationModelsRoute> routes =
-        await Future<List<FoundationModelsRoute>>.value(
-          _orchestrator._router.resolve(request, context),
-        );
-    final List<FoundationModelsRouteAttempt> attempts =
-        <FoundationModelsRouteAttempt>[];
+    _beginRequest();
+    try {
+      final FoundationModelsRequest request = _chatRequest(
+        text: text,
+        task: task,
+        attachments: attachments,
+        options: options,
+      );
+      final FoundationModelsRuntimeContext context = await _orchestrator
+          .getRuntimeContext(localeIdentifier: request.localeIdentifier);
+      final List<FoundationModelsRoute> routes =
+          await Future<List<FoundationModelsRoute>>.value(
+            _orchestrator._router.resolve(request, context),
+          );
+      final List<FoundationModelsRouteAttempt> attempts =
+          <FoundationModelsRouteAttempt>[];
 
-    for (final FoundationModelsRoute route in routes) {
-      if (!_orchestrator._isRouteAvailable(route, context)) {
-        attempts.add(
-          FoundationModelsRouteAttempt(
-            route: route,
-            succeeded: false,
-            wasAvailable: false,
-            message: _orchestrator._unavailableMessage(route, context),
-          ),
-        );
-        continue;
+      for (final FoundationModelsRoute route in routes) {
+        if (!_orchestrator._isRouteAvailable(route, context)) {
+          attempts.add(
+            FoundationModelsRouteAttempt(
+              route: route,
+              succeeded: false,
+              wasAvailable: false,
+              message: _orchestrator._unavailableMessage(route, context),
+            ),
+          );
+          continue;
+        }
+
+        try {
+          final OrchestratedModelResponse response = route.isApple
+              ? await _sendApple(request, route, attempts)
+              : await _orchestrator._runExternal(request, route, attempts);
+          _commitTurn(text, response);
+          return response;
+        } on Object catch (error) {
+          final FoundationModelsException exception = _orchestrator
+              ._asFoundationModelsException(error);
+          attempts.add(
+            FoundationModelsRouteAttempt(
+              route: route,
+              succeeded: false,
+              wasAvailable: true,
+              message: exception.message,
+              errorCode: exception.code,
+            ),
+          );
+          if (route.isApple) {
+            await _disposeAppleSession();
+          }
+          if (!_orchestrator._router.fallbackOnError) {
+            throw exception;
+          }
+        }
       }
 
-      try {
-        final OrchestratedModelResponse response = route.isApple
-            ? await _sendApple(request, route, attempts)
-            : await _orchestrator._runExternal(request, route, attempts);
-        _commitTurn(text, response);
-        return response;
-      } on Object catch (error) {
-        final FoundationModelsException exception = _orchestrator
-            ._asFoundationModelsException(error);
+      throw _noRouteException(attempts);
+    } finally {
+      _requestActive = false;
+    }
+  }
+
+  /// Sends one user message and streams cumulative text snapshots.
+  ///
+  /// When a route fails mid-stream and fallback is allowed, the next route
+  /// starts again from an empty snapshot; replace the rendered text with each
+  /// [OrchestratedChatTextEvent].
+  Stream<OrchestratedChatEvent> sendStream(
+    String text, {
+    FoundationModelsTask? task,
+    List<PromptAttachment> attachments = const <PromptAttachment>[],
+    GenerationOptions? options,
+  }) async* {
+    _beginRequest();
+    try {
+      final FoundationModelsRequest request = _chatRequest(
+        text: text,
+        task: task,
+        attachments: attachments,
+        options: options,
+      );
+      final FoundationModelsRuntimeContext context = await _orchestrator
+          .getRuntimeContext(localeIdentifier: request.localeIdentifier);
+      final List<FoundationModelsRoute> routes =
+          await Future<List<FoundationModelsRoute>>.value(
+            _orchestrator._router.resolve(request, context),
+          );
+      final List<FoundationModelsRouteAttempt> attempts =
+          <FoundationModelsRouteAttempt>[];
+
+      for (final FoundationModelsRoute route in routes) {
+        if (!_orchestrator._isRouteAvailable(route, context)) {
+          attempts.add(
+            FoundationModelsRouteAttempt(
+              route: route,
+              succeeded: false,
+              wasAvailable: false,
+              message: _orchestrator._unavailableMessage(route, context),
+            ),
+          );
+          continue;
+        }
+
+        OrchestratedModelResponse? completed;
+        FoundationModelsException? failure;
+
+        try {
+          if (route.isApple) {
+            final FoundationModelSession session = await _ensureAppleSession(
+              route,
+              request,
+            );
+            final Prompt prompt = _effectivePrompt(request);
+            final GenerationOptions routeOptions = _orchestrator
+                ._optionsForRoute(request.options, route);
+            await for (final SessionEvent event in session.stream(
+              prompt,
+              options: routeOptions,
+            )) {
+              switch (event) {
+                case TextSnapshotEvent():
+                  yield OrchestratedChatTextEvent(
+                    text: event.text,
+                    route: route,
+                  );
+                case CompletionEvent():
+                  completed = OrchestratedModelResponse(
+                    text: event.response.text,
+                    provider: FoundationModelsProviderKind.apple,
+                    providerName: 'apple',
+                    route: route,
+                    usedMode: event.response.usedMode,
+                    structuredValue: event.response.structuredValue,
+                    usage: event.response.usage,
+                    metadata: event.response.metadata,
+                    attempts: <FoundationModelsRouteAttempt>[
+                      ...attempts,
+                      FoundationModelsRouteAttempt(
+                        route: route,
+                        succeeded: true,
+                        wasAvailable: true,
+                      ),
+                    ],
+                  );
+                case FailureEvent():
+                  failure = FoundationModelsException(
+                    code: FoundationModelsErrorCode.nativeFailure,
+                    message: event.message,
+                  );
+                case ToolCallEvent():
+                case UnknownSessionEvent():
+                  break;
+              }
+            }
+          } else {
+            final FoundationModelsExternalProvider? provider =
+                _orchestrator._externalProvider;
+            if (provider == null || !provider.supports(request)) {
+              throw const FoundationModelsException(
+                code: FoundationModelsErrorCode.modelUnavailable,
+                message:
+                    'No external provider is configured for this chat request.',
+              );
+            }
+            String snapshot = '';
+            await for (final String textSnapshot in provider.respondStream(
+              request,
+            )) {
+              snapshot = textSnapshot;
+              yield OrchestratedChatTextEvent(text: snapshot, route: route);
+            }
+            completed = OrchestratedModelResponse(
+              text: snapshot,
+              provider: FoundationModelsProviderKind.external,
+              providerName: provider.name,
+              route: route,
+              attempts: <FoundationModelsRouteAttempt>[
+                ...attempts,
+                FoundationModelsRouteAttempt(
+                  route: route,
+                  succeeded: true,
+                  wasAvailable: true,
+                ),
+              ],
+            );
+          }
+        } on Object catch (error) {
+          failure = _orchestrator._asFoundationModelsException(error);
+        }
+
+        if (completed != null && failure == null) {
+          _commitTurn(text, completed);
+          yield OrchestratedChatCompletionEvent(response: completed);
+          return;
+        }
+
+        final FoundationModelsException exception =
+            failure ??
+            const FoundationModelsException(
+              code: FoundationModelsErrorCode.nativeFailure,
+              message: 'The stream ended without a completion event.',
+            );
         attempts.add(
           FoundationModelsRouteAttempt(
             route: route,
@@ -1129,173 +1301,22 @@ final class FoundationModelsChatSession {
           throw exception;
         }
       }
+
+      throw _noRouteException(attempts);
+    } finally {
+      _requestActive = false;
     }
-
-    throw _noRouteException(attempts);
-  }
-
-  /// Sends one user message and streams cumulative text snapshots.
-  ///
-  /// When a route fails mid-stream and fallback is allowed, the next route
-  /// starts again from an empty snapshot; replace the rendered text with each
-  /// [OrchestratedChatTextEvent].
-  Stream<OrchestratedChatEvent> sendStream(
-    String text, {
-    FoundationModelsTask? task,
-    List<PromptAttachment> attachments = const <PromptAttachment>[],
-    GenerationOptions? options,
-  }) async* {
-    _checkNotDisposed();
-    final FoundationModelsRequest request = _chatRequest(
-      text: text,
-      task: task,
-      attachments: attachments,
-      options: options,
-    );
-    final FoundationModelsRuntimeContext context = await _orchestrator
-        .getRuntimeContext(localeIdentifier: request.localeIdentifier);
-    final List<FoundationModelsRoute> routes =
-        await Future<List<FoundationModelsRoute>>.value(
-          _orchestrator._router.resolve(request, context),
-        );
-    final List<FoundationModelsRouteAttempt> attempts =
-        <FoundationModelsRouteAttempt>[];
-
-    for (final FoundationModelsRoute route in routes) {
-      if (!_orchestrator._isRouteAvailable(route, context)) {
-        attempts.add(
-          FoundationModelsRouteAttempt(
-            route: route,
-            succeeded: false,
-            wasAvailable: false,
-            message: _orchestrator._unavailableMessage(route, context),
-          ),
-        );
-        continue;
-      }
-
-      OrchestratedModelResponse? completed;
-      FoundationModelsException? failure;
-
-      try {
-        if (route.isApple) {
-          final FoundationModelSession session = await _ensureAppleSession(
-            route,
-            request,
-          );
-          final Prompt prompt = _effectivePrompt(request);
-          final GenerationOptions routeOptions = _orchestrator._optionsForRoute(
-            request.options,
-            route,
-          );
-          await for (final SessionEvent event in session.stream(
-            prompt,
-            options: routeOptions,
-          )) {
-            switch (event) {
-              case TextDeltaEvent():
-                yield OrchestratedChatTextEvent(text: event.text, route: route);
-              case CompletionEvent():
-                completed = OrchestratedModelResponse(
-                  text: event.response.text,
-                  provider: FoundationModelsProviderKind.apple,
-                  providerName: 'apple',
-                  route: route,
-                  usedMode: event.response.usedMode,
-                  structuredValue: event.response.structuredValue,
-                  metadata: event.response.metadata,
-                  attempts: <FoundationModelsRouteAttempt>[
-                    ...attempts,
-                    FoundationModelsRouteAttempt(
-                      route: route,
-                      succeeded: true,
-                      wasAvailable: true,
-                    ),
-                  ],
-                );
-              case FailureEvent():
-                failure = FoundationModelsException(
-                  code: FoundationModelsErrorCode.nativeFailure,
-                  message: event.message,
-                );
-              case ToolCallEvent():
-              case UnknownSessionEvent():
-                break;
-            }
-          }
-        } else {
-          final FoundationModelsExternalProvider? provider =
-              _orchestrator._externalProvider;
-          if (provider == null || !provider.supports(request)) {
-            throw const FoundationModelsException(
-              code: FoundationModelsErrorCode.modelUnavailable,
-              message:
-                  'No external provider is configured for this chat request.',
-            );
-          }
-          String snapshot = '';
-          await for (final String textSnapshot in provider.respondStream(
-            request,
-          )) {
-            snapshot = textSnapshot;
-            yield OrchestratedChatTextEvent(text: snapshot, route: route);
-          }
-          completed = OrchestratedModelResponse(
-            text: snapshot,
-            provider: FoundationModelsProviderKind.external,
-            providerName: provider.name,
-            route: route,
-            attempts: <FoundationModelsRouteAttempt>[
-              ...attempts,
-              FoundationModelsRouteAttempt(
-                route: route,
-                succeeded: true,
-                wasAvailable: true,
-              ),
-            ],
-          );
-        }
-      } on Object catch (error) {
-        failure = _orchestrator._asFoundationModelsException(error);
-      }
-
-      if (completed != null && failure == null) {
-        _commitTurn(text, completed);
-        yield OrchestratedChatCompletionEvent(response: completed);
-        return;
-      }
-
-      final FoundationModelsException exception =
-          failure ??
-          const FoundationModelsException(
-            code: FoundationModelsErrorCode.nativeFailure,
-            message: 'The stream ended without a completion event.',
-          );
-      attempts.add(
-        FoundationModelsRouteAttempt(
-          route: route,
-          succeeded: false,
-          wasAvailable: true,
-          message: exception.message,
-          errorCode: exception.code,
-        ),
-      );
-      if (route.isApple) {
-        await _disposeAppleSession();
-      }
-      if (!_orchestrator._router.fallbackOnError) {
-        throw exception;
-      }
-    }
-
-    throw _noRouteException(attempts);
   }
 
   /// Clears the conversation and disposes the native Apple session.
   Future<void> reset() async {
-    _checkNotDisposed();
-    _history.clear();
-    await _disposeAppleSession();
+    _beginRequest();
+    try {
+      _history.clear();
+      await _disposeAppleSession();
+    } finally {
+      _requestActive = false;
+    }
   }
 
   /// Releases the native Apple session held by this chat.
@@ -1350,6 +1371,7 @@ final class FoundationModelsChatSession {
       route: route,
       usedMode: response.usedMode,
       structuredValue: response.structuredValue,
+      usage: response.usage,
       metadata: response.metadata,
       attempts: <FoundationModelsRouteAttempt>[
         ...attempts,
@@ -1472,7 +1494,24 @@ final class FoundationModelsChatSession {
 
   void _checkNotDisposed() {
     if (_disposed) {
-      throw StateError('This chat session was disposed.');
+      throw const FoundationModelsException(
+        code: FoundationModelsErrorCode.invalidRequest,
+        message: 'This chat session has already been disposed.',
+        recoverySuggestion: 'Start a new chat session before sending.',
+      );
     }
+  }
+
+  void _beginRequest() {
+    _checkNotDisposed();
+    if (_requestActive) {
+      throw const FoundationModelsException(
+        code: FoundationModelsErrorCode.concurrentRequests,
+        message: 'This chat session already has an active request.',
+        recoverySuggestion:
+            'Wait for the active response or cancel it before sending again.',
+      );
+    }
+    _requestActive = true;
   }
 }

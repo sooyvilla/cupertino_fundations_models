@@ -226,7 +226,7 @@ void main() {
       await expectLater(
         stream,
         emitsInOrder(<Object>[
-          isA<TextDeltaEvent>().having((event) => event.text, 'text', 'hi'),
+          isA<TextSnapshotEvent>().having((event) => event.text, 'text', 'hi'),
           emitsError(
             isA<FoundationModelsException>().having(
               (error) => error.code,

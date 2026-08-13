@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'cupertino_fundations_models'
-  s.version          = '0.0.1'
+  s.version          = '0.2.0'
   s.summary          = 'Flutter bridge for Apple Foundation Models.'
   s.description      = 'A native Flutter plugin for Apple Foundation Models, Private Cloud Compute capabilities, structured generation, and tool calling.'
   s.homepage         = 'https://github.com/sooyvilla/cupertino_fundations_models'
