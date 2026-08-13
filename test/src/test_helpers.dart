@@ -80,6 +80,18 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   }
 
   @override
+  Future<int> countTokens({required Prompt prompt}) async {
+    calls.add('countTokens');
+    return prompt.text.length;
+  }
+
+  @override
+  Future<int> countSessionTokens({required String sessionId}) async {
+    calls.add('countSessionTokens');
+    return sessionId.length;
+  }
+
+  @override
   Future<PickedFoundationModelsFile?> pickFile({
     required FoundationModelsFileKind kind,
   }) async {
@@ -132,7 +144,7 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   }) {
     calls.add('stream');
     return Stream<SessionEvent>.value(
-      const TextDeltaEvent(requestId: 'r', text: 'delta'),
+      const TextSnapshotEvent(requestId: 'r', text: 'delta'),
     );
   }
 

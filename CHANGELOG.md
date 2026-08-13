@@ -1,3 +1,46 @@
+## 0.2.0
+
+iOS 27 beta 5 API alignment. This is a breaking release from `0.1.x`.
+
+### Breaking
+
+- Replaced `ToolCallingPolicy.automatic` with Apple's iOS 27 terminology: `ToolCallingMode.allowed`. The request field is now `GenerationOptions.toolCallingMode`.
+- Renamed reasoning values from `low`, `medium`, and `high` to Apple's `light`, `moderate`, and `deep` values.
+- Renamed `TextDeltaEvent` to `TextSnapshotEvent` because Apple streaming content is a cumulative snapshot, not an incremental delta.
+- Changed `ModelResponse.structuredValue` and orchestrated structured values from `Map<String, Object?>?` to `Object?`, preserving valid root arrays and scalar guided-generation results.
+- Replaced `FoundationModelsErrorCode.contextExceeded` with `contextSizeExceeded` and added the distinct error cases introduced by iOS 27.
+- Replaced `PrivateCloudQuota.status` strings and `limitIncreaseSuggestion` with `PrivateCloudQuotaStatus`, `isApproachingLimit`, and `canRequestLimitIncrease`.
+- Removed `ModelCapability.externalProvider`; app-provided Dart adapters remain supported by `FoundationModelsOrchestrator`, but they are not a native Apple runtime capability.
+
+### Added
+
+- `CupertinoFoundationModels.countTokens()` for prompt token counts and `FoundationModelSession.countTokens()` for local transcript counts on iOS 26.4 or later.
+- `ModelUsage` on completed responses with input, cached-input, output, reasoning, and total token counts from iOS 27.
+- Configurable top-K, probability threshold, and random seed values for native sampling.
+- `ReasoningLevel.custom()` for custom iOS 27 reasoning-level identifiers.
+- `TranscriptErrorHandlingPolicy` in `SessionOptions` for iOS 27 transcript rollback or preservation behavior.
+- Typed mappings for `LanguageModelError`, `SystemLanguageModel.Error`, `LanguageModelSession.Error`, `PrivateCloudComputeLanguageModel.Error`, and `GeneratedContent.ParsingError`.
+- Image prompt attachments supplied as Dart bytes, decoded natively before creating the Apple attachment.
+
+### Changed
+
+- iOS 27 structured generation uses the new `respond(to:schema:options:contextOptions:)` overload instead of the deprecated `includeSchemaInPrompt` overload.
+- Capability reporting now advertises token counting from iOS 26.4 and uses iOS 27 `LanguageModelCapabilities` for vision and reasoning instead of assuming them from the OS version.
+- PCC quota diagnostics now expose beta 5 status, approaching-limit state, reset date, and whether Apple offers a limit-increase action.
+- Streaming completion events now carry the final iOS 27 token usage.
+- Audio-file transcription now uses `SpeechAnalyzer` on iOS 26+ and the new iOS 27 `AssetInputSequenceProvider`; explicit server mode and older systems retain the `SFSpeechRecognizer` path.
+- Live transcription on iOS 27 uses the beta 5 `CaptureInputSequenceProvider`, avoiding manual microphone format conversion on the newest runtime.
+
+### Fixed
+
+- iOS 27 beta 5 compatibility is verified against Xcode 27 build `27A5194q`.
+- Guided generation no longer drops valid non-object root values.
+- The public streaming event name now matches its cumulative-snapshot semantics.
+- Generation sessions and high-level chat sessions reject overlapping requests before they reach Apple's single-request native session.
+- `GenerationOptions.timeout` now cancels stalled one-shot and streaming requests; `AudioTranscriptionRequest.timeout` cancels the native Speech task and reports `transcriptionTimeout`.
+- Live microphone startup is invalidated when its Dart subscription is cancelled, and the iOS 26 fallback validates sample rate and channel count before installing an `AVAudioEngine` tap, preventing AVFoundation assertion crashes on invalid microphone formats.
+- The example marks a send as active before waiting for microphone shutdown and renders unexpected failures instead of letting them escape as unhandled asynchronous errors.
+
 ## 0.1.1
 
 ### Added

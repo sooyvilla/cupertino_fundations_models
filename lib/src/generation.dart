@@ -4,11 +4,24 @@ import 'schema.dart';
 /// Sampling behavior requested from the native model.
 enum SamplingMode { greedy, randomTopK, randomProbabilityThreshold }
 
-/// Tool calling preference for a model request.
-enum ToolCallingPolicy { automatic, required, disallowed }
+/// Tool calling mode for a model request on iOS 27 or later.
+enum ToolCallingMode { allowed, required, disallowed }
 
 /// Reasoning preference for iOS 27 Private Cloud Compute requests.
-enum ReasoningLevel { automatic, low, medium, high }
+final class ReasoningLevel {
+  const ReasoningLevel.custom(String value)
+    : this._('custom', customValue: value);
+
+  const ReasoningLevel._(this.name, {this.customValue});
+
+  static const ReasoningLevel automatic = ReasoningLevel._('automatic');
+  static const ReasoningLevel light = ReasoningLevel._('light');
+  static const ReasoningLevel moderate = ReasoningLevel._('moderate');
+  static const ReasoningLevel deep = ReasoningLevel._('deep');
+
+  final String name;
+  final String? customValue;
+}
 
 /// A prompt sent to a model.
 final class Prompt {
@@ -75,19 +88,33 @@ final class PromptAttachment {
 final class GenerationOptions {
   const GenerationOptions({
     this.samplingMode = SamplingMode.greedy,
+    this.samplingTopK = 40,
+    this.samplingProbabilityThreshold = 0.95,
+    this.samplingSeed,
     this.temperature,
     this.maximumResponseTokens,
-    this.toolCallingPolicy = ToolCallingPolicy.automatic,
+    this.toolCallingMode = ToolCallingMode.allowed,
     this.reasoningLevel = ReasoningLevel.automatic,
     this.cloudPolicy = CloudPolicy.never,
     this.includeSchemaInPrompt,
     this.timeout = const Duration(seconds: 60),
-  });
+  }) : assert(samplingTopK > 0, 'samplingTopK must be greater than zero.'),
+       assert(
+         samplingProbabilityThreshold >= 0 && samplingProbabilityThreshold <= 1,
+         'samplingProbabilityThreshold must be between zero and one.',
+       ),
+       assert(
+         samplingSeed == null || samplingSeed >= 0,
+         'samplingSeed cannot be negative.',
+       );
 
   final SamplingMode samplingMode;
+  final int samplingTopK;
+  final double samplingProbabilityThreshold;
+  final int? samplingSeed;
   final double? temperature;
   final int? maximumResponseTokens;
-  final ToolCallingPolicy toolCallingPolicy;
+  final ToolCallingMode toolCallingMode;
   final ReasoningLevel reasoningLevel;
   final CloudPolicy cloudPolicy;
   final bool? includeSchemaInPrompt;
@@ -96,10 +123,14 @@ final class GenerationOptions {
   Map<String, Object?> toMap() {
     return <String, Object?>{
       'samplingMode': samplingMode.name,
+      'samplingTopK': samplingTopK,
+      'samplingProbabilityThreshold': samplingProbabilityThreshold,
+      'samplingSeed': samplingSeed,
       'temperature': temperature,
       'maximumResponseTokens': maximumResponseTokens,
-      'toolCallingPolicy': toolCallingPolicy.name,
+      'toolCallingMode': toolCallingMode.name,
       'reasoningLevel': reasoningLevel.name,
+      'customReasoningLevel': reasoningLevel.customValue,
       'cloudPolicy': cloudPolicy.name,
       'includeSchemaInPrompt': includeSchemaInPrompt,
       'timeoutMilliseconds': timeout.inMilliseconds,
@@ -114,13 +145,14 @@ final class ModelResponse {
     required this.usedMode,
     required this.metadata,
     this.structuredValue,
+    this.usage,
   });
 
   factory ModelResponse.fromMap(Map<Object?, Object?> map) {
     final Map<Object?, Object?> rawMetadata =
         (map['metadata'] as Map<Object?, Object?>?) ?? <Object?, Object?>{};
-    final Map<Object?, Object?>? rawStructured =
-        map['structuredValue'] as Map<Object?, Object?>?;
+    final Map<Object?, Object?>? rawUsage =
+        map['usage'] as Map<Object?, Object?>?;
 
     return ModelResponse(
       text: (map['text'] as String?) ?? '',
@@ -128,14 +160,43 @@ final class ModelResponse {
         (map['usedMode'] as String?) ?? ModelMode.local.name,
       ),
       metadata: rawMetadata.cast<String, Object?>(),
-      structuredValue: rawStructured?.cast<String, Object?>(),
+      structuredValue: _normalizeChannelValue(map['structuredValue']),
+      usage: rawUsage == null ? null : ModelUsage.fromMap(rawUsage),
     );
   }
 
   final String text;
   final ModelMode usedMode;
   final Map<String, Object?> metadata;
-  final Map<String, Object?>? structuredValue;
+  final Object? structuredValue;
+  final ModelUsage? usage;
+}
+
+/// Token usage returned by Foundation Models on iOS 27 or later.
+final class ModelUsage {
+  const ModelUsage({
+    required this.inputTokenCount,
+    required this.cachedInputTokenCount,
+    required this.outputTokenCount,
+    required this.reasoningTokenCount,
+    required this.totalTokenCount,
+  });
+
+  factory ModelUsage.fromMap(Map<Object?, Object?> map) {
+    return ModelUsage(
+      inputTokenCount: (map['inputTokenCount'] as int?) ?? 0,
+      cachedInputTokenCount: (map['cachedInputTokenCount'] as int?) ?? 0,
+      outputTokenCount: (map['outputTokenCount'] as int?) ?? 0,
+      reasoningTokenCount: (map['reasoningTokenCount'] as int?) ?? 0,
+      totalTokenCount: (map['totalTokenCount'] as int?) ?? 0,
+    );
+  }
+
+  final int inputTokenCount;
+  final int cachedInputTokenCount;
+  final int outputTokenCount;
+  final int reasoningTokenCount;
+  final int totalTokenCount;
 }
 
 /// Options used when requesting structured output.
@@ -167,7 +228,8 @@ sealed class SessionEvent {
     final String type = (map['type'] as String?) ?? 'unknown';
     switch (type) {
       case 'textDelta':
-        return TextDeltaEvent(
+      case 'textSnapshot':
+        return TextSnapshotEvent(
           requestId: (map['requestId'] as String?) ?? '',
           text: (map['text'] as String?) ?? '',
         );
@@ -200,14 +262,14 @@ sealed class SessionEvent {
   }
 }
 
-final class TextDeltaEvent extends SessionEvent {
-  /// Creates a streamed text delta event.
-  const TextDeltaEvent({required this.requestId, required this.text});
+final class TextSnapshotEvent extends SessionEvent {
+  /// Creates a streamed cumulative text snapshot event.
+  const TextSnapshotEvent({required this.requestId, required this.text});
 
   /// Identifier of the request that produced this event.
   final String requestId;
 
-  /// Incremental text emitted by the model.
+  /// Latest cumulative text emitted by the model.
   final String text;
 }
 
@@ -281,4 +343,18 @@ ModelMode _modeFromName(String name) {
     }
   }
   return ModelMode.local;
+}
+
+Object? _normalizeChannelValue(Object? value) {
+  if (value is Map<Object?, Object?>) {
+    return <String, Object?>{
+      for (final MapEntry<Object?, Object?> entry in value.entries)
+        if (entry.key is String)
+          entry.key! as String: _normalizeChannelValue(entry.value),
+    };
+  }
+  if (value is List<Object?>) {
+    return value.map(_normalizeChannelValue).toList(growable: false);
+  }
+  return value;
 }

@@ -26,8 +26,8 @@ void main() {
         samplingMode: SamplingMode.randomTopK,
         temperature: 0.4,
         maximumResponseTokens: 20,
-        toolCallingPolicy: ToolCallingPolicy.required,
-        reasoningLevel: ReasoningLevel.high,
+        toolCallingMode: ToolCallingMode.required,
+        reasoningLevel: ReasoningLevel.deep,
         cloudPolicy: CloudPolicy.automaticWithUserConsent,
         includeSchemaInPrompt: true,
         timeout: Duration(milliseconds: 7),
@@ -66,7 +66,7 @@ void main() {
           'requestId': 'r1',
           'text': 'hi',
         }),
-        isA<TextDeltaEvent>(),
+        isA<TextSnapshotEvent>(),
       );
 
       final toolCall =

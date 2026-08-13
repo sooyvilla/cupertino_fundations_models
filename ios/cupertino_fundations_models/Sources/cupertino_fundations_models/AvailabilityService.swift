@@ -6,6 +6,7 @@ import FoundationModels
 final class AvailabilityService {
     func capabilities() -> [String: Any] {
         let majorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+        let minorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.minorVersion
         var capabilities: [String] = []
         var contextSize: Int?
         var privateCloudContextSize: Int?
@@ -24,14 +25,13 @@ final class AvailabilityService {
         }
 
         #if compiler(>=6.4)
+        if majorVersion > 26 || majorVersion == 26 && minorVersion >= 4 {
+            capabilities.append("tokenCounting")
+        }
         if majorVersion >= 27 {
             capabilities.append(contentsOf: [
-                "tokenCounting",
-                "imageInput",
                 "privateCloudCompute",
-                "reasoning",
                 "dynamicProfiles",
-                "externalProvider",
                 "fullPower"
             ])
             privateCloudContextSize = 32768
@@ -46,6 +46,21 @@ final class AvailabilityService {
         }
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
+            let localModel: SystemLanguageModel = SystemLanguageModel.default
+            if localModel.capabilities.contains(.vision) {
+                capabilities.append("imageInput")
+            }
+            if localModel.capabilities.contains(.reasoning) {
+                capabilities.append("reasoning")
+            }
+            let privateCloudModel: PrivateCloudComputeLanguageModel =
+                PrivateCloudComputeLanguageModel()
+            if privateCloudModel.capabilities.contains(.vision) {
+                capabilities.append("imageInput")
+            }
+            if privateCloudModel.capabilities.contains(.reasoning) {
+                capabilities.append("reasoning")
+            }
             let privateCloud: [String: Any] = privateCloudAvailability(mode: "privateCloudCompute")
             supportsFullPower = privateCloud["isAvailable"] as? Bool ?? false
             preferredMode = supportsFullPower ? "privateCloudCompute" : "local"
@@ -262,6 +277,7 @@ final class AvailabilityService {
         let model: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
         switch model.availability {
         case .available:
+            let quota: [String: Any] = privateCloudQuota(model.quotaUsage)
             return [
                 "mode": mode,
                 "status": "available",
@@ -270,13 +286,7 @@ final class AvailabilityService {
                 "reason": NSNull(),
                 "recoverySuggestion": NSNull(),
                 "contextSize": 32768,
-                "quota": [
-                    "status": String(describing: model.quotaUsage.status),
-                    "isLimitReached": model.quotaUsage.isLimitReached,
-                    "resetDate": NSNull(),
-                    "limitIncreaseSuggestion": NSNull(),
-                    "details": [:]
-                ],
+                "quota": quota,
                 "details": [
                     "requiresNetwork": true,
                     "runtimeChecked": true
@@ -298,6 +308,38 @@ final class AvailabilityService {
                 recoverySuggestion: "Try again on the latest iOS 27 beta or later."
             )
         }
+    }
+    #endif
+
+    #if canImport(FoundationModels) && compiler(>=6.4)
+    @available(iOS 27.0, *)
+    private func privateCloudQuota(
+        _ quota: PrivateCloudComputeLanguageModel.QuotaUsage
+    ) -> [String: Any] {
+        let status: String
+        let isApproachingLimit: Bool
+        switch quota.status {
+        case .belowLimit(let details):
+            status = "belowLimit"
+            isApproachingLimit = details.isApproachingLimit
+        case .limitReached:
+            status = "limitReached"
+            isApproachingLimit = true
+        @unknown default:
+            status = "unknown"
+            isApproachingLimit = false
+        }
+
+        return [
+            "status": status,
+            "isLimitReached": quota.isLimitReached,
+            "isApproachingLimit": isApproachingLimit,
+            "canRequestLimitIncrease": quota.limitIncreaseSuggestion != nil,
+            "resetDate": quota.resetDate.map {
+                Int64($0.timeIntervalSince1970 * 1000)
+            } as Any,
+            "details": [:]
+        ]
     }
     #endif
 

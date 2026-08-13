@@ -57,6 +57,11 @@ final class CupertinoFoundationModels {
     return _platform.createSession(options: options);
   }
 
+  /// Counts a prompt with the on-device Foundation Models tokenizer.
+  Future<int> countTokens(Prompt prompt) {
+    return _platform.countTokens(prompt: prompt);
+  }
+
   Future<PickedFoundationModelsFile?> pickFile({
     FoundationModelsFileKind kind = FoundationModelsFileKind.any,
   }) {

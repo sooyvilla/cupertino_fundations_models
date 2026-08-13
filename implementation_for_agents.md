@@ -18,7 +18,7 @@ This document explains how to use, validate, and extend `cupertino_fundations_mo
 
 Offline means `SystemLanguageModel` with `ModelMode.local` and `CloudPolicy.never`. It still requires Apple Intelligence to be enabled, supported languages to be configured, and model assets to be downloaded by the system.
 
-Audio transcription uses `Speech.framework`, not Foundation Models. `AudioTranscriptionMode.onDevice` forces `requiresOnDeviceRecognition = true`; `server` allows Apple Speech's remote path; `automatic` prefers on-device when the locale recognizer supports it. This is separate from Private Cloud Compute.
+Audio transcription uses `Speech.framework`, not Foundation Models. On iOS 26+, `onDevice` uses `SpeechAnalyzer`/`SpeechTranscriber`; on iOS 27 the beta 5 input providers handle file and microphone audio conversion. Explicit `server` mode and older systems use `SFSpeechRecognizer`. This is separate from Private Cloud Compute.
 
 ## Official References
 
@@ -32,6 +32,9 @@ Audio transcription uses `Speech.framework`, not Foundation Models. `AudioTransc
 - Tool calling: https://developer.apple.com/documentation/foundationmodels/expanding-generation-with-tool-calling
 - Guided generation: https://developer.apple.com/documentation/FoundationModels/generating-swift-data-structures-with-guided-generation
 - Speech recognition: https://developer.apple.com/documentation/speech
+- SpeechAnalyzer: https://developer.apple.com/documentation/speech/speechanalyzer
+- Asset input provider: https://developer.apple.com/documentation/speech/assetinputsequenceprovider
+- Capture input provider: https://developer.apple.com/documentation/speech/captureinputsequenceprovider
 - Pubspec format: https://dart.dev/tools/pub/pubspec
 - Publishing packages: https://dart.dev/tools/pub/publishing
 - Writing package pages: https://dart.dev/tools/pub/writing-package-pages
@@ -48,12 +51,14 @@ Implemented:
 - `respond()`
 - `stream()` through `FoundationModelSession`
 - `pickFile()`
-- `transcribeAudio()`
-- `liveTranscription()` streaming microphone speech-to-text with partial results; uses `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ and falls back to `SFSpeechRecognizer`.
+- `transcribeAudio()` with `SpeechAnalyzer` for on-device files on iOS 26+, `AssetInputSequenceProvider` on iOS 27, and a legacy/server fallback.
+- `liveTranscription()` streaming microphone speech-to-text with partial results; uses `CaptureInputSequenceProvider` on iOS 27, a validated `SpeechAnalyzer` buffer pipeline on iOS 26, and falls back to `SFSpeechRecognizer`.
 - Native tool calling: `SessionOptions.tools` registers Dart `ModelTool`s on the native session; the model calls back into Dart over the method channel (`toolCall`), with per-tool timeouts enforced in Dart.
 - Native guided structured generation: `generateStructured()` maps the Dart `StructuredSchema` to `DynamicGenerationSchema` and returns model-validated JSON in `structuredValue`.
 - `prewarm()` and `cancelActiveRequest()` are real native calls; cancellation maps to the `cancelled` error code.
 - `SessionOptions.useCase` selects the `contentTagging` on-device model variant.
+- `countTokens()` on the facade for prompts and on local sessions for the current transcript.
+- Typed iOS 27 `ModelUsage`, PCC quota state, and transcript error handling policy.
 - `FoundationModelsOrchestrator` for Apple-first, external-first, local-only, and hybrid routing.
 - `FoundationModelsChatSession` through `orchestrator.startChat()`: multi-turn hybrid chat with shared history across Apple and external routes, `send()`, `sendStream()`, `reset()`, and `dispose()`.
 - External provider adapters through `FoundationModelsExternalProvider` (including `respondStream()` for streaming) and `FoundationModelsExternalTranscriptionProvider`.
@@ -61,15 +66,13 @@ Implemented:
 - Native preflight availability checks before session creation.
 - Native prompt construction from text, text files, and iOS 27 image attachments.
 - iOS 27 `ContextOptions.reasoningLevel` mapping.
-- iOS 27 usage metadata when Apple exposes it.
+- iOS 27 typed response usage when Apple exposes it.
 - Any feature that requires iOS 27 must be compiled with Xcode 27, either beta or official when available.
-- On the iOS 27 beta, Foundation Models currently require the device to be fully configured in English, including system language and Siri language.
+- Check runtime availability and locale support instead of assuming a specific device language.
 
 Pending:
 
 - Direct Photos picker.
-- Token counting (`tokenCount(for:)`, iOS 26.4+).
-- `SpeechAnalyzer` adoption for audio-file transcription (live already uses it).
 - Dynamic Profiles and the iOS 27 `LanguageModel` protocol bridge.
 
 ## Important Files
@@ -93,8 +96,8 @@ Pending:
 - `.../Sources/cupertino_fundations_models/SessionRegistry.swift`: actor that owns native model sessions, tools, prewarm, and structured generation.
 - `.../Sources/cupertino_fundations_models/SchemaMapper.swift`: Dart schema maps to `DynamicGenerationSchema`/`GenerationSchema`.
 - `.../Sources/cupertino_fundations_models/ToolBridge.swift`: forwards native tool calls to Dart and returns the result to the model.
-- `.../Sources/cupertino_fundations_models/SpeechTranscriptionService.swift`: `SFSpeechURLRecognitionRequest` file transcription.
-- `.../Sources/cupertino_fundations_models/LiveTranscriptionService.swift`: live microphone transcription; `SpeechAnalyzer`/`SpeechTranscriber` on iOS 26+ with an `SFSpeechRecognizer` fallback, exposed through the `cupertino_fundations_models/transcription_events` event channel.
+- `.../Sources/cupertino_fundations_models/SpeechTranscriptionService.swift`: `SpeechAnalyzer` file transcription with the iOS 27 asset provider and legacy/server fallback.
+- `.../Sources/cupertino_fundations_models/LiveTranscriptionService.swift`: generation-token-guarded live microphone transcription with the iOS 27 capture provider, iOS 26 buffer conversion, and an `SFSpeechRecognizer` fallback.
 - `.../Sources/cupertino_fundations_models/ErrorMapper.swift`: Swift error to `FlutterError` mapping, including `CancellationError` to `cancelled`.
 - `example/lib/main.dart`: chat example with hybrid orchestration, streaming, live transcription, tool calling, and attachments.
 
@@ -278,7 +281,7 @@ await for (final SessionEvent event in session.stream(
   const Prompt.text('Draft a short release note.'),
 )) {
   switch (event) {
-    case TextDeltaEvent():
+    case TextSnapshotEvent():
       print(event.text);
     case CompletionEvent():
       print(event.response.text);
@@ -292,7 +295,7 @@ await for (final SessionEvent event in session.stream(
 }
 ```
 
-Treat `TextDeltaEvent.text` as the latest native text snapshot.
+Treat `TextSnapshotEvent.text` as the latest cumulative native text snapshot.
 
 ## Audio
 
@@ -340,6 +343,8 @@ final StreamSubscription<LiveTranscriptionEvent> dictation = models
 ```
 
 The host app must include `NSSpeechRecognitionUsageDescription`, and `NSMicrophoneUsageDescription` for live microphone transcription.
+
+Treat generation sessions as single-flight resources. Dart rejects overlapping `respond`, `stream`, structured generation, prewarm, or transcript token-count calls with `concurrentRequests`. Generation and file-transcription timeouts are real caller-visible failures; never wrap these calls in an additional unbounded wait.
 
 ## SEO And Pub.dev Checklist
 

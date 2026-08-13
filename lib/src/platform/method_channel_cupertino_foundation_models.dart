@@ -93,6 +93,24 @@ final class MethodChannelCupertinoFoundationModels
   }
 
   @override
+  Future<int> countTokens({required Prompt prompt}) async {
+    final int? response = await _invoke<int>('countTokens', <String, Object?>{
+      'target': 'prompt',
+      'prompt': prompt.toMap(),
+    });
+    return response ?? 0;
+  }
+
+  @override
+  Future<int> countSessionTokens({required String sessionId}) async {
+    final int? response = await _invoke<int>('countTokens', <String, Object?>{
+      'target': 'transcript',
+      'sessionId': sessionId,
+    });
+    return response ?? 0;
+  }
+
+  @override
   Future<PickedFoundationModelsFile?> pickFile({
     required FoundationModelsFileKind kind,
   }) async {
@@ -109,8 +127,31 @@ final class MethodChannelCupertinoFoundationModels
   Future<AudioTranscriptionResult> transcribeAudio({
     required AudioTranscriptionRequest request,
   }) async {
-    final Object? response = await _invoke('transcribeAudio', request.toMap());
-    return AudioTranscriptionResult.fromMap(_asMap(response));
+    final String requestId = _createRequestId();
+    try {
+      final Object? response = await _invoke<Object?>(
+        'transcribeAudio',
+        <String, Object?>{...request.toMap(), 'requestId': requestId},
+      ).timeout(request.timeout);
+      return AudioTranscriptionResult.fromMap(_asMap(response));
+    } on TimeoutException {
+      try {
+        await _invoke<void>('cancelTranscription', <String, Object?>{
+          'requestId': requestId,
+        });
+      } on FoundationModelsException {
+        // The timeout remains the actionable failure for the caller.
+      }
+      throw FoundationModelsException(
+        code: FoundationModelsErrorCode.transcriptionTimeout,
+        message:
+            'Audio transcription did not finish within '
+            '${request.timeout.inMilliseconds}ms.',
+        recoverySuggestion:
+            'Retry after speech assets finish downloading, use a shorter file, '
+            'or increase AudioTranscriptionRequest.timeout.',
+      );
+    }
   }
 
   @override

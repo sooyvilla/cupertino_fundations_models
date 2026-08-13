@@ -56,7 +56,7 @@ Private Cloud Compute en Foundation Models esta documentado como `PrivateCloudCo
 
 Apple indica que PCC no requiere que el desarrollador gestione API keys ni autenticacion propia. Aun asi, requiere dispositivo compatible con Apple Intelligence y disponibilidad runtime.
 
-Las release notes de iOS/iPadOS 27 beta indican issues relevantes: PCC puede no funcionar en simuladores; tool calling + guided generation puede producir llamadas excesivas; truncar historial en `onPrompt` puede causar runtime errors; `PrivateCloudComputeLanguageModel` usa greedy decoding en esa beta; pasar `any LanguageModel` al modifier `model(_:)` puede fallar y Apple menciona `foundation-models-utilities` como workaround.
+Las release notes de iOS/iPadOS 27 beta 5 marcan como resueltos seis problemas de Foundation Models: PCC en simulador, tool calling excesivo con guided generation, warning de `GenerationError` en enums `@Generable`, runtime error al truncar historial en `onPrompt`, omision de `onPrompt` en perfiles sin instrucciones y decoding greedy forzado en PCC. No anuncian una nueva familia de API exclusiva de beta 5.
 
 Dynamic Profiles, `DynamicInstructions`, `Profile`, `LanguageModel` protocol, `LanguageModelExecutor`, `ContextOptions`, image `Attachment` y control explicito `GenerationOptions.ToolCallingMode` aparecen como iOS/iPadOS/macOS/visionOS/watchOS 27.0 beta.
 
@@ -197,7 +197,7 @@ Enums y DTOs clave:
 - `ModelCapability.localText`, `streaming`, `toolCalling`, `structuredOutput`, `tokenCounting`, `imageInput`, `pcc`, `reasoning`, `dynamicProfiles`.
 - `AvailabilityStatus.available`, `unavailable`, `unsupportedPlatform`, `unsupportedOsVersion`, `appleIntelligenceDisabled`, `assetsUnavailable`, `unsupportedLanguage`, `networkUnavailable`, `quotaExceeded`, `missingEntitlement`.
 - `CloudPolicy.never`, `whenExplicit`, `automaticWithUserConsent`.
-- `ToolCallingPolicy.auto`, `required`, `disallowed`, con degradacion si iOS 27 beta no esta disponible.
+- `ToolCallingMode.allowed`, `required`, `disallowed`, con degradacion si iOS 27 no esta disponible.
 
 ## Reglas de rendimiento
 
@@ -290,7 +290,7 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - Registrar tool definitions por sesion.
 - Swift tool bridge llama a Dart y espera resultado.
 - Controlar concurrencia, timeout y errores.
-- `ToolCallingPolicy` iOS 27 beta se expone como capability experimental; en iOS 26 queda en comportamiento automatico del modelo.
+- `ToolCallingMode` iOS 27 se expone como capability experimental; en iOS 26 queda en comportamiento automatico del modelo.
 
 ### Fase 6 - Structured output
 
@@ -506,7 +506,7 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - Live transcription upgraded: `LiveTranscriptionService.swift` now prefers `SpeechAnalyzer` + `SpeechTranscriber` on iOS 26+ (supported-locale check, `AssetInventory` install, `bestAvailableAudioFormat` + `AVAudioConverter`, `AsyncStream<AnalyzerInput>`, volatile results merged as finalized+volatile snapshots) and falls back to `SFSpeechRecognizer` on older systems, unsupported locales, analyzer setup failure, or explicit `server` mode. Event metadata includes `engine: speechAnalyzer|sfSpeech`. File transcription still uses SFSpeech (SpeechAnalyzer adoption pending there).
 - Example: added demo `DeviceTimeTool` (`get_current_time`) wired through `FoundationModelsDefaults.tools` so the chat exercises native tool calling.
 - Docs: README gained Tool Calling, Structured Output, and Performance sections and an updated capability matrix; `implementation_for_agents.md` file map updated to the SPM paths; CHANGELOG 0.1.0 extended with Added/Fixed entries for this pass.
-- Pending after this pass: direct Photos picker, `tokenCount(for:)` (iOS 26.4, API shape unverified), SpeechAnalyzer for file transcription, Dynamic Profiles, iOS 27 `LanguageModel` protocol bridge.
+- Pending after this pass: direct Photos picker, SpeechAnalyzer for file transcription, Dynamic Profiles, iOS 27 `LanguageModel` protocol bridge.
 - Validations: `flutter analyze` clean at root and example; `flutter build ios --no-codesign` with Xcode 27 beta succeeded; `dart pub publish --dry-run` only warns about the dirty git tree. No tests were created.
 
 ## Implemented on 2026-07-03, fix: streaming EventChannel never closed (chat stuck after first message)
@@ -542,6 +542,27 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - `CHANGELOG.md` 0.1.1 previously only documented the Xcode 26/27 compilation fix; added the missing entries: `privateCloudFirst()` routing policy (Added), SpeechAnalyzer language-variant locale matching and example backend-selector UX pass (Changed), and the streaming end-of-stream hang fix (Fixed).
 - `README.md`: added `privateCloudFirst()` to the built-in policies list.
 - Validations: `flutter analyze` clean at root and example; `dart pub publish --dry-run` clean. Published 0.1.1 to pub.dev, committed and pushed. No tests were created.
+
+## Implemented on 2026-08-12, iOS 27 beta 5 API alignment, 0.2.0
+
+- Official research: `doc/ios-27-beta-5-foundation-models.md` distinguishes beta 5 fixes from the broader iOS 27 API additions. Apple beta 5 resolves six Foundation Models defects and does not introduce a separate beta-5-only API family. The local SDK interface from Xcode 27 beta 5 build `27A5194q` was used to verify current symbols and deprecations.
+- Breaking Dart alignment: `ToolCallingMode.allowed|required|disallowed` replaces `ToolCallingPolicy`; reasoning values are `light|moderate|deep`; cumulative streaming uses `TextSnapshotEvent`; `structuredValue` is `Object?`; `contextSizeExceeded` replaces `contextExceeded`; PCC quota state is typed; `ModelCapability.externalProvider` was removed because the Dart adapter is not a native Apple capability.
+- New Dart APIs: `CupertinoFoundationModels.countTokens(Prompt)`, `FoundationModelSession.countTokens()`, typed `ModelUsage`, sampling top-K/probability/seed controls, `ReasoningLevel.custom()`, and `TranscriptErrorHandlingPolicy`.
+- Native Swift: iOS 27 structured generation uses the `ContextOptions` overload; response and stream usage is forwarded; image bytes are decoded into `Attachment<ImageAttachmentContent>`; runtime vision/reasoning capabilities come from `LanguageModelCapabilities`; PCC quota exposes below/approaching/limit/reset state.
+- Error bridge: iOS 27 typed errors from `LanguageModelError`, `SystemLanguageModel.Error`, `LanguageModelSession.Error`, `PrivateCloudComputeLanguageModel.Error`, and `GeneratedContent.ParsingError` map to stable Dart codes and safe recovery details. Localized-string parsing remains only as a compatibility fallback.
+- Versioning and docs: `pubspec.yaml` and podspec moved from 0.1.1 to 0.2.0; `CHANGELOG.md`, `README.md`, existing test fixtures, `AGENTS.md`, and `context.md` were synchronized. Dynamic Profiles and a native arbitrary `LanguageModelExecutor` bridge remain explicit future work because they require stateful typed Swift integration, not a static channel map.
+- Allowed validations: `dart format lib example/lib test`; `flutter analyze` clean at the package root and example; `flutter build ios --no-codesign` from `example/` with Xcode 27 beta 5 succeeded and produced `Runner.app`; `dart pub publish --dry-run` found only the expected dirty-tree warning because no commit was authorized. No tests, simulator, app execution, signing, commit, push, publish, or deployment were performed. The known optional CocoaPods-to-SPM cleanup warning remains.
+
+## Iteracion 2026-08-12 - Estabilidad de chat y transcripcion en iOS 27 beta 5
+
+- Sintomas reportados: el `example` podia cerrarse al enviar mensajes; la transcripcion en vivo podia cerrarse o comportarse de forma irregular; la transcripcion de archivos podia tardar demasiado. No habia reportes `.ips`/`.crash` de Runner disponibles localmente, por lo que no se atribuye una pila concreta sin evidencia de dispositivo.
+- Causas comprobadas en codigo: el ejemplo activaba `_sending` despues de esperar la cancelacion del microfono, permitiendo dos envios durante esa ventana; las sesiones Dart no impedían solicitudes superpuestas aunque Apple solo admite una por sesion; `GenerationOptions.timeout` y `AudioTranscriptionRequest.timeout` no se aplicaban; un arranque asincrono de microfono podia continuar despues de cancelar su suscripcion; el fallback de `AVAudioEngine` instalaba un tap sin validar sample rate ni channel count, condicion que puede terminar el proceso dentro de AVFoundation.
+- Estabilidad de generacion: `FoundationModelSession` y `FoundationModelsChatSession` ahora son single-flight, reportan `concurrentRequests`, protegen sesiones ya descartadas y cancelan la solicitud nativa cuando vence `GenerationOptions.timeout`. El ejemplo marca el envio antes de detener la voz y captura fallos asincronos no tipados para mostrarlos en la burbuja.
+- Speech moderno: `SpeechTranscriptionService.swift` usa `SpeechAnalyzer`/`SpeechTranscriber` para archivos on-device desde iOS 26. En iOS 27 beta 5 usa `AssetInputSequenceProvider`; `server` y runtimes anteriores conservan `SFSpeechURLRecognitionRequest`. `AudioTranscriptionRequest.timeout` cancela la tarea nativa, su continuacion se resuelve una sola vez y Dart recibe `transcriptionTimeout`.
+- Captura en vivo: `LiveTranscriptionService.swift` usa `CaptureInputSequenceProvider` en iOS 27 beta 5, invalida inicios tardios con un token por suscripcion y limpia capture/analyzer/tasks al cancelar. iOS 26 conserva conversion manual con validacion de formato; iOS 13+ y modo server conservan SFSpeech.
+- Documentacion: `README.md`, `CHANGELOG.md`, `implementation_for_agents.md` y `doc/ios-27-beta-5-foundation-models.md` se alinearon con la arquitectura Speech actual y las reglas de concurrencia/timeout.
+- Validaciones permitidas: `dart format lib`; `flutter analyze` limpio en raiz y `example`; `flutter build ios --no-codesign` desde `example/` con Xcode 27 beta 5 build `27A5194q` exitoso y `Runner.app` de 16.8 MB; `git diff --check` limpio; `dart pub publish --dry-run` valido el paquete y solo aviso que el arbol Git tiene cambios sin commit. No se ejecutaron tests, app, simulador ni dispositivo. La comprobacion definitiva del cierre reportado y la latencia real requiere reproduccion manual en el dispositivo afectado o un crash log `.ips`; el codigo y el build por si solos no prueban comportamiento runtime.
+- Pendientes ajenos a esta correccion: Dynamic Profiles, bridge nativo arbitrario de `LanguageModelExecutor`, selector directo de Photos y migracion opcional del ejemplo para retirar la integracion CocoaPods residual.
 
 ## Regla de mantenimiento de contexto
 
