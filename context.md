@@ -4,7 +4,7 @@
 
 - Objetivo: auditar fuentes, documentación, ejemplo, fallos históricos y SDK oficial 27.2; preparar la próxima entrega sin publicar ni aumentar todavía la versión.
 - Estado inicial: `main` en `080aa00`, 31 archivos modificados y tres nuevos de trabajo previo. Se preservó esa base; copia de fuentes/configuración/documentación en `/tmp/cfm-audit-2026-09-19-baseline`, sin archivos de entorno.
-- Auditoría inicial sobre 0.2.1; preparación de entrega autorizada después por el usuario: manifiestos **0.3.0**, incompatible por retirar API híbrida. No se declara 1.0: faltan validaciones de runtime y contrato estable.
+- Versión vigente **0.3.0**, publicada y verificada en pub.dev el 2026-09-19 (Bogotá; 2026-09-20 UTC), y entregada a GitHub/main. Incompatible con 0.2.x por retirar API híbrida. No se declara 1.0: faltan validaciones de runtime y contrato estable.
 - Toolchain observado: Flutter 3.47.4 / Dart 3.13.3, Xcode 27.2 beta `27B5019j`, SDK iOS 27.2, Swift 6.4. Deployment target iOS 15; generación exige 26+ y funciones nuevas 27+ con guards de SDK/runtime.
 - Git: `main` para entregas expresamente autorizadas; política confirmada en la continuación de entrega. La auditoría inicial no creó commits ni publicó. No pruebas ni app/simuladores/dispositivos en esta iteración.
 
@@ -38,7 +38,7 @@
 - `dart pub publish --dry-run` generó archive de 119 KB, exit 65 por dos advertencias Git: archivos modificados y router eliminado aún indexado (Pub lo reporta como ignored). Archive revisado: sin router, AGENTS/context ni tests; incluye guías y nuevas fuentes nativas. No se publicó.
 - Revisión independiente Sol cerrada sin defectos prioritarios confirmados pendientes. Corrigió la observación de schemas malformados y detectó una regresión temporal del nombre opcional de tools, también corregida antes de builds finales.
 - Sin ejecución de tests, app, simuladores ni dispositivos; la matriz física beta 8 del 1 de septiembre es histórica y no valida runtime 27.2 ni PCC.
-- Pendiente de futura autorización: validación física 27.2, regresión runtime iOS 26, permisos/assets/Speech, PCC con entitlement, pruebas automatizadas y etapa Git/publicación. El versionado, changelog y texto de desarrollo se actualizaron en la continuación autorizada de abajo.
+- Pendiente de futura autorización: validación física 27.2, regresión runtime iOS 26, permisos/assets/Speech, PCC con entitlement y pruebas automatizadas. El versionado y la entrega Git/pub.dev de 0.3.0 se completaron en la continuación autorizada de abajo.
 - Evidencia local: `/tmp/cfm-final-analyze.log`, `/tmp/cfm-final-native-build.log`, `/tmp/cfm-cocoapods-build.log`, `/tmp/cfm-doc-examples-analyze.log`, `/tmp/cfm-publish-dry-run.log`.
 
 Equipo Astra invocado por el usuario: Luna low para fuentes oficiales, Terra medium para retirar híbrido/migrar example, Sol high para revisión independiente de solo lectura. Principal previsto Astra/high por la skill, sin metadatos de cliente suficientes para verificar modelo/esfuerzo.
@@ -49,8 +49,13 @@ Equipo Astra invocado por el usuario: Luna low para fuentes oficiales, Terra med
 - Pubspec/podspec sincronizados en 0.3.0. Notas trasladadas a CHANGELOG; eliminado borrador next-release. README, guía de agentes, ejemplo y migración describen la versión concreta.
 - Pub.dev confirmó 0.2.1 como latest antes de la entrega y que 0.3.0 aún no existe. Sus enlaces relativos de documentación apuntan a GitHub/main: se requiere sincronizar las fuentes para no publicar enlaces nuevos rotos.
 - Metadatos 0.3.0 alineados en pubspec/podspec/lock del example; changelog comienza en 0.3.0 y enlaces locales correctos. `flutter analyze --no-pub` sin incidencias; dry run 119 KB con solo las dos advertencias Git esperadas (árbol modificado y router eliminado aún indexado). No hay cambios de código ni ejecución de tests/app en esta continuación.
-- `origin/main` comprobado por ls-remote en `080aa0004e6bcde2b76b650b1bb1010e3bcba2ad`, coincide con el HEAD de partida. Usuario confirmó: «Subirlo, tanto a git como a pub.dev». Se documenta política `main` para entregas autorizadas y se prepara commit/push y publicación de 0.3.0. Los resultados remotos se registrarán tras verificarlos.
+- `origin/main` comprobado por ls-remote en `080aa0004e6bcde2b76b650b1bb1010e3bcba2ad`, coincide con el HEAD de partida. Usuario confirmó: «Subirlo, tanto a git como a pub.dev». Se documenta política `main` para entregas autorizadas y se ejecutó commit/push y publicación de 0.3.0.
 - Logs de esta preparación: `/tmp/cfm-030-analyze.log` y `/tmp/cfm-030-dry-run.log`.
+- Commit de entrega: `bc17a6fe5b13b53bc103a8f32b905ab72b005834` (`release: 0.3.0 native sessions and stability hardening`), push exitoso a `origin/main`; SHA remoto comprobado después del push.
+- Tras el commit, `dart pub publish --dry-run` pasó con **0 warnings**; archive 119 KB. `dart pub publish --force` completó el upload con aceptación explícita del servidor.
+- API de pub.dev verificó `latest=0.3.0`, publicación `2026-09-20T02:45:04.664972Z` y archive SHA-256 `0c9967b8ddca4cdfc82a72d9a403ca07ee1fef2d774bc6c80583cbcea5779f81`. Hash del archivo descargado coincide; nueve archivos clave coinciden byte por byte con las fuentes locales, router eliminado ausente, AGENTS/context excluidos.
+- Página pública de changelog verificada: primer h2 0.3.0, sin encabezado Unreleased. README/guías de 0.3.0 subidos a GitHub para que funcionen los enlaces relativos de pub.dev.
+- Evidencia adicional: `/tmp/cfm-030-clean-dry-run.log` y `/tmp/cfm-030-publication.log`. Solo existe el checkout principal en los worktrees registrados; no se creó ni eliminó otro worktree. Este cierre se registra en un commit documental posterior, sin cambiar el contenido publicado.
 
 ## Historial conservado
 
