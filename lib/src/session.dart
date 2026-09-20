@@ -34,6 +34,7 @@ final class SessionOptions {
     this.mode = ModelMode.automatic,
     this.cloudPolicy = CloudPolicy.never,
     this.instructions,
+    this.localeIdentifier,
     this.tools = const <ModelTool>[],
     this.useCase = FoundationModelsUseCase.general,
     this.transcriptErrorHandlingPolicy =
@@ -44,6 +45,9 @@ final class SessionOptions {
   final ModelMode mode;
   final CloudPolicy cloudPolicy;
   final String? instructions;
+
+  /// Optional locale preflight. Set the response language in [instructions].
+  final String? localeIdentifier;
   final List<ModelTool> tools;
 
   /// On-device model variant. `contentTagging` applies to local sessions only.
@@ -61,6 +65,7 @@ final class SessionOptions {
       'mode': mode.name,
       'cloudPolicy': cloudPolicy.name,
       'instructions': instructions,
+      'localeIdentifier': localeIdentifier,
       'tools': definitions
           .map((ToolDefinition value) => value.toMap())
           .toList(growable: false),
@@ -91,6 +96,9 @@ final class FoundationModelSession {
   final Map<String, ModelTool> _tools;
   bool _requestActive = false;
   bool _disposed = false;
+  Future<void>? _cancellation;
+  Future<void>? _disposal;
+  bool _cancellationFailed = false;
 
   String get id => _id;
 
@@ -114,20 +122,25 @@ final class FoundationModelSession {
     GenerationOptions options = const GenerationOptions(),
   }) async* {
     _beginRequest();
+    Future<void>? cancellation;
     try {
       final Stream<SessionEvent> events = _platform
           .stream(sessionId: _id, prompt: prompt, options: options)
           .timeout(
             options.timeout,
             onTimeout: (EventSink<SessionEvent> sink) {
-              unawaited(_platform.cancelActiveRequest(sessionId: _id));
+              cancellation ??= _cancelNativeRequest();
               sink.addError(_timeoutException(options.timeout));
               sink.close();
             },
           );
       yield* events;
     } finally {
-      _requestActive = false;
+      try {
+        await cancellation;
+      } finally {
+        _requestActive = false;
+      }
     }
   }
 
@@ -167,21 +180,26 @@ final class FoundationModelSession {
 
   Future<void> cancelActiveRequest() {
     _checkNotDisposed();
-    return _platform.cancelActiveRequest(sessionId: _id);
+    return _cancelNativeRequest();
   }
 
-  Future<void> dispose() async {
-    if (_disposed) {
-      return;
-    }
+  Future<void> dispose() => _disposal ??= _dispose();
+
+  Future<void> _dispose() async {
     _disposed = true;
-    if (_requestActive) {
-      await _platform.cancelActiveRequest(sessionId: _id);
+    try {
+      if (_requestActive || _cancellation != null) {
+        await _cancelNativeRequest();
+      }
+    } finally {
+      await _platform.disposeSession(sessionId: _id);
     }
-    await _platform.disposeSession(sessionId: _id);
   }
 
   Future<ToolResult> resolveToolCall(ToolCall call) async {
+    if (_disposed) {
+      return const ToolResult.failure('The session has been disposed.');
+    }
     final ModelTool? tool = _tools[call.name];
     if (tool == null) {
       return ToolResult.failure('Tool ${call.name} is not registered.');
@@ -210,7 +228,7 @@ final class FoundationModelSession {
       return await operation().timeout(
         timeout,
         onTimeout: () async {
-          await _platform.cancelActiveRequest(sessionId: _id);
+          await _cancelNativeRequest();
           throw _timeoutException(timeout);
         },
       );
@@ -221,7 +239,14 @@ final class FoundationModelSession {
 
   void _beginRequest() {
     _checkNotDisposed();
-    if (_requestActive) {
+    if (_cancellationFailed) {
+      throw const FoundationModelsException(
+        code: FoundationModelsErrorCode.invalidRequest,
+        message: 'Native cancellation could not be confirmed for this session.',
+        recoverySuggestion: 'Dispose this session and create a new one.',
+      );
+    }
+    if (_requestActive || _cancellation != null) {
       throw const FoundationModelsException(
         code: FoundationModelsErrorCode.concurrentRequests,
         message: 'This session already has an active request.',
@@ -230,6 +255,21 @@ final class FoundationModelSession {
       );
     }
     _requestActive = true;
+  }
+
+  Future<void> _cancelNativeRequest() {
+    return _cancellation ??= _performCancellation();
+  }
+
+  Future<void> _performCancellation() async {
+    try {
+      await _platform.cancelActiveRequest(sessionId: _id);
+    } on Object {
+      _cancellationFailed = true;
+      rethrow;
+    } finally {
+      _cancellation = null;
+    }
   }
 
   void _checkNotDisposed() {

@@ -18,14 +18,10 @@ final class MethodChannelCupertinoFoundationModels
     implements CupertinoFoundationModelsPlatform {
   MethodChannelCupertinoFoundationModels({
     MethodChannel? methodChannel,
-    EventChannel? eventChannel,
     EventChannel? transcriptionEventChannel,
   }) : _methodChannel =
            methodChannel ??
            const MethodChannel('cupertino_fundations_models/methods'),
-       _eventChannel =
-           eventChannel ??
-           const EventChannel('cupertino_fundations_models/events'),
        _transcriptionEventChannel =
            transcriptionEventChannel ??
            const EventChannel(
@@ -35,10 +31,13 @@ final class MethodChannelCupertinoFoundationModels
   }
 
   final MethodChannel _methodChannel;
-  final EventChannel _eventChannel;
   final EventChannel _transcriptionEventChannel;
   final Map<String, FoundationModelSession> _liveSessions =
       <String, FoundationModelSession>{};
+  final Map<String, _ActiveGenerationStream> _activeStreams =
+      <String, _ActiveGenerationStream>{};
+  int _requestSequence = 0;
+  bool _liveTranscriptionActive = false;
 
   @override
   Future<FoundationModelsCapabilities> getCapabilities() async {
@@ -169,38 +168,38 @@ final class MethodChannelCupertinoFoundationModels
   @override
   Stream<LiveTranscriptionEvent> liveTranscription({
     required LiveTranscriptionRequest request,
-  }) {
-    final Stream<Object?> nativeStream = _transcriptionEventChannel
-        .receiveBroadcastStream(request.toMap())
-        .cast<Object?>();
-    return nativeStream.transform<LiveTranscriptionEvent>(
-      StreamTransformer<Object?, LiveTranscriptionEvent>.fromHandlers(
-        handleData: (Object? event, EventSink<LiveTranscriptionEvent> sink) {
-          final LiveTranscriptionEvent parsed = LiveTranscriptionEvent.fromMap(
-            _asMap(event),
-          );
-          sink.add(parsed);
-          if (parsed.isFinal) {
-            sink.close();
-          }
-        },
-        handleError:
-            (
-              Object error,
-              StackTrace stackTrace,
-              EventSink<LiveTranscriptionEvent> sink,
-            ) {
-              if (error is PlatformException) {
-                sink.addError(
-                  FoundationModelsException.fromPlatformException(error),
-                  stackTrace,
-                );
-                return;
-              }
-              sink.addError(error, stackTrace);
-            },
-      ),
-    );
+  }) async* {
+    if (_liveTranscriptionActive) {
+      throw const FoundationModelsException(
+        code: FoundationModelsErrorCode.concurrentRequests,
+        message: 'A microphone transcription is already active.',
+        recoverySuggestion:
+            'Cancel and await the current subscription before starting another.',
+      );
+    }
+    _liveTranscriptionActive = true;
+    try {
+      await for (final Object? value
+          in _transcriptionEventChannel.receiveBroadcastStream(
+            request.toMap(),
+          )) {
+        final LiveTranscriptionEvent event = LiveTranscriptionEvent.fromMap(
+          _asMap(value),
+        );
+        yield event;
+        if (event.isFinal) {
+          break;
+        }
+      }
+    } on PlatformException catch (error) {
+      throw FoundationModelsException.fromPlatformException(error);
+    } finally {
+      try {
+        await _invoke<void>('stopLiveTranscription');
+      } finally {
+        _liveTranscriptionActive = false;
+      }
+    }
   }
 
   @override
@@ -230,36 +229,26 @@ final class MethodChannelCupertinoFoundationModels
       'prompt': prompt.toMap(),
       'options': options.toMap(),
     };
-
-    final Stream<Object?> nativeStream = _eventChannel
-        .receiveBroadcastStream(arguments)
-        .cast<Object?>();
-    return nativeStream.transform<SessionEvent>(
-      StreamTransformer<Object?, SessionEvent>.fromHandlers(
-        handleData: (Object? event, EventSink<SessionEvent> sink) {
-          final SessionEvent parsed = SessionEvent.fromMap(_asMap(event));
-          sink.add(parsed);
-          if (parsed is CompletionEvent || parsed is FailureEvent) {
-            sink.close();
-          }
-        },
-        handleError:
-            (
-              Object error,
-              StackTrace stackTrace,
-              EventSink<SessionEvent> sink,
-            ) {
-              if (error is PlatformException) {
-                sink.addError(
-                  FoundationModelsException.fromPlatformException(error),
-                  stackTrace,
-                );
-                return;
-              }
-              sink.addError(error, stackTrace);
-            },
-      ),
+    late final StreamController<SessionEvent> controller;
+    controller = StreamController<SessionEvent>(
+      sync: true,
+      onListen: () {
+        _activeStreams[requestId] = _ActiveGenerationStream(
+          sessionId: sessionId,
+          controller: controller,
+        );
+        unawaited(_startStream(requestId, arguments, controller));
+      },
+      onCancel: () async {
+        final _ActiveGenerationStream? active = _activeStreams[requestId];
+        if (active == null || !identical(active.controller, controller)) {
+          return;
+        }
+        _activeStreams.remove(requestId);
+        await _cancelStream(sessionId: sessionId, requestId: requestId);
+      },
     );
+    return controller.stream;
   }
 
   @override
@@ -303,10 +292,25 @@ final class MethodChannelCupertinoFoundationModels
     await _invoke<void>('disposeSession', <String, Object?>{
       'sessionId': sessionId,
     });
+    final List<String> requestIds = _activeStreams.entries
+        .where(
+          (MapEntry<String, _ActiveGenerationStream> entry) =>
+              entry.value.sessionId == sessionId,
+        )
+        .map((MapEntry<String, _ActiveGenerationStream> entry) => entry.key)
+        .toList(growable: false);
+    for (final String requestId in requestIds) {
+      final _ActiveGenerationStream? active = _activeStreams.remove(requestId);
+      await active?.controller.close();
+    }
   }
 
   /// Handles calls initiated by the native side, currently tool invocations.
   Future<Object?> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'streamEvent') {
+      await _handleStreamEvent(_asMap(call.arguments));
+      return null;
+    }
     if (call.method != 'toolCall') {
       return null;
     }
@@ -321,29 +325,96 @@ final class MethodChannelCupertinoFoundationModels
       ).toMap();
     }
 
-    final ToolResult result = await session.resolveToolCall(
-      ToolCall(
-        id: (arguments['toolCallId'] as String?) ?? '',
-        name: name,
-        arguments: _decodeToolArguments(arguments['argumentsJson'] as String?),
-      ),
-    );
-    return result.toMap();
+    try {
+      final ToolResult result = await session.resolveToolCall(
+        ToolCall(
+          id: (arguments['toolCallId'] as String?) ?? '',
+          name: name,
+          arguments: _decodeToolArguments(
+            arguments['argumentsJson'] as String?,
+          ),
+        ),
+      );
+      return result.toMap();
+    } on FormatException {
+      return const ToolResult.failure(
+        'Tool arguments must be a valid JSON object.',
+      ).toMap();
+    }
+  }
+
+  Future<void> _startStream(
+    String requestId,
+    Map<String, Object?> arguments,
+    StreamController<SessionEvent> controller,
+  ) async {
+    try {
+      await _invoke<void>('startStream', arguments);
+    } on Object catch (error, stackTrace) {
+      final _ActiveGenerationStream? active = _activeStreams[requestId];
+      if (active == null || !identical(active.controller, controller)) {
+        return;
+      }
+      _activeStreams.remove(requestId);
+      controller.addError(error, stackTrace);
+      await controller.close();
+    }
+  }
+
+  Future<void> _cancelStream({
+    required String sessionId,
+    required String requestId,
+  }) async {
+    try {
+      await _invoke<void>('cancelStream', <String, Object?>{
+        'sessionId': sessionId,
+        'requestId': requestId,
+      });
+    } on FoundationModelsException {
+      return;
+    }
+  }
+
+  Future<void> _handleStreamEvent(Map<Object?, Object?> arguments) async {
+    final String requestId = (arguments['requestId'] as String?) ?? '';
+    final _ActiveGenerationStream? active = _activeStreams[requestId];
+    if (active == null) {
+      return;
+    }
+
+    final Object? errorValue = arguments['error'];
+    if (errorValue is Map<Object?, Object?>) {
+      _activeStreams.remove(requestId);
+      active.controller.addError(
+        FoundationModelsException.fromPlatformException(
+          PlatformException(
+            code: (errorValue['code'] as String?) ?? 'nativeFailure',
+            message: errorValue['message'] as String?,
+            details: errorValue['details'],
+          ),
+        ),
+      );
+      await active.controller.close();
+      return;
+    }
+
+    final SessionEvent event = SessionEvent.fromMap(_asMap(arguments['event']));
+    active.controller.add(event);
+    if (event is CompletionEvent || event is FailureEvent) {
+      _activeStreams.remove(requestId);
+      await active.controller.close();
+    }
   }
 
   Map<String, Object?> _decodeToolArguments(String? argumentsJson) {
     if (argumentsJson == null || argumentsJson.isEmpty) {
       return <String, Object?>{};
     }
-    try {
-      final Object? decoded = jsonDecode(argumentsJson);
-      if (decoded is Map<String, dynamic>) {
-        return decoded.cast<String, Object?>();
-      }
-      return <String, Object?>{'value': decoded};
-    } on FormatException {
-      return <String, Object?>{'raw': argumentsJson};
+    final Object? decoded = jsonDecode(argumentsJson);
+    if (decoded is Map<String, dynamic>) {
+      return decoded.cast<String, Object?>();
     }
+    throw const FormatException('Tool arguments must be a JSON object.');
   }
 
   Future<T?> _invoke<T>(String method, [Object? arguments]) async {
@@ -353,6 +424,13 @@ final class MethodChannelCupertinoFoundationModels
         arguments,
       );
       return response;
+    } on MissingPluginException {
+      throw const FoundationModelsException(
+        code: FoundationModelsErrorCode.unsupportedPlatform,
+        message: 'The native iOS Foundation Models plugin is unavailable.',
+        recoverySuggestion:
+            'Use an iOS host with the plugin registered and rebuild after adding it.',
+      );
     } on PlatformException catch (exception) {
       throw FoundationModelsException.fromPlatformException(exception);
     }
@@ -367,7 +445,8 @@ final class MethodChannelCupertinoFoundationModels
 
   String _createRequestId() {
     final int micros = DateTime.now().microsecondsSinceEpoch;
-    return 'request_$micros';
+    _requestSequence += 1;
+    return 'request_${micros}_$_requestSequence';
   }
 
   ModelMode _modeFromName(String name) {
@@ -378,4 +457,14 @@ final class MethodChannelCupertinoFoundationModels
     }
     return ModelMode.local;
   }
+}
+
+final class _ActiveGenerationStream {
+  const _ActiveGenerationStream({
+    required this.sessionId,
+    required this.controller,
+  });
+
+  final String sessionId;
+  final StreamController<SessionEvent> controller;
 }

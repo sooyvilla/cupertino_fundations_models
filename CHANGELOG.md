@@ -1,4 +1,61 @@
-## Unreleased
+## 0.3.0
+
+Native Apple sessions, stricter privacy and input validation, and lifecycle hardening.
+This is a breaking update from 0.2.x.
+
+### Breaking
+
+- Remove the Dart hybrid orchestrator, external-provider contracts, shared
+  cross-provider chat history and routing policies. Applications own API/local
+  routing and consent; this package owns Apple native sessions.
+- `GenerationOptions.cloudPolicy` is nullable and inherits the session when
+  omitted. Explicit `never` refuses requests on an existing PCC session.
+- Reject contradictory cloud policies, unsupported schema constraints, invalid
+  tool arguments and generation options instead of silently changing behavior.
+- Require Flutter 3.41 or later, consistent with the existing Dart 3.11 minimum.
+
+See [migration](doc/migration-0.3.0.md) and [application routing](doc/app-owned-routing.md).
+
+### Added
+
+- `SessionOptions.localeIdentifier` to validate the requested local model locale.
+- `GenerationOptions.maximumToolCalls`, a per-request limit of 1–128 (default 16).
+- Missing Speech/microphone usage descriptions produce a typed configuration
+  error before requesting protected platform APIs.
+- Feature guide, recovered crash ledger, recovery recipes, an updated agent
+  implementation guide and the [iOS 27.2 audit](doc/ios-27.2-audit-2026-09-19.md).
+
+### Changed
+
+- Example uses persistent Apple sessions, defaults to local generation and
+  on-device Speech, and removes the Gemini client/API key path.
+- Request-scoped streaming callbacks allow different sessions to coexist;
+  default facade instances share a single native callback transport.
+- Cancellation and disposal wait for native work to finish before reuse.
+- Tools have native and Dart timeout handling, a request budget, and a 64,000
+  character result ceiling that returns a size error instead of truncating data.
+- Attachments are bounded before decoding; images are downsampled to 2,048
+  pixels and processed with Vision OCR, classification and barcode detection.
+- Private Cloud Compute initialization requires an explicit host opt-in flag;
+  this flag does not grant or verify Apple's managed entitlement.
+
+### Fixed
+
+- Native tool bridge installation and stale task completion races.
+- Conflicting generation, prewarm, cancellation and session disposal operations.
+- Live microphone startup/cancellation overlap and analyzer cleanup ordering.
+- Speech callback values crossing Swift concurrency boundaries unsafely.
+- Invalid sampling, response limits, timeouts, schemas and tool arguments reaching
+  Apple APIs; unavailable local models now return typed availability reasons.
+- Swallowed structured JSON parse failures and silent attachment extraction errors.
+- Empty `Unreleased` heading and outdated hybrid claims in package metadata/docs.
+
+### Validation
+
+- Dart analysis, documentation snippets and unsigned SPM/CocoaPods builds passed
+  with Xcode 27.2 beta.
+- Current iOS 27.2 device behavior and entitled PCC generation remain unverified;
+  historical device checks are documented separately.
 
 ## 0.2.1
 

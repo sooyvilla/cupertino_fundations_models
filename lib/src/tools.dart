@@ -37,6 +37,16 @@ final class ToolDefinition {
   final Duration timeout;
 
   Map<String, Object?> toMap() {
+    if (name.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'Cannot be empty.');
+    }
+    if (timeout.inMilliseconds < 1 || timeout > const Duration(minutes: 10)) {
+      throw ArgumentError.value(
+        timeout,
+        'timeout',
+        'Must be between 1 millisecond and 10 minutes.',
+      );
+    }
     return <String, Object?>{
       'name': name,
       'description': description,

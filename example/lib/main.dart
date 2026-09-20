@@ -1,23 +1,24 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:cupertino_fundations_models/cupertino_fundations_models.dart';
 import 'package:flutter/material.dart';
 
-/// Optional Gemini API key used to demo hybrid routing.
-///
-/// Run with an external fallback provider:
-/// flutter run --dart-define=GEMINI_API_KEY=your_key
-const String geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+import 'smoke_test.dart';
+
+const bool foundationModelsSmokeTest = bool.fromEnvironment('CFM_SMOKE_TEST');
 
 /// Backend selection exposed in the example UI.
-enum ChatBackend { auto, local, privateCloud, gemini }
+enum ChatBackend { local, privateCloud }
 
 enum _ChatAction { diagnostics, reset }
 
 void main() {
-  runApp(const ExampleApp());
+  runApp(
+    foundationModelsSmokeTest
+        ? const FoundationModelsSmokeTestApp()
+        : const ExampleApp(),
+  );
 }
 
 final class ExampleApp extends StatelessWidget {
@@ -33,93 +34,6 @@ final class ExampleApp extends StatelessWidget {
       ),
       home: const ChatScreen(),
     );
-  }
-}
-
-/// Minimal Gemini adapter used to demo Apple + external hybrid routing.
-///
-/// The package never ships provider clients; this adapter lives in the app.
-final class GeminiExternalProvider extends FoundationModelsExternalProvider {
-  const GeminiExternalProvider({required this.apiKey});
-
-  final String apiKey;
-
-  @override
-  String get name => 'gemini';
-
-  @override
-  Future<bool> isAvailable() async => apiKey.isNotEmpty;
-
-  @override
-  Future<FoundationModelsProviderResponse> respond(
-    FoundationModelsRequest request,
-  ) async {
-    final List<Map<String, Object?>> contents = <Map<String, Object?>>[
-      for (final FoundationModelsChatMessage message in request.history)
-        <String, Object?>{
-          'role': message.role == FoundationModelsChatRole.assistant
-              ? 'model'
-              : 'user',
-          'parts': <Map<String, Object?>>[
-            <String, Object?>{'text': message.text},
-          ],
-        },
-      <String, Object?>{
-        'role': 'user',
-        'parts': <Map<String, Object?>>[
-          <String, Object?>{'text': request.prompt.text},
-        ],
-      },
-    ];
-
-    final Map<String, Object?> body = <String, Object?>{
-      'contents': contents,
-      if (request.instructions != null)
-        'systemInstruction': <String, Object?>{
-          'parts': <Map<String, Object?>>[
-            <String, Object?>{'text': request.instructions},
-          ],
-        },
-    };
-
-    final HttpClient client = HttpClient();
-    try {
-      final HttpClientRequest httpRequest = await client.postUrl(
-        Uri.parse(
-          'https://generativelanguage.googleapis.com/v1beta/models/'
-          'gemini-2.5-flash:generateContent?key=$apiKey',
-        ),
-      );
-      httpRequest.headers.contentType = ContentType.json;
-      httpRequest.write(jsonEncode(body));
-      final HttpClientResponse httpResponse = await httpRequest.close();
-      final String payload = await httpResponse.transform(utf8.decoder).join();
-      if (httpResponse.statusCode != 200) {
-        throw FoundationModelsException(
-          code: FoundationModelsErrorCode.networkUnavailable,
-          message: 'Gemini request failed with ${httpResponse.statusCode}.',
-        );
-      }
-      final Map<String, Object?> decoded = (jsonDecode(payload) as Map)
-          .cast<String, Object?>();
-      final List<Object?> candidates =
-          (decoded['candidates'] as List<Object?>?) ?? <Object?>[];
-      final Map<String, Object?> first = candidates.isEmpty
-          ? <String, Object?>{}
-          : (candidates.first as Map).cast<String, Object?>();
-      final Map<String, Object?> content =
-          (first['content'] as Map?)?.cast<String, Object?>() ??
-          <String, Object?>{};
-      final List<Object?> parts =
-          (content['parts'] as List<Object?>?) ?? <Object?>[];
-      final String text = parts
-          .whereType<Map<String, Object?>>()
-          .map((Map<String, Object?> part) => part['text'] as String? ?? '')
-          .join();
-      return FoundationModelsProviderResponse(text: text);
-    } finally {
-      client.close(force: true);
-    }
   }
 }
 
@@ -174,8 +88,8 @@ final class ChatScreen extends StatefulWidget {
 
 final class _ChatScreenState extends State<ChatScreen> {
   final CupertinoFoundationModels _models = CupertinoFoundationModels();
-  late FoundationModelsOrchestrator _orchestrator;
-  late FoundationModelsChatSession _chat;
+  FoundationModelSession? _session;
+  Future<void> _sessionDisposal = Future<void>.value();
 
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
@@ -186,7 +100,8 @@ final class _ChatScreenState extends State<ChatScreen> {
   StreamSubscription<LiveTranscriptionEvent>? _liveTranscription;
   bool _sending = false;
   bool _listening = false;
-  ChatBackend _backend = ChatBackend.auto;
+  ChatBackend _backend = ChatBackend.local;
+  AudioTranscriptionMode _transcriptionMode = AudioTranscriptionMode.onDevice;
   String? _transcriptionEngine;
   late FoundationModelsLanguage _selectedLanguage;
   List<FoundationModelsLanguage> _supportedLanguages =
@@ -199,12 +114,9 @@ final class _ChatScreenState extends State<ChatScreen> {
   String get _selectedLocaleIdentifier => _selectedLanguage.identifier;
 
   String get _instructions =>
-      'You are a helpful, versatile assistant. Always respond in '
-      '${_selectedLanguage.displayName} using locale '
-      '${_selectedLanguage.identifier}, unless the user explicitly asks for '
-      'another language. Fulfill creative requests such as stories, poems, '
-      'or brainstorming. Give complete, well-developed answers; only be '
-      'brief when the user asks for brevity.';
+      'Respond in ${_selectedLanguage.displayName} '
+      '(${_selectedLanguage.identifier}) unless the user asks otherwise. '
+      'Be helpful and concise.';
 
   @override
   void initState() {
@@ -216,38 +128,18 @@ final class _ChatScreenState extends State<ChatScreen> {
       nativeDisplayName: _deviceLocale,
       isTranscriptionAssetInstalled: false,
     );
-    _configureChat();
     unawaited(_loadSupportedLanguages());
   }
 
-  void _configureChat() {
-    _orchestrator = FoundationModelsOrchestrator(
-      apple: _models,
-      externalProvider: geminiApiKey.isEmpty
-          ? null
-          : const GeminiExternalProvider(apiKey: geminiApiKey),
-      router: switch (_backend) {
-        ChatBackend.auto => FoundationModelsRoutingPolicy.hybrid(
-          allowPrivateCloud: true,
-          allowExternalFallback: geminiApiKey.isNotEmpty,
-        ),
-        ChatBackend.local => FoundationModelsRoutingPolicy.localOnly(),
-        ChatBackend.privateCloud =>
-          FoundationModelsRoutingPolicy.privateCloudFirst(
-            allowLocalFallback: false,
-          ),
-        ChatBackend.gemini => FoundationModelsRoutingPolicy.externalFirst(
-          allowAppleFallback: false,
-        ),
-      },
-      defaults: FoundationModelsDefaults(
-        localeIdentifier: _selectedLocaleIdentifier,
-        options: const GenerationOptions(maximumResponseTokens: 2000),
-        tools: const <ModelTool>[DeviceTimeTool()],
-      ),
-    );
-    _chat = _orchestrator.startChat(instructions: _instructions);
-  }
+  ModelMode get _modelMode => switch (_backend) {
+    ChatBackend.local => ModelMode.local,
+    ChatBackend.privateCloud => ModelMode.privateCloudCompute,
+  };
+
+  CloudPolicy get _cloudPolicy => switch (_backend) {
+    ChatBackend.local => CloudPolicy.never,
+    ChatBackend.privateCloud => CloudPolicy.whenExplicit,
+  };
 
   Future<void> _loadSupportedLanguages() async {
     try {
@@ -288,15 +180,13 @@ final class _ChatScreenState extends State<ChatScreen> {
       }
       preferred ??= languages.first;
 
-      final FoundationModelsChatSession previous = _chat;
       setState(() {
         _supportedLanguages = languages;
         _selectedLanguage = preferred!;
         _loadingLanguages = false;
         _languageLoadError = null;
-        _configureChat();
       });
-      await previous.dispose();
+      await _disposeSession();
       await _refreshAvailability();
     } on FoundationModelsException catch (error) {
       if (mounted) {
@@ -347,6 +237,9 @@ final class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _switchLanguage(FoundationModelsLanguage language) async {
+    if (_sending) {
+      return;
+    }
     if (_normalizedLocale(language.identifier) ==
         _normalizedLocale(_selectedLocaleIdentifier)) {
       return;
@@ -356,14 +249,12 @@ final class _ChatScreenState extends State<ChatScreen> {
     if (!mounted) {
       return;
     }
-    final FoundationModelsChatSession previous = _chat;
     setState(() {
       _selectedLanguage = language;
       _messages.clear();
       _transcriptionEngine = null;
-      _configureChat();
     });
-    await previous.dispose();
+    await _disposeSession();
     await _refreshAvailability();
     _showSnack(
       'Language changed to ${language.nativeDisplayName}. '
@@ -380,31 +271,86 @@ final class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _switchBackend(ChatBackend backend) async {
-    if (backend == _backend) {
+    if (_sending || backend == _backend) {
       return;
     }
-    final FoundationModelsChatSession previous = _chat;
+    if (backend == ChatBackend.privateCloud) {
+      try {
+        final ModelAvailability availability = await _models.checkAvailability(
+          mode: ModelMode.privateCloudCompute,
+          cloudPolicy: CloudPolicy.whenExplicit,
+          localeIdentifier: _selectedLocaleIdentifier,
+        );
+        if (!mounted) {
+          return;
+        }
+        if (!availability.isAvailable) {
+          _showSnack(
+            availability.recoverySuggestion ??
+                availability.reason ??
+                'Private Cloud Compute is not available.',
+          );
+          return;
+        }
+      } on FoundationModelsException catch (error) {
+        if (!mounted) {
+          return;
+        }
+        _showSnack(error.recoverySuggestion ?? error.message);
+        return;
+      }
+    }
     setState(() {
       _backend = backend;
       _messages.clear();
-      _configureChat();
     });
-    await previous.dispose();
+    await _disposeSession();
   }
 
   String _backendLabel(ChatBackend backend) {
     return switch (backend) {
-      ChatBackend.auto => 'Auto (hybrid)',
       ChatBackend.local => 'Apple on-device',
       ChatBackend.privateCloud => 'Private Cloud Compute',
-      ChatBackend.gemini => 'Gemini',
+    };
+  }
+
+  Future<void> _switchTranscriptionMode(AudioTranscriptionMode mode) async {
+    if (mode == _transcriptionMode) {
+      return;
+    }
+    await _stopLiveTranscription();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _transcriptionMode = mode;
+      _transcriptionEngine = null;
+    });
+  }
+
+  String _transcriptionModeLabel(AudioTranscriptionMode mode) {
+    return switch (mode) {
+      AudioTranscriptionMode.automatic => 'Automatic · on-device first',
+      AudioTranscriptionMode.onDevice => 'On-device only',
+      AudioTranscriptionMode.server => 'Apple Speech server',
+    };
+  }
+
+  String _transcriptionModeDescription(AudioTranscriptionMode mode) {
+    return switch (mode) {
+      AudioTranscriptionMode.automatic =>
+        'Uses local speech first and falls back when unavailable.',
+      AudioTranscriptionMode.onDevice =>
+        'Keeps microphone transcription on this device.',
+      AudioTranscriptionMode.server =>
+        'Requires network and may send audio to Apple Speech.',
     };
   }
 
   @override
   void dispose() {
     unawaited(_liveTranscription?.cancel());
-    unawaited(_chat.dispose());
+    unawaited(_disposeSession());
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -430,6 +376,60 @@ final class _ChatScreenState extends State<ChatScreen> {
         );
       }
     }
+  }
+
+  Future<FoundationModelSession> _ensureSession() async {
+    final FoundationModelSession? existing = _session;
+    if (existing != null) {
+      return existing;
+    }
+
+    await _sessionDisposal;
+    if (!mounted) {
+      throw StateError('Chat screen is no longer active.');
+    }
+    final FoundationModelSession created = await _models.createSession(
+      options: SessionOptions(
+        mode: _modelMode,
+        cloudPolicy: _cloudPolicy,
+        instructions: _instructions,
+        localeIdentifier: _selectedLocaleIdentifier,
+        tools: const <ModelTool>[DeviceTimeTool()],
+      ),
+    );
+    if (!mounted) {
+      await created.dispose();
+      throw StateError('Chat screen is no longer active.');
+    }
+    _session = created;
+    return created;
+  }
+
+  Future<void> _disposeSession() {
+    final FoundationModelSession? previous = _session;
+    _session = null;
+    return _sessionDisposal = _sessionDisposal.then((_) async {
+      if (previous == null) {
+        return;
+      }
+      try {
+        await previous.dispose();
+      } on Object catch (error) {
+        if (mounted) {
+          _showSnack('Could not close the previous session: $error');
+        }
+      }
+    });
+  }
+
+  void _restoreDraft(String text, PickedFoundationModelsFile? attachment) {
+    if (!mounted || _input.text.trim().isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _input.text = text;
+      _pendingAttachment ??= attachment;
+    });
   }
 
   Future<void> _send() async {
@@ -464,38 +464,59 @@ final class _ChatScreenState extends State<ChatScreen> {
     });
     _scrollToEnd();
 
+    bool completed = false;
     try {
       await _stopLiveTranscription();
-      final Stream<OrchestratedChatEvent> stream = _chat.sendStream(
-        text,
-        attachments: <PromptAttachment>[
-          if (attachment != null)
-            attachment.toPromptAttachment(label: attachment.name),
-        ],
-      );
-      await for (final OrchestratedChatEvent event in stream) {
+      final FoundationModelSession session = await _ensureSession();
+      await for (final SessionEvent event in session.stream(
+        Prompt(
+          text: text,
+          attachments: <PromptAttachment>[
+            if (attachment != null)
+              attachment.toPromptAttachment(label: attachment.name),
+          ],
+        ),
+        options: GenerationOptions(
+          maximumResponseTokens: 384,
+          maximumToolCalls: 4,
+          cloudPolicy: _cloudPolicy,
+        ),
+      )) {
         if (!mounted) {
           return;
         }
         switch (event) {
-          case OrchestratedChatTextEvent():
+          case TextSnapshotEvent():
             setState(() {
               reply
                 ..text = event.text
-                ..providerName = event.route.label;
+                ..providerName = _backendLabel(_backend);
             });
-          case OrchestratedChatCompletionEvent():
+          case CompletionEvent():
             setState(() {
               reply
                 ..text = event.response.text
-                ..providerName = event.response.providerName
+                ..providerName = _backendLabel(_backend)
                 ..isStreaming = false;
             });
+            completed = true;
+          case FailureEvent():
+            throw FoundationModelsException(
+              code: FoundationModelsErrorCode.nativeFailure,
+              message: event.message,
+            );
+          case ToolCallEvent():
+          case UnknownSessionEvent():
+            break;
         }
         _scrollToEnd();
       }
+      if (mounted && !completed) {
+        setState(() => reply.isStreaming = false);
+      }
     } on FoundationModelsException catch (error) {
       if (mounted) {
+        _restoreDraft(text, attachment);
         setState(() {
           reply
             ..text = error.recoverySuggestion ?? error.message
@@ -505,6 +526,7 @@ final class _ChatScreenState extends State<ChatScreen> {
       }
     } on Object catch (error) {
       if (mounted) {
+        _restoreDraft(text, attachment);
         setState(() {
           reply
             ..text = 'Unexpected request failure: $error'
@@ -538,7 +560,7 @@ final class _ChatScreenState extends State<ChatScreen> {
         .liveTranscription(
           request: LiveTranscriptionRequest(
             localeIdentifier: _selectedLocaleIdentifier,
-            mode: AudioTranscriptionMode.automatic,
+            mode: _transcriptionMode,
           ),
         )
         .listen(
@@ -595,7 +617,10 @@ final class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _resetChat() async {
-    await _chat.reset();
+    if (_sending) {
+      return;
+    }
+    await _disposeSession();
     if (mounted) {
       setState(_messages.clear);
     }
@@ -605,8 +630,8 @@ final class _ChatScreenState extends State<ChatScreen> {
     try {
       final FoundationModelsDiagnostics diagnostics = await _models
           .getDiagnostics(localeIdentifier: _selectedLocaleIdentifier);
-      final String runtimeContext = await _orchestrator
-          .buildRuntimePromptContext(refresh: true);
+      final FoundationModelsCapabilities capabilities = await _models
+          .getCapabilities();
       if (!mounted) {
         return;
       }
@@ -624,7 +649,11 @@ final class _ChatScreenState extends State<ChatScreen> {
                 'Local model: ${diagnostics.localAvailability.status.name}\n'
                 'PCC: '
                 '${diagnostics.privateCloudAvailability?.status.name ?? 'unknown'}'
-                '\n\n$runtimeContext',
+                '\nLocal context: ${capabilities.contextSize ?? 'unknown'}'
+                '\nPCC context: '
+                '${capabilities.privateCloudContextSize ?? 'unknown'}'
+                '\nCapabilities: '
+                '${capabilities.capabilities.map((ModelCapability value) => value.name).join(', ')}',
               ),
             ),
             actions: <Widget>[
@@ -707,9 +736,6 @@ final class _ChatScreenState extends State<ChatScreen> {
                   CheckedPopupMenuItem<ChatBackend>(
                     value: backend,
                     checked: backend == _backend,
-                    enabled:
-                        backend != ChatBackend.gemini ||
-                        geminiApiKey.isNotEmpty,
                     child: Text(_backendLabel(backend)),
                   ),
               ];
@@ -766,10 +792,7 @@ final class _ChatScreenState extends State<ChatScreen> {
               ),
             Expanded(
               child: _messages.isEmpty
-                  ? _EmptyChatHint(
-                      localReady: localReady,
-                      hasExternalProvider: geminiApiKey.isNotEmpty,
-                    )
+                  ? _EmptyChatHint(localReady: localReady)
                   : ListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.all(12),
@@ -791,20 +814,35 @@ final class _ChatScreenState extends State<ChatScreen> {
                   ),
                 ),
               ),
-            if (_listening)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    _transcriptionEngine == null
-                        ? 'Listening ($_selectedLocaleIdentifier)…'
-                        : 'Listening ($_selectedLocaleIdentifier, '
-                              'engine: $_transcriptionEngine)',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: <Widget>[
+                    _TranscriptionModePicker(
+                      mode: _transcriptionMode,
+                      enabled: !_sending,
+                      labelFor: _transcriptionModeLabel,
+                      descriptionFor: _transcriptionModeDescription,
+                      onSelected: (AudioTranscriptionMode mode) =>
+                          unawaited(_switchTranscriptionMode(mode)),
+                    ),
+                    if (_listening)
+                      Text(
+                        _transcriptionEngine == null
+                            ? 'Listening ($_selectedLocaleIdentifier)…'
+                            : 'Listening ($_selectedLocaleIdentifier, '
+                                  'engine: $_transcriptionEngine)',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
                 ),
               ),
+            ),
             _InputBar(
               controller: _input,
               sending: _sending,
@@ -932,20 +970,15 @@ final class _LanguagePickerSheetState extends State<_LanguagePickerSheet> {
 }
 
 final class _EmptyChatHint extends StatelessWidget {
-  const _EmptyChatHint({
-    required this.localReady,
-    required this.hasExternalProvider,
-  });
+  const _EmptyChatHint({required this.localReady});
 
   final bool localReady;
-  final bool hasExternalProvider;
 
   @override
   Widget build(BuildContext context) {
     final String routes = <String>[
       if (localReady) 'Apple on-device model',
       'Private Cloud Compute (when available)',
-      if (hasExternalProvider) 'Gemini fallback',
     ].join(' + ');
     return Center(
       child: Padding(
@@ -1040,6 +1073,112 @@ final class _MessageBubble extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+final class _TranscriptionModePicker extends StatelessWidget {
+  const _TranscriptionModePicker({
+    required this.mode,
+    required this.enabled,
+    required this.labelFor,
+    required this.descriptionFor,
+    required this.onSelected,
+  });
+
+  final AudioTranscriptionMode mode;
+  final bool enabled;
+  final String Function(AudioTranscriptionMode mode) labelFor;
+  final String Function(AudioTranscriptionMode mode) descriptionFor;
+  final ValueChanged<AudioTranscriptionMode> onSelected;
+
+  IconData _iconFor(AudioTranscriptionMode value) {
+    return switch (value) {
+      AudioTranscriptionMode.automatic => Icons.swap_horiz,
+      AudioTranscriptionMode.onDevice => Icons.phone_iphone,
+      AudioTranscriptionMode.server => Icons.cloud_outlined,
+    };
+  }
+
+  String _compactLabelFor(AudioTranscriptionMode value) {
+    return switch (value) {
+      AudioTranscriptionMode.automatic => 'Auto',
+      AudioTranscriptionMode.onDevice => 'On-device',
+      AudioTranscriptionMode.server => 'Apple server',
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final String label = labelFor(mode);
+
+    return PopupMenuButton<AudioTranscriptionMode>(
+      enabled: enabled,
+      tooltip: 'Live transcription: $label',
+      onSelected: onSelected,
+      itemBuilder: (BuildContext context) {
+        return <PopupMenuEntry<AudioTranscriptionMode>>[
+          for (final AudioTranscriptionMode value
+              in AudioTranscriptionMode.values)
+            CheckedPopupMenuItem<AudioTranscriptionMode>(
+              value: value,
+              checked: value == mode,
+              height: 88,
+              child: SizedBox(
+                width: 280,
+                child: Row(
+                  children: <Widget>[
+                    Icon(_iconFor(value)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(labelFor(value)),
+                          Text(
+                            descriptionFor(value),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ];
+      },
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: 'Live transcription mode: $label',
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: DecoratedBox(
+            decoration: ShapeDecoration(
+              color: colors.surfaceContainerHighest,
+              shape: StadiumBorder(
+                side: BorderSide(color: colors.outlineVariant),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(_iconFor(mode), size: 18),
+                  const SizedBox(width: 8),
+                  Text('Speech: ${_compactLabelFor(mode)}'),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.arrow_drop_down, size: 18),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

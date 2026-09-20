@@ -17,11 +17,12 @@
 - Dart expone contratos tipados y orquestación; Swift integra directamente `FoundationModels`, `Speech` y APIs de plataforma.
 - No exponer `MethodChannel` como API pública ni asumir capacidades por modelo de dispositivo; consultar availability y capabilities nativas.
 - Mantener límites de privacidad explícitos: local por defecto y PCC/proveedores externos solo según la política solicitada por la app.
+- El núcleo integra Apple local/PCC. La aplicación consumidora decide la orquestación con APIs externas, consentimiento, historial y reintentos; no agregar routing híbrido implícito al paquete.
 - Mantener alineados `pubspec.yaml`, `README.md`, `CHANGELOG.md`, el ejemplo y los manifiestos iOS cuando cambie la API pública.
 
 ## Flujo de trabajo
 
-- Git: no existe política de ramas o commits automáticos confirmada. No crear ramas, commits, merges, pushes ni publicaciones sin autorización explícita.
+- Git (`team-defined`, confirmado 2026-09-19): `main` es el destino de las entregas expresamente autorizadas. Una solicitud de subir a Git permite crear el commit de esa entrega y hacer push a `origin/main`, tras revisar los cambios y verificar el remoto. No crear ramas, merges, commits automáticos, pushes ni publicaciones en tareas que no los autoricen. Trabajos paralelos o una rama distinta requieren una instrucción específica; usar `codex/` cuando se autorice una rama de tarea.
 - Validaciones permitidas: `dart format`, `flutter analyze` y builds no interactivos proporcionales. Usar Xcode beta cuando se validen APIs de iOS 27.
 - No crear ni ejecutar pruebas salvo petición explícita.
 - No ejecutar la aplicación, simuladores o dispositivos salvo petición explícita.

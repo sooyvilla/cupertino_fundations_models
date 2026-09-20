@@ -1,9 +1,14 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
-import Speech
+@preconcurrency import Speech
 
-final class SpeechTranscriptionService {
-    func transcribeAudio(arguments: [String: Any]) async throws -> [String: Any] {
+final class SpeechTranscriptionService: Sendable {
+    func transcribeAudio(
+        arguments message: FlutterChannelValue<[String: Any]>
+    ) async throws -> FlutterChannelValue<[String: Any]> {
+        let arguments: [String: Any] = message.value
+        try SpeechPermissions.validate(requiresMicrophone: false)
+        try Task.checkCancellation()
         let filePath: String = arguments["filePath"] as? String ?? ""
         guard !filePath.isEmpty else {
             throw NativeSessionError.modelUnavailable(
@@ -30,17 +35,19 @@ final class SpeechTranscriptionService {
                 recoverySuggestion: "Enable Speech Recognition permission for this app in Settings."
             )
         }
+        try Task.checkCancellation()
 
         let localeIdentifier: String = arguments["localeIdentifier"] as? String ?? "en_US"
         let requestedMode: String = arguments["mode"] as? String ?? "onDevice"
 
         if #available(iOS 26.0, *), requestedMode != "server" {
             do {
-                return try await transcribeWithAnalyzer(
+                let response: [String: Any] = try await transcribeWithAnalyzer(
                     fileURL: fileURL,
                     localeIdentifier: localeIdentifier,
                     requestedMode: requestedMode
                 )
+                return FlutterChannelValue(response)
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -50,11 +57,13 @@ final class SpeechTranscriptionService {
             }
         }
 
-        return try await transcribeWithLegacyRecognizer(
-            fileURL: fileURL,
-            localeIdentifier: localeIdentifier,
-            requestedMode: requestedMode,
-            arguments: arguments
+        return FlutterChannelValue(
+            try await transcribeWithLegacyRecognizer(
+                fileURL: fileURL,
+                localeIdentifier: localeIdentifier,
+                requestedMode: requestedMode,
+                arguments: arguments
+            )
         )
     }
 
@@ -89,6 +98,7 @@ final class SpeechTranscriptionService {
         }
 
         let analyzer: SpeechAnalyzer = SpeechAnalyzer(modules: modules)
+        try await analyzer.prepareToAnalyze(in: nil)
         async let collectedResult: AnalyzerResult = collectResults(from: transcriber)
 
         do {
@@ -194,17 +204,16 @@ final class SpeechTranscriptionService {
             )
         }
 
-        let result: SFSpeechRecognitionResult = try await recognize(
+        let result: LegacyRecognitionResult = try await recognize(
             recognizer: recognizer,
             request: request
         )
-        let transcription: SFTranscription = result.bestTranscription
         return [
-            "text": transcription.formattedString,
+            "text": result.text,
             "isFinal": result.isFinal,
             "usedMode": mode,
             "localeIdentifier": localeIdentifier,
-            "segments": transcription.segments.map(segmentPayload),
+            "segments": result.segments.map { $0.payload },
             "metadata": [
                 "engine": "sfSpeech",
                 "supportsOnDeviceRecognition": recognizer.supportsOnDeviceRecognition,
@@ -224,7 +233,7 @@ final class SpeechTranscriptionService {
     private func recognize(
         recognizer: SFSpeechRecognizer,
         request: SFSpeechURLRecognitionRequest
-    ) async throws -> SFSpeechRecognitionResult {
+    ) async throws -> LegacyRecognitionResult {
         let state: SpeechRecognitionContinuationState = SpeechRecognitionContinuationState()
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
@@ -240,7 +249,20 @@ final class SpeechTranscriptionService {
                     guard let result, result.isFinal else {
                         return
                     }
-                    state.finish(with: .success(result))
+                    let transcription: SFTranscription = result.bestTranscription
+                    let snapshot: LegacyRecognitionResult = LegacyRecognitionResult(
+                        text: transcription.formattedString,
+                        isFinal: result.isFinal,
+                        segments: transcription.segments.map { segment in
+                            AnalyzerSegment(
+                                text: segment.substring,
+                                timestamp: segment.timestamp,
+                                duration: segment.duration,
+                                confidence: Double(segment.confidence)
+                            )
+                        }
+                    )
+                    state.finish(with: .success(snapshot))
                 }
                 state.install(task: recognitionTask)
             }
@@ -262,15 +284,6 @@ final class SpeechTranscriptionService {
         }
     }
 
-    private func segmentPayload(segment: SFTranscriptionSegment) -> [String: Any] {
-        return [
-            "text": segment.substring,
-            "timestamp": segment.timestamp,
-            "duration": segment.duration,
-            "confidence": segment.confidence
-        ]
-    }
-
     private func finiteSeconds(_ time: CMTime) -> Double {
         let seconds: Double = time.seconds
         return seconds.isFinite ? seconds : 0
@@ -279,6 +292,12 @@ final class SpeechTranscriptionService {
 
 private struct AnalyzerResult: Sendable {
     let text: String
+    let segments: [AnalyzerSegment]
+}
+
+private struct LegacyRecognitionResult: Sendable {
+    let text: String
+    let isFinal: Bool
     let segments: [AnalyzerSegment]
 }
 
@@ -300,11 +319,11 @@ private struct AnalyzerSegment: Sendable {
 
 private final class SpeechRecognitionContinuationState: @unchecked Sendable {
     private let lock: NSLock = NSLock()
-    private var continuation: CheckedContinuation<SFSpeechRecognitionResult, Error>?
+    private var continuation: CheckedContinuation<LegacyRecognitionResult, Error>?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var completed: Bool = false
 
-    func install(continuation: CheckedContinuation<SFSpeechRecognitionResult, Error>) {
+    func install(continuation: CheckedContinuation<LegacyRecognitionResult, Error>) {
         lock.lock()
         if completed {
             lock.unlock()
@@ -326,14 +345,14 @@ private final class SpeechRecognitionContinuationState: @unchecked Sendable {
         lock.unlock()
     }
 
-    func finish(with result: Result<SFSpeechRecognitionResult, Error>) {
+    func finish(with result: sending Result<LegacyRecognitionResult, Error>) {
         lock.lock()
         guard !completed else {
             lock.unlock()
             return
         }
         completed = true
-        let continuation: CheckedContinuation<SFSpeechRecognitionResult, Error>? = continuation
+        let continuation: CheckedContinuation<LegacyRecognitionResult, Error>? = continuation
         self.continuation = nil
         recognitionTask = nil
         lock.unlock()
@@ -348,7 +367,7 @@ private final class SpeechRecognitionContinuationState: @unchecked Sendable {
             return
         }
         completed = true
-        let continuation: CheckedContinuation<SFSpeechRecognitionResult, Error>? = continuation
+        let continuation: CheckedContinuation<LegacyRecognitionResult, Error>? = continuation
         let recognitionTask: SFSpeechRecognitionTask? = recognitionTask
         self.continuation = nil
         self.recognitionTask = nil

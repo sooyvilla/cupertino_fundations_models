@@ -5,3 +5,11 @@ enum MessageCodec {
         return value as? [String: Any] ?? [:]
     }
 }
+
+struct FlutterChannelValue<Value>: @unchecked Sendable {
+    let value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+}

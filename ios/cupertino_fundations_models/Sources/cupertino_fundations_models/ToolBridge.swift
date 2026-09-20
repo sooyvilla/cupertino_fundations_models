@@ -1,4 +1,4 @@
-import Flutter
+@preconcurrency import Flutter
 import Foundation
 
 /// Invokes Dart-registered tools from native model sessions.
@@ -15,23 +15,59 @@ final class ToolBridge: @unchecked Sendable {
     func callTool(
         sessionId: String,
         name: String,
-        argumentsJson: String
+        argumentsJson: String,
+        timeoutMilliseconds: Int
     ) async -> String {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async {
-                self.methodChannel.invokeMethod(
-                    "toolCall",
-                    arguments: [
-                        "sessionId": sessionId,
-                        "toolCallId": UUID().uuidString,
-                        "name": name,
-                        "argumentsJson": argumentsJson
-                    ]
-                ) { result in
-                    continuation.resume(returning: Self.toolOutput(from: result, name: name))
+        let state: ToolCallContinuationState = ToolCallContinuationState()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                state.install(continuation: continuation)
+                let timeoutTask: Task<Void, Never> = Task {
+                    do {
+                        try await Task.sleep(
+                            nanoseconds: UInt64(timeoutMilliseconds) * 1_000_000
+                        )
+                    } catch {
+                        return
+                    }
+                    state.finish(
+                        value: "Tool \(name) timed out after \(timeoutMilliseconds)ms."
+                    )
+                }
+                state.install(timeoutTask: timeoutTask)
+
+                DispatchQueue.main.async {
+                    guard state.isPending else {
+                        return
+                    }
+                    self.methodChannel.invokeMethod(
+                        "toolCall",
+                        arguments: [
+                            "sessionId": sessionId,
+                            "toolCallId": UUID().uuidString,
+                            "name": name,
+                            "argumentsJson": argumentsJson
+                        ]
+                    ) { result in
+                        state.finish(
+                            value: Self.boundedToolOutput(
+                                Self.toolOutput(from: result, name: name)
+                            )
+                        )
+                    }
                 }
             }
+        } onCancel: {
+            state.finish(value: "Tool \(name) was cancelled.")
         }
+    }
+
+    private static func boundedToolOutput(_ output: String) -> String {
+        let maximumCharacters: Int = 64_000
+        guard output.count > maximumCharacters else {
+            return output
+        }
+        return "Tool output exceeded the 64,000-character transport limit. Return a smaller, complete result."
     }
 
     private static func toolOutput(from result: Any?, name: String) -> String {
@@ -62,5 +98,57 @@ final class ToolBridge: @unchecked Sendable {
             return json
         }
         return String(describing: value)
+    }
+}
+
+private final class ToolCallContinuationState: @unchecked Sendable {
+    private let lock: NSLock = NSLock()
+    private var continuation: CheckedContinuation<String, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var completedValue: String?
+
+    var isPending: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return completedValue == nil
+    }
+
+    func install(continuation: CheckedContinuation<String, Never>) {
+        lock.lock()
+        if let completedValue {
+            lock.unlock()
+            continuation.resume(returning: completedValue)
+            return
+        }
+        self.continuation = continuation
+        lock.unlock()
+    }
+
+    func install(timeoutTask: Task<Void, Never>) {
+        lock.lock()
+        if completedValue != nil {
+            lock.unlock()
+            timeoutTask.cancel()
+            return
+        }
+        self.timeoutTask = timeoutTask
+        lock.unlock()
+    }
+
+    func finish(value: String) {
+        lock.lock()
+        guard completedValue == nil else {
+            lock.unlock()
+            return
+        }
+        completedValue = value
+        let continuation: CheckedContinuation<String, Never>? = continuation
+        let timeoutTask: Task<Void, Never>? = timeoutTask
+        self.continuation = nil
+        self.timeoutTask = nil
+        lock.unlock()
+
+        timeoutTask?.cancel()
+        continuation?.resume(returning: value)
     }
 }

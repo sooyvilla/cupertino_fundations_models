@@ -1,10 +1,26 @@
-import Flutter
+@preconcurrency import Flutter
 import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
 enum ErrorMapper {
+    #if canImport(FoundationModels)
+    @available(iOS 26.0, *)
+    static func localAvailabilityCode(_ reason: SystemLanguageModel.Availability.UnavailableReason) -> String {
+        switch reason {
+        case .appleIntelligenceNotEnabled:
+            return "appleIntelligenceDisabled"
+        case .deviceNotEligible:
+            return "unsupportedPlatform"
+        case .modelNotReady:
+            return "assetsUnavailable"
+        @unknown default:
+            return "modelUnavailable"
+        }
+    }
+    #endif
+
     static func flutterError(code: String, message: String, details: [String: Any] = [:]) -> FlutterError {
         return FlutterError(
             code: code,
@@ -35,6 +51,15 @@ enum ErrorMapper {
                 )
             }
         }
+        if error is ToolCallBudgetError {
+            return flutterError(
+                code: "toolFailed",
+                message: error.localizedDescription,
+                details: [
+                    "recoverySuggestion": "Increase maximumToolCalls only when the workflow has a deterministic exit condition."
+                ]
+            )
+        }
 
         #if canImport(FoundationModels) && compiler(>=6.4)
         if #available(iOS 27.0, *) {
@@ -60,6 +85,17 @@ enum ErrorMapper {
         #endif
 
         #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            #if compiler(>=6.4)
+            if #unavailable(iOS 27.0), let generationError = error as? LanguageModelSession.GenerationError {
+                return legacyGenerationFlutterError(generationError)
+            }
+            #else
+            if let generationError = error as? LanguageModelSession.GenerationError {
+                return legacyGenerationFlutterError(generationError)
+            }
+            #endif
+        }
         if #available(iOS 26.0, *), error is LanguageModelSession.ToolCallError {
             return flutterError(code: "toolFailed", message: error.localizedDescription)
         }
@@ -74,6 +110,26 @@ enum ErrorMapper {
             message: resolvedMessage
         )
     }
+
+    #if canImport(FoundationModels)
+    @available(iOS, introduced: 26.0, deprecated: 27.0)
+    private static func legacyGenerationFlutterError(_ error: LanguageModelSession.GenerationError) -> FlutterError {
+        let code: String
+        switch error {
+        case .exceededContextWindowSize: code = "contextSizeExceeded"
+        case .assetsUnavailable: code = "assetsUnavailable"
+        case .guardrailViolation: code = "guardrailViolation"
+        case .unsupportedGuide: code = "unsupportedGenerationGuide"
+        case .unsupportedLanguageOrLocale: code = "unsupportedLanguage"
+        case .decodingFailure: code = "parsingFailure"
+        case .rateLimited: code = "rateLimited"
+        case .concurrentRequests: code = "concurrentRequests"
+        case .refusal: code = "refusal"
+        @unknown default: code = "nativeFailure"
+        }
+        return flutterError(code: code, message: error.localizedDescription)
+    }
+    #endif
 
     private static func errorCode(from message: String) -> String {
         let normalized: String = message.lowercased()
@@ -99,6 +155,9 @@ enum ErrorMapper {
         }
         if normalized.contains("speech") {
             return "speechRecognitionUnavailable"
+        }
+        if normalized.contains("entitlement") {
+            return "missingEntitlement"
         }
         if normalized.contains("context") || normalized.contains("token") {
             return "contextSizeExceeded"

@@ -10,17 +10,14 @@ import '../test_helpers.dart';
 void main() {
   group('method channel platform', () {
     late MethodChannel methodChannel;
-    late EventChannel eventChannel;
     late MethodChannelCupertinoFoundationModels platform;
     final log = <MethodCall>[];
 
     setUp(() {
       log.clear();
       methodChannel = const MethodChannel('test/cupertino/methods');
-      eventChannel = const EventChannel('test/cupertino/events');
       platform = MethodChannelCupertinoFoundationModels(
         methodChannel: methodChannel,
-        eventChannel: eventChannel,
       );
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(methodChannel, (MethodCall call) async {
@@ -60,6 +57,8 @@ void main() {
                   'structuredValue': <String, Object?>{'ok': true},
                 };
               case 'prewarm':
+              case 'startStream':
+              case 'cancelStream':
               case 'cancelActiveRequest':
               case 'disposeSession':
                 return null;
@@ -71,8 +70,6 @@ void main() {
     tearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(methodChannel, null);
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMessageHandler('test/cupertino/events', null);
     });
 
     test('invokes every method and maps responses', () async {
@@ -181,40 +178,50 @@ void main() {
       final messenger =
           TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       const codec = StandardMethodCodec();
-      messenger.setMockMessageHandler('test/cupertino/events', (
-        ByteData? message,
+      messenger.setMockMethodCallHandler(methodChannel, (
+        MethodCall call,
       ) async {
-        final methodCall = codec.decodeMethodCall(message);
-        if (methodCall.method == 'cancel') {
-          return codec.encodeSuccessEnvelope(null);
+        if (call.method == 'cancelStream') {
+          return null;
         }
-        expect(methodCall.method, 'listen');
-        final arguments = methodCall.arguments as Map<Object?, Object?>;
+        expect(call.method, 'startStream');
+        final arguments = call.arguments as Map<Object?, Object?>;
+        final String requestId = arguments['requestId']! as String;
         expect(arguments['sessionId'], 's');
-        expect(arguments['requestId'], startsWith('request_'));
+        expect(requestId, startsWith('request_'));
         unawaited(
           Future<void>(() async {
-            await messenger.handlePlatformMessage(
-              'test/cupertino/events',
-              codec.encodeSuccessEnvelope(<String, Object?>{
-                'type': 'textDelta',
-                'requestId': arguments['requestId'],
-                'text': 'hi',
+            await _sendNativeMethodCall(
+              messenger,
+              methodChannel.name,
+              codec,
+              MethodCall('streamEvent', <String, Object?>{
+                'requestId': requestId,
+                'event': <String, Object?>{
+                  'type': 'textSnapshot',
+                  'requestId': requestId,
+                  'text': 'hi',
+                },
               }),
-              (_) {},
             );
-            await messenger.handlePlatformMessage(
-              'test/cupertino/events',
-              codec.encodeErrorEnvelope(
-                code: FoundationModelsErrorCode.nativeFailure.name,
-                message: 'failed',
-                details: <String, Object?>{'recoverySuggestion': 'retry'},
-              ),
-              (_) {},
+            await _sendNativeMethodCall(
+              messenger,
+              methodChannel.name,
+              codec,
+              MethodCall('streamEvent', <String, Object?>{
+                'requestId': requestId,
+                'error': <String, Object?>{
+                  'code': FoundationModelsErrorCode.nativeFailure.name,
+                  'message': 'failed',
+                  'details': const <String, Object?>{
+                    'recoverySuggestion': 'retry',
+                  },
+                },
+              }),
             );
           }),
         );
-        return codec.encodeSuccessEnvelope(null);
+        return null;
       });
 
       final stream = platform.stream(
@@ -238,19 +245,140 @@ void main() {
       );
     });
 
-    test('stream forwards non-platform errors', () async {
-      final throwingPlatform = MethodChannelCupertinoFoundationModels(
-        methodChannel: methodChannel,
-        eventChannel: const ThrowingEventChannel('test/cupertino/throwing'),
+    test('multiplexes streams without cross-delivering events', () async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const codec = StandardMethodCodec();
+      messenger.setMockMethodCallHandler(methodChannel, (
+        MethodCall call,
+      ) async {
+        if (call.method == 'cancelStream') {
+          return null;
+        }
+        final arguments = call.arguments as Map<Object?, Object?>;
+        final String requestId = arguments['requestId']! as String;
+        final String sessionId = arguments['sessionId']! as String;
+        unawaited(
+          Future<void>(() async {
+            await _sendNativeMethodCall(
+              messenger,
+              methodChannel.name,
+              codec,
+              MethodCall('streamEvent', <String, Object?>{
+                'requestId': requestId,
+                'event': <String, Object?>{
+                  'type': 'textSnapshot',
+                  'requestId': requestId,
+                  'text': sessionId,
+                },
+              }),
+            );
+            await _sendNativeMethodCall(
+              messenger,
+              methodChannel.name,
+              codec,
+              MethodCall('streamEvent', <String, Object?>{
+                'requestId': requestId,
+                'event': <String, Object?>{
+                  'type': 'completed',
+                  'requestId': requestId,
+                  'response': <String, Object?>{
+                    'text': sessionId,
+                    'usedMode': 'local',
+                  },
+                },
+              }),
+            );
+          }),
+        );
+        return null;
+      });
+
+      final List<List<SessionEvent>> results =
+          await Future.wait(<Future<List<SessionEvent>>>[
+            platform
+                .stream(
+                  sessionId: 'first',
+                  prompt: const Prompt.text('hello'),
+                  options: const GenerationOptions(),
+                )
+                .toList(),
+            platform
+                .stream(
+                  sessionId: 'second',
+                  prompt: const Prompt.text('hello'),
+                  options: const GenerationOptions(),
+                )
+                .toList(),
+          ]);
+
+      expect((results[0].first as TextSnapshotEvent).text, 'first');
+      expect((results[1].first as TextSnapshotEvent).text, 'second');
+    });
+
+    test('subscription cancellation targets the exact native stream', () async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const codec = StandardMethodCodec();
+      final started = Completer<Map<Object?, Object?>>();
+      final cancelled = Completer<Map<Object?, Object?>>();
+      messenger.setMockMethodCallHandler(methodChannel, (
+        MethodCall call,
+      ) async {
+        final arguments = call.arguments as Map<Object?, Object?>;
+        if (call.method == 'startStream') {
+          started.complete(arguments);
+          return null;
+        }
+        if (call.method == 'cancelStream') {
+          cancelled.complete(arguments);
+          return null;
+        }
+        return null;
+      });
+
+      final StreamSubscription<SessionEvent> subscription = platform
+          .stream(
+            sessionId: 'cancel-session',
+            prompt: const Prompt.text('hello'),
+            options: const GenerationOptions(),
+          )
+          .listen((SessionEvent _) {});
+      final Map<Object?, Object?> startArguments = await started.future;
+      await subscription.cancel();
+      final Map<Object?, Object?> cancelArguments = await cancelled.future;
+
+      expect(cancelArguments['sessionId'], 'cancel-session');
+      expect(cancelArguments['requestId'], startArguments['requestId']);
+
+      await _sendNativeMethodCall(
+        messenger,
+        methodChannel.name,
+        codec,
+        MethodCall('streamEvent', <String, Object?>{
+          'requestId': startArguments['requestId'],
+          'event': <String, Object?>{
+            'type': 'textSnapshot',
+            'requestId': startArguments['requestId'],
+            'text': 'late',
+          },
+        }),
       );
+    });
+
+    test('forwards startStream platform errors', () async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methodChannel, (MethodCall call) async {
+            throw PlatformException(code: 'nativeFailure', message: 'failed');
+          });
 
       await expectLater(
-        throwingPlatform.stream(
+        platform.stream(
           sessionId: 's',
           prompt: const Prompt.text('hello'),
           options: const GenerationOptions(),
         ),
-        emitsError(isNot(isA<FoundationModelsException>())),
+        emitsError(isA<FoundationModelsException>()),
       );
     });
 
@@ -263,4 +391,21 @@ void main() {
       expect((await platform.getCapabilities()).platform, 'unknown');
     });
   });
+}
+
+Future<void> _sendNativeMethodCall(
+  TestDefaultBinaryMessenger messenger,
+  String channel,
+  StandardMethodCodec codec,
+  MethodCall call,
+) {
+  final Completer<void> completer = Completer<void>();
+  unawaited(
+    messenger.handlePlatformMessage(channel, codec.encodeMethodCall(call), (
+      ByteData? reply,
+    ) {
+      completer.complete();
+    }),
+  );
+  return completer.future;
 }
