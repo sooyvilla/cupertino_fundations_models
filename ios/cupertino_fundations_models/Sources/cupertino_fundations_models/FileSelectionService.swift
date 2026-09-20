@@ -1,41 +1,40 @@
-import Flutter
+@preconcurrency import Flutter
 import Foundation
 import UIKit
 import UniformTypeIdentifiers
 
+@MainActor
 final class FileSelectionService: NSObject, UIDocumentPickerDelegate {
     private var pendingResult: FlutterResult?
     private var pendingKind: String = "any"
 
     func pickFile(arguments: [String: Any], result: @escaping FlutterResult) {
-        DispatchQueue.main.async {
-            guard self.pendingResult == nil else {
-                result(ErrorMapper.flutterError(
-                    code: "invalidRequest",
-                    message: "A file picker request is already active."
-                ))
-                return
-            }
-
-            guard let viewController: UIViewController = self.topViewController() else {
-                result(ErrorMapper.flutterError(
-                    code: "fileSelectionUnavailable",
-                    message: "No active view controller is available to present the file picker."
-                ))
-                return
-            }
-
-            let kind: String = arguments["kind"] as? String ?? "any"
-            let picker: UIDocumentPickerViewController = UIDocumentPickerViewController(
-                forOpeningContentTypes: self.contentTypes(kind: kind),
-                asCopy: true
-            )
-            picker.delegate = self
-            picker.allowsMultipleSelection = false
-            self.pendingKind = kind
-            self.pendingResult = result
-            viewController.present(picker, animated: true)
+        guard pendingResult == nil else {
+            result(ErrorMapper.flutterError(
+                code: "invalidRequest",
+                message: "A file picker request is already active."
+            ))
+            return
         }
+
+        guard let viewController: UIViewController = topViewController() else {
+            result(ErrorMapper.flutterError(
+                code: "fileSelectionUnavailable",
+                message: "No active view controller is available to present the file picker."
+            ))
+            return
+        }
+
+        let kind: String = arguments["kind"] as? String ?? "any"
+        let picker: UIDocumentPickerViewController = UIDocumentPickerViewController(
+            forOpeningContentTypes: contentTypes(kind: kind),
+            asCopy: true
+        )
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        pendingKind = kind
+        pendingResult = result
+        viewController.present(picker, animated: true)
     }
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {

@@ -1,364 +1,60 @@
-# Cupertino Foundations Models - Contexto de desarrollo
-
-Fecha de investigacion: 2026-06-11  
-Estado actual: paquete Flutter/Dart convertido a base inicial de plugin iOS.  
-Regla local del proyecto: no crear tests.
-
-## Objetivo del paquete
-
-Crear un puente Flutter nativo para Apple Foundation Models, priorizando:
-
-- Acceso local a `SystemLanguageModel` cuando el dispositivo y Apple Intelligence lo permitan.
-- Acceso online mediante Private Cloud Compute (PCC) solo cuando la API, version del sistema, entitlement, red y cuota lo permitan.
-- Tool calling, structured generation, streaming, sesiones con historial y utilidades de disponibilidad.
-- Orquestacion opcional para apps que combinan Apple local/PCC con un proveedor externo propio.
-- API publica estable en Dart, con degradacion por capacidades para no romper apps en dispositivos o SDKs sin soporte.
-- Cero dependencias runtime de terceros. Usar solo Flutter, Dart core y APIs nativas Apple.
-
-## Fuentes oficiales consultadas
-
-- Apple Developer, Foundation Models: https://developer.apple.com/documentation/FoundationModels
-- Apple Developer, generar contenido y tareas: https://developer.apple.com/documentation/FoundationModels/generating-content-and-performing-tasks-with-foundation-models
-- Apple Developer, tool calling: https://developer.apple.com/documentation/foundationmodels/expanding-generation-with-tool-calling
-- Apple Developer, guided generation: https://developer.apple.com/documentation/FoundationModels/generating-swift-data-structures-with-guided-generation
-- Apple Developer, multimodal image prompting: https://developer.apple.com/documentation/foundationmodels/analyzing-images-with-multimodal-prompting
-- Apple Developer, dynamic sessions/profiles: https://developer.apple.com/documentation/foundationmodels/composing-dynamic-sessions-with-instructions-and-profiles
-- Apple Developer, PCC: https://developer.apple.com/documentation/foundationmodels/adding-server-side-intelligence-with-private-cloud-compute
-- Apple Developer, performance runtime: https://developer.apple.com/documentation/foundationmodels/analyzing-the-runtime-performance-of-your-foundation-models-app
-- Apple Developer, KV caching: https://developer.apple.com/documentation/foundationmodels/optimizing-key-value-caching-in-language-model-sessions
-- Apple Developer, context window: https://developer.apple.com/documentation/foundationmodels/managing-the-context-window
-- Apple Developer, languages/locales: https://developer.apple.com/documentation/foundationmodels/supporting-languages-and-locales-with-foundation-models
-- Apple Developer, Apple Intelligence overview: https://developer.apple.com/apple-intelligence/
-- Apple Support, requisitos Apple Intelligence: https://support.apple.com/en-us/121115
-- Apple Developer, WWDC26 Foundation Models: https://developer.apple.com/videos/play/wwdc2026/241/
-- Apple Developer, WWDC26 PCC: https://developer.apple.com/videos/play/wwdc2026/319/
-- Apple Developer, WWDC26 agentic apps: https://developer.apple.com/videos/play/wwdc2026/242/
-- Apple Developer, WWDC26 LLM provider: https://developer.apple.com/videos/play/wwdc2026/339/
-- Apple Developer, Core AI: https://developer.apple.com/documentation/coreai/
-- Apple Developer, iOS/iPadOS 27 beta release notes: https://developer.apple.com/documentation/ios-ipados-release-notes/ios-ipados-27-release-notes
-- Apple Developer, Xcode 27 beta release notes: https://developer.apple.com/documentation/xcode-release-notes/xcode-27-release-notes
-
-## Hechos confirmados por documentacion Apple
-
-Foundation Models no debe tratarse como una API exclusivamente iOS 27. El nucleo local existe desde iOS/iPadOS/macOS/visionOS 26.0 para `LanguageModelSession`, `SystemLanguageModel`, `Tool`, `Generable`, `GenerationSchema`, `Prompt`, `Instructions` y `Transcript`.
-
-`SystemLanguageModel` representa el modelo de texto on-device que potencia Apple Intelligence. La disponibilidad no debe inferirse por nombre de dispositivo: se debe consultar `SystemLanguageModel.default.availability` o `isAvailable` en runtime.
-
-Apple Intelligence requiere dispositivo compatible, Apple Intelligence activado, modelos descargados, idioma/region soportados y espacio disponible. Apple lista como compatibles iPhone 15 Pro, iPhone 15 Pro Max, iPhone 16 o posterior, iPad mini A17 Pro, iPads con M1 o posterior, Mac con M1 o posterior y Apple Vision Pro.
-
-Apple Support indica que si se cambia el idioma de Siri, Apple Intelligence puede quedar no disponible hasta que el nuevo idioma de Siri descargue completamente y coincida con el idioma del dispositivo. El paquete no puede leer publicamente el idioma de Siri; por eso expone diagnostics de `Locale.current`, preferred languages y `supportsLocale`.
-
-El contexto local documentado para el modelo on-device es 4096 tokens por sesion. La suma incluye instrucciones, prompts, respuestas, tool definitions, tool input/output y schemas.
-
-`SystemLanguageModel.contextSize` aparece disponible desde iOS 26.0 con back-deployment antes de iOS 26.4. `tokenCount(for:)` aparece desde iOS 26.4.
-
-Private Cloud Compute en Foundation Models esta documentado como `PrivateCloudComputeLanguageModel`, beta desde iOS/iPadOS/Mac Catalyst/macOS/visionOS/watchOS 27.0. PCC ofrece mayor razonamiento y contexto de 32K tokens, requiere red, usa cuota diaria por usuario y exige el entitlement `com.apple.developer.private-cloud-compute`.
-
-Apple indica que PCC no requiere que el desarrollador gestione API keys ni autenticacion propia. Aun asi, requiere dispositivo compatible con Apple Intelligence y disponibilidad runtime.
-
-Las release notes de iOS/iPadOS 27 beta 5 marcan como resueltos seis problemas de Foundation Models: PCC en simulador, tool calling excesivo con guided generation, warning de `GenerationError` en enums `@Generable`, runtime error al truncar historial en `onPrompt`, omision de `onPrompt` en perfiles sin instrucciones y decoding greedy forzado en PCC. No anuncian una nueva familia de API exclusiva de beta 5.
-
-Dynamic Profiles, `DynamicInstructions`, `Profile`, `LanguageModel` protocol, `LanguageModelExecutor`, `ContextOptions`, image `Attachment` y control explicito `GenerationOptions.ToolCallingMode` aparecen como iOS/iPadOS/macOS/visionOS/watchOS 27.0 beta.
-
-Core AI es otra tecnologia: sirve para ejecutar modelos propios `.aimodel` en Apple silicon. No debe mezclarse en el nucleo inicial del paquete Foundation Models, aunque puede ser una extension futura.
-
-## Matriz de disponibilidad para la API Dart
-
-| Capacidad | API Apple | Version minima documentada | Estado del paquete |
-| --- | --- | --- | --- |
-| Disponibilidad local | `SystemLanguageModel.availability` | iOS 26.0 | Core estable |
-| Generacion texto | `LanguageModelSession.respond` | iOS 26.0 | Core estable |
-| Streaming | `LanguageModelSession.streamResponse` | iOS 26.0 | Core estable |
-| Sesion con historial | `LanguageModelSession`, `Transcript` | iOS 26.0 | Core estable |
-| Tool calling base | `Tool` | iOS 26.0 | Core estable |
-| Structured output | `Generable`, `GenerationSchema` | iOS 26.0 | Core estable |
-| Tamano de contexto | `SystemLanguageModel.contextSize` | iOS 26.0 | Core estable |
-| Conteo tokens | `tokenCount(for:)` | iOS 26.4 | Core condicional |
-| Imagenes multimodales | `Attachment`, `ImageReference` | iOS 27.0 beta | Experimental |
-| Tool calling mode | `GenerationOptions.ToolCallingMode` | iOS 27.0 beta | Experimental |
-| PCC | `PrivateCloudComputeLanguageModel` | iOS 27.0 beta | Experimental con entitlement |
-| Reasoning level | `ContextOptions.ReasoningLevel` | iOS 27.0 beta | Experimental |
-| Dynamic profiles | `DynamicProfile`, `Profile` | iOS 27.0 beta | Experimental |
-| Provider externo | Adapter Dart de la app | N/A | Capa opcional de orquestacion; el paquete no incluye clientes de terceros |
-| Core AI | `CoreAI` | iOS 27.0 beta | Fuera del core inicial |
-
-## Principios de arquitectura
-
-1. Native-first: la logica pesada vive en Swift y usa Foundation Models directamente. Dart solo orquesta y tipa la experiencia.
-2. Zero runtime dependencies: no Provider, Riverpod, Bloc, Pigeon, JSON schema packages ni paquetes de terceros. Solo Flutter channels y Dart core.
-3. Capability-based API: nunca asumir soporte por modelo de iPhone. Consultar capacidades nativas y exponer razones de no disponibilidad.
-4. Stable public API, unstable internals: Dart debe mantener contratos estables aunque Apple cambie detalles de APIs beta.
-5. Explicit cloud boundary: nunca enviar a PCC por sorpresa. `automatic` puede existir, pero debe ser configurable y reportar que uso cloud.
-6. Privacy by default: prompts, tool outputs, imagenes y transcripts deben quedarse locales salvo que el usuario active PCC o proveedor externo.
-7. Session isolation: cada sesion tiene estado propio. No usar singleton global mutable para transcripts o tools.
-8. Backpressure-aware streaming: usar `Stream` y cancelar correctamente en Dart y Swift.
-9. Typed errors: mapear errores nativos a codigos Dart estables, con razon, recovery suggestion y datos seguros.
-10. No forced state manager: exponer `Stream`, DTOs inmutables y session handles. El usuario decide si integra Riverpod, Bloc, Provider, setState o arquitectura propia.
-
-## SOLID aplicado
-
-- SRP: availability, model selection, session registry, generation, streaming, tools, schema mapping y error mapping son componentes separados.
-- OCP: agregar PCC, proveedores externos o Core AI no debe modificar la fachada publica base; se agregan estrategias/adapters.
-- LSP: todos los modelos se tratan como `ModelBackend` desde Dart, aunque internamente usen `SystemLanguageModel`, PCC o proveedor futuro.
-- ISP: separar interfaces Dart para availability, generation, streaming, tools, quota y diagnostics.
-- DIP: la fachada Dart depende de una abstraccion `CupertinoFoundationModelsPlatform`, no del `MethodChannel` concreto.
-
-## Patrones de diseno
-
-- Facade: `CupertinoFoundationModels` como entrada simple para apps Flutter.
-- Strategy: `FoundationModelsRoutingPolicy` decide `appleLocal`, `applePrivateCloud`, `appleAutomatic` o `external`.
-- Adapter: Swift adapta Foundation Models a payloads Dart; Dart adapta DTOs a channel messages.
-- Repository/Registry: `SessionRegistry` nativo conserva sesiones por `sessionId`.
-- Actor model: Swift `actor` para aislar sesiones, tools, streaming y cancelaciones.
-- Builder: `SessionOptions`, `GenerationOptions`, `StructuredSchema`, `ToolDefinition`.
-- Command: cada tool call Dart se representa como comando con nombre, argumentos, timeout y resultado.
-- State machine: ciclo de vida de sesion: `idle`, `prewarming`, `responding`, `streaming`, `cancelled`, `disposed`, `failed`.
-- Observer: `Stream<SessionEvent>` para tokens, tool calls, quota updates y estado.
-- Null object/fallback: backend `unsupported` devuelve availability clara sin lanzar excepciones no controladas.
-
-## Arquitectura propuesta
-
-### Capa Dart publica
-
-Archivos objetivo:
-
-- `lib/cupertino_fundations_models.dart`: exports publicos.
-- `lib/src/cupertino_foundation_models.dart`: fachada principal.
-- `lib/src/availability.dart`: availability, capabilities, unavailable reasons.
-- `lib/src/session.dart`: session handle, lifecycle, transcript summary.
-- `lib/src/generation.dart`: prompt, response, stream chunks, options.
-- `lib/src/orchestration.dart`: fachada opcional para rutas Apple/local/PCC/proveedor externo.
-- `lib/src/schema.dart`: schema dinamico compatible con `GenerationSchema`.
-- `lib/src/tools.dart`: `ModelTool`, `ToolDefinition`, `ToolCall`, `ToolResult`.
-- `lib/src/errors.dart`: errores tipados.
-- `lib/src/platform/cupertino_foundation_models_platform.dart`: interfaz interna.
-- `lib/src/platform/method_channel_cupertino_foundation_models.dart`: implementacion channel.
-
-No exponer `MethodChannel` al usuario. No imponer singleton obligatorio. Permitir inyeccion para apps grandes.
-
-### Capa nativa Swift
-
-Archivos objetivo (desde 2026-07-03 la capa nativa vive en `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/`, layout hibrido SPM + CocoaPods; los subdirectorios listados abajo son organizacion aspiracional):
-
-- `ios/Classes/CupertinoFoundationModelsPlugin.swift`: registro Flutter y routing.
-- `ios/Classes/Core/SessionRegistry.swift`: `actor` con almacenamiento de sesiones.
-- `ios/Classes/Core/AvailabilityService.swift`: consulta Apple Intelligence/Foundation Models.
-- `ios/Classes/Core/ModelResolver.swift`: strategy local/PCC/automatic.
-- `ios/Classes/Core/MessageCodec.swift`: conversion segura Dart <-> Swift.
-- `ios/Classes/Core/ErrorMapper.swift`: errores Foundation Models a codigos Dart.
-- `ios/Classes/Generation/GenerationService.swift`: respond/structured.
-- `ios/Classes/Generation/StreamingService.swift`: event channel y cancelacion.
-- `ios/Classes/Tools/ToolBridge.swift`: tool calls nativas hacia Dart.
-- `ios/Classes/Schemas/SchemaMapper.swift`: Dart schema a `GenerationSchema`.
-- `ios/Classes/Diagnostics/DiagnosticsService.swift`: context size, token count, quota, version.
-- `ios/Classes/PCC/PCCModelResolver.swift`: solo si se compila con SDK iOS 27.
-
-Si se agrega macOS, compartir la mayor parte del Swift en `darwin/Classes` o duplicar minimo en `macos/Classes` con sources comunes.
-
-### Comunicacion Flutter
-
-- `MethodChannel` para llamadas request/response: availability, createSession, respond, dispose, countTokens, quota.
-- `EventChannel` o event stream multiplexado para streaming de tokens, tool calls, estado y errores.
-- Payloads JSON-like con maps/listas/primitivos para evitar codecs externos.
-- Cada llamada debe incluir `requestId` y `sessionId` para cancelacion y correlacion.
-- Tool calls deben viajar al Dart isolate principal y volver al Swift con timeout controlado.
-
-## API Dart planificada
-
-```dart
-final CupertinoFoundationModels client = CupertinoFoundationModels();
-
-final FoundationModelsCapabilities capabilities = await client.getCapabilities();
-final ModelAvailability availability = await client.checkAvailability(
-  mode: ModelMode.local,
-);
-
-final FoundationModelSession session = await client.createSession(
-  options: SessionOptions(
-    mode: ModelMode.automatic,
-    instructions: 'You are a concise assistant.',
-    tools: [myTool],
-  ),
-);
-
-final ModelResponse response = await session.respond(
-  Prompt.text('Summarize this note in Spanish.'),
-  options: const GenerationOptions(maximumResponseTokens: 300),
-);
-
-await for (final event in session.stream(Prompt.text('Draft three titles'))) {
-  print(event);
-}
-```
-
-Enums y DTOs clave:
-
-- `ModelMode.local`, `ModelMode.privateCloudCompute`, `ModelMode.automatic`.
-- `ModelCapability.localText`, `streaming`, `toolCalling`, `structuredOutput`, `tokenCounting`, `imageInput`, `pcc`, `reasoning`, `dynamicProfiles`.
-- `AvailabilityStatus.available`, `unavailable`, `unsupportedPlatform`, `unsupportedOsVersion`, `appleIntelligenceDisabled`, `assetsUnavailable`, `unsupportedLanguage`, `networkUnavailable`, `quotaExceeded`, `missingEntitlement`.
-- `CloudPolicy.never`, `whenExplicit`, `automaticWithUserConsent`.
-- `ToolCallingMode.allowed`, `required`, `disallowed`, con degradacion si iOS 27 no esta disponible.
-
-## Reglas de rendimiento
-
-- Usar sesion nueva para interacciones single-turn.
-- Reusar sesion para multiturn solo cuando el historial sea necesario.
-- Mantener instrucciones y tools estables al inicio de la sesion para preservar KV cache.
-- Evitar cambiar tools a mitad de sesion. Si se cambian, iniciar nueva sesion o limpiar outputs relacionados.
-- Usar `prewarm` cuando la app sabe que el modelo se usara en 1 o 2 segundos.
-- Preferir streaming para UX responsiva.
-- Mantener prompts especificos y cortos.
-- Limitar `maximumResponseTokens` cuando la UI no necesita respuestas largas.
-- Mantener nombres y descripciones de tools/schemas cortos. Las descripciones consumen tokens.
-- Para documentos largos, chunking por sesiones independientes y resumen acumulativo.
-- No recortar transcript en cada turno. Consolidar cerca del limite de contexto.
-- Al exceder contexto, resumir o crear nueva sesion con entradas clave.
-- Medir con Foundation Models Instrument en Xcode: tokens, latencia, cache hit rate, tool calls.
-
-## Politica cloud/PCC
-
-PCC es una capacidad experimental iOS 27 beta en junio de 2026. Reglas:
-
-- No usar PCC si `CloudPolicy.never`.
-- No usar PCC sin disponibilidad runtime, red y entitlement.
-- Exponer `quotaUsage`, `resetDate` y sugerencias de upgrade si Apple las entrega.
-- Si PCC falla por red, intentar fallback local solo si la politica lo permite.
-- Informar en eventos/metadata cuando una respuesta uso PCC.
-- No almacenar prompts ni transcripts en el paquete.
-- No incluir clientes concretos de proveedores externos en el paquete. La capa Dart solo define adapters opcionales para que la app conecte Gemini, OpenAI, Anthropic o backend propio.
-
-## Seguridad y privacidad
-
-- El paquete no debe registrar prompts, tool args, tool outputs ni imagenes por defecto.
-- Diagnostics deben ser opt-in y sanitizados.
-- Las tools declaradas por el usuario deben tener timeouts.
-- El puente debe validar tipos, tamanos maximos y nombres de tools.
-- No ejecutar herramientas destructivas sin que el usuario del paquete las haya registrado explicitamente.
-- Los errores deben evitar devolver contenido sensible en mensajes.
-
-## Manejo de estado
-
-No agregar gestor de estado externo. El paquete expone:
-
-- Objetos inmutables para opciones y respuestas.
-- `Stream<SessionEvent>` para cambios.
-- `Future` para operaciones one-shot.
-- `SessionHandle` con `dispose()` y `cancelActiveRequest()`.
-
-El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y suscripciones.
-
-## Roadmap de implementacion
-
-### Fase 0 - Documentacion base
-
-- Mantener `context.md` como mapa vivo del proyecto.
-- Corregir README para no prometer iOS 27 local-only ni ejemplos que no existen.
-- Decidir nombre del paquete antes de publicar. `cupertino_fundations_models` parece tener typo; pub.dev no permite renombrar un paquete publicado sin publicar uno nuevo.
-
-### Fase 1 - Convertir a Flutter plugin nativo
-
-- Actualizar `pubspec.yaml` con seccion `flutter.plugin`.
-- Crear estructura `ios/Classes`.
-- Definir platform interface interna sin dependencias externas.
-- Implementar `getPlatformInfo()` y `getCapabilities()` minimo.
-- Validar con `flutter analyze` y ejecucion manual, sin crear tests.
-
-### Fase 2 - Availability local iOS 26
-
-- Implementar `SystemLanguageModel.default.availability`.
-- Mapear razones de no disponibilidad.
-- Exponer `contextSize`, `supportedLanguages`, `supportsLocale`.
-- Exponer `tokenCount` solo desde iOS 26.4.
-
-### Fase 3 - Generacion local
-
-- Crear y destruir sesiones.
-- Implementar `respond` texto.
-- Implementar `GenerationOptions` base: sampling, temperature, maximumResponseTokens.
-- Mapear errores: context exceeded, assets unavailable, unsupported language, cancellation.
-
-### Fase 4 - Streaming
-
-- Implementar `streamResponse`.
-- Multiplexar eventos por `requestId`.
-- Cancelacion desde Dart.
-- Backpressure simple y limpieza de recursos al cancelar/dispose.
-
-### Fase 5 - Tool calling
-
-- Definir `ModelTool` Dart.
-- Registrar tool definitions por sesion.
-- Swift tool bridge llama a Dart y espera resultado.
-- Controlar concurrencia, timeout y errores.
-- `ToolCallingMode` iOS 27 se expone como capability experimental; en iOS 26 queda en comportamiento automatico del modelo.
-
-### Fase 6 - Structured output
-
-- Implementar schema dinamico para JSON-like structures.
-- Evitar macros Swift `@Generable` en tipos generados por el paquete, porque los schemas vienen de Dart runtime.
-- Devolver `Map<String, Object?>` validado por Foundation Models.
-
-### Fase 7 - PCC experimental
-
-- Agregar sources iOS 27 beta con `PrivateCloudComputeLanguageModel`.
-- Chequear entitlement y availability.
-- Exponer quota.
-- Fallback local por politica.
-- Documentar que simulador puede fallar segun release notes de iOS 27 beta.
-
-### Fase 8 - Imagenes y multimodal experimental
-
-- Soportar attachments por file URL o bytes temporales seguros.
-- Labels para attachments.
-- No cargar imagenes enormes sin limites.
-- Usar PCC solo si la politica lo permite y local no alcanza.
-
-### Fase 9 - Dynamic profiles y proveedores
-
-- Evaluar si Dynamic Profiles aportan valor desde Dart o si conviene modelarlo como policies propias.
-- Evitar dependencia obligatoria de `foundation-models-utilities`.
-- Proveedores Anthropic/Google/Core AI deben ir en paquetes adapters, no en el core.
-
-## Decisiones abiertas
-
-- Confirmar nombre final del paquete antes de publicacion.
-- Definir plataformas iniciales: iOS solo, o iOS + macOS desde el primer corte.
-- Definir si se publicara una version estable solo iOS 26 y otra beta para iOS 27.
-- Confirmar estrategia para entitlement PCC, porque Apple requiere solicitud/eligibilidad.
-
-## Mapa actual del repo
-
-- `pubspec.yaml`: define el plugin iOS `CupertinoFoundationModelsPlugin`.
-- `lib/cupertino_fundations_models.dart`: exports publicos de la API Dart.
-- `lib/src/availability.dart`: capacidades, modos, politica cloud, availability, cuota PCC, diagnostics de locale/idioma y `LanguageSupport`.
-- `lib/src/cupertino_foundation_models.dart`: fachada publica `CupertinoFoundationModels`.
-- `lib/src/errors.dart`: errores tipados estables para Dart.
-- `lib/src/file_selection.dart`: seleccion de archivos nativos para alimentar prompts o transcripcion.
-- `lib/src/generation.dart`: prompt, attachments, generation options, responses y eventos de streaming.
-- `lib/src/schema.dart`: schema runtime para structured output.
-- `lib/src/session.dart`: session handle, lifecycle y resolucion de tools Dart.
-- `lib/src/transcription.dart`: contratos de transcripcion de audio via Speech framework.
-- `lib/src/tools.dart`: contratos `ModelTool`, `ToolDefinition`, `ToolCall` y `ToolResult`.
-- `lib/src/platform/cupertino_foundation_models_platform.dart`: contrato interno de plataforma.
-- `lib/src/platform/method_channel_cupertino_foundation_models.dart`: implementacion MethodChannel/EventChannel.
-- `ios/cupertino_fundations_models.podspec`: podspec del plugin iOS (ruta CocoaPods; apunta a las fuentes del layout SPM).
-- `ios/cupertino_fundations_models/Package.swift`: manifiesto Swift Package Manager (soporte hibrido SPM + CocoaPods) con dependencia `FlutterFramework`.
-- `ios/cupertino_fundations_models/Sources/cupertino_fundations_models/`: fuentes Swift del plugin (antes `ios/Classes/`):
-  - `CupertinoFoundationModelsPlugin.swift`: registro Flutter y routing de metodos/eventos.
-  - `AvailabilityService.swift`: capabilities y availability iOS 26/27, con runtime check local si Foundation Models esta disponible.
-  - `FileSelectionService.swift`: `UIDocumentPickerViewController` para seleccionar texto, imagen, audio o cualquier archivo sin dependencias externas.
-  - `SessionRegistry.swift`: actor de sesiones, generacion local basica y streaming local basico.
-  - `SpeechTranscriptionService.swift`: transcripcion de archivos de audio con `SFSpeechURLRecognitionRequest`, on-device o servidor Apple Speech.
-  - `LiveTranscriptionService.swift`: transcripcion en vivo con `AVAudioEngine` + Apple Speech.
-  - `MessageCodec.swift`: conversion basica de payloads Flutter.
-  - `ErrorMapper.swift`: conversion de errores nativos a `FlutterError`.
-  - `PrivacyInfo.xcprivacy`: manifiesto de privacidad del SDK (sin tracking ni APIs con required reason declaradas).
-- `implementation_for_agents.md`: guia operativa tipo skill para agentes que implementen o integren la libreria.
-- `example/pubspec.yaml`: app Flutter de ejemplo creada con `flutter create --platforms=ios .` y dependencia path al paquete.
-- `example/lib/main.dart`: UI manual para probar capabilities, diagnostics, availability, full power, respond local/automatic y streaming local.
-- `example/ios`: scaffold iOS generado por Flutter para correr en dispositivo real.
-- `README.md`: documentacion publica, se debe mantener alineada con `context.md`.
-- `analysis_options.yaml`: usa `flutter_lints`.
+# Cupertino Foundation Models - Contexto vigente
+
+## Iteración 2026-09-19
+
+- Objetivo: auditar fuentes, documentación, ejemplo, fallos históricos y SDK oficial 27.2; preparar la próxima entrega sin publicar ni aumentar todavía la versión.
+- Estado inicial: `main` en `080aa00`, 31 archivos modificados y tres nuevos de trabajo previo. Se preservó esa base; copia de fuentes/configuración/documentación en `/tmp/cfm-audit-2026-09-19-baseline`, sin archivos de entorno.
+- Auditoría inicial sobre 0.2.1; preparación de entrega autorizada después por el usuario: manifiestos **0.3.0**, incompatible por retirar API híbrida. No se declara 1.0: faltan validaciones de runtime y contrato estable.
+- Toolchain observado: Flutter 3.47.4 / Dart 3.13.3, Xcode 27.2 beta `27B5019j`, SDK iOS 27.2, Swift 6.4. Deployment target iOS 15; generación exige 26+ y funciones nuevas 27+ con guards de SDK/runtime.
+- Git: `main` para entregas expresamente autorizadas; política confirmada en la continuación de entrega. La auditoría inicial no creó commits ni publicó. No pruebas ni app/simuladores/dispositivos en esta iteración.
+
+## Contrato y arquitectura actuales
+
+- Paquete Flutter iOS; Dart tipa contratos y administra sesiones/streams. Swift integra FoundationModels, Speech, Vision, PDFKit y picker. Cero dependencias runtime externas; CocoaPods y Swift Package Manager conservados.
+- Se retira `orchestration.dart` y el proveedor Gemini del ejemplo. La aplicación consumidora decide API/local y conserva consentimiento, credenciales, historial, reintentos e idempotencia.
+- Local por defecto; PCC requiere política explícita, opt-in Info.plist, entitlement de Apple y disponibilidad. El flag de opt-in no prueba el entitlement. Automatic + whenExplicit no selecciona cloud. Cada request puede restringir a never pero no cambiar el backend de una sesión.
+- Un request por sesión; cancelación/disposal esperados. Callbacks de streams por request; transporte predeterminado compartido. Sesión con cancelación fallida debe recrearse.
+- StructuredSchema soporta raíz objeto y subset acotado; validación estricta de tipos/constraints. Tools con timeout/budget y resultados pequeños. Autorización y efectos externos son responsabilidad de la app.
+- Speech posee política separada (onDevice/automatic/server), verificación de textos de privacidad y limpieza serializada; solo una suscripción de micrófono por transporte.
+- Adjuntos: extracción UTF-8/PDF y Vision para imágenes. Attachment multimodal nativo y getters PCC de idiomas/capabilities siguen bloqueados por crashes históricos; no se habilitan en 27.2 sin evidencia física.
+- APIs nuevas 27.2 DataAttachment/DataEntry verificadas en referencia Apple y SDK, documentadas pero no expuestas. Dynamic Profiles/Core AI/model executors/transcript import no implementados.
+
+## Mapa de documentación
+
+- `README.md`: entrada pública, compatibilidad, privacidad y ejemplos breves.
+- `implementation_for_agents.md`: contrato de implementación con API existente y límites.
+- `doc/usage.md`: funcionalidades y semántica completa.
+- `doc/app-owned-routing.md`: coordinación aplicación/API/local.
+- `doc/migration-0.3.0.md`: migración de la API híbrida eliminada.
+- `doc/troubleshooting.md`: bugs/crashes recuperados, mitigaciones y evidencia.
+- `doc/ios-27.2-audit-2026-09-19.md`: investigación oficial y auditoría actual.
+- `CHANGELOG.md`: notas definitivas de 0.3.0 primero, seguidas de las versiones históricas; sin encabezado Unreleased vacío.
+
+## Validaciones y pendientes
+
+- Formato sin cambios; `flutter analyze --no-pub` sin incidencias. Ocho snippets Dart de documentación analizados correctamente en workspace temporal, sin ejecutarlos.
+- Build Release sin firma del example con plugin SPM y Xcode 27.2 correcto. Build separado del target CocoaPods con podspec real correcto. Ambos con `SWIFT_STRICT_CONCURRENCY=complete` y `SWIFT_TREAT_WARNINGS_AS_ERRORS=YES`; hubo avisos de sistema de build/AppIntents, no errores Swift.
+- `git diff --check` y enlaces locales de 13 documentos correctos. Los archivos de tests coinciden byte por byte con el snapshot inicial.
+- `dart pub publish --dry-run` generó archive de 119 KB, exit 65 por dos advertencias Git: archivos modificados y router eliminado aún indexado (Pub lo reporta como ignored). Archive revisado: sin router, AGENTS/context ni tests; incluye guías y nuevas fuentes nativas. No se publicó.
+- Revisión independiente Sol cerrada sin defectos prioritarios confirmados pendientes. Corrigió la observación de schemas malformados y detectó una regresión temporal del nombre opcional de tools, también corregida antes de builds finales.
+- Sin ejecución de tests, app, simuladores ni dispositivos; la matriz física beta 8 del 1 de septiembre es histórica y no valida runtime 27.2 ni PCC.
+- Pendiente de futura autorización: validación física 27.2, regresión runtime iOS 26, permisos/assets/Speech, PCC con entitlement, pruebas automatizadas y etapa Git/publicación. El versionado, changelog y texto de desarrollo se actualizaron en la continuación autorizada de abajo.
+- Evidencia local: `/tmp/cfm-final-analyze.log`, `/tmp/cfm-final-native-build.log`, `/tmp/cfm-cocoapods-build.log`, `/tmp/cfm-doc-examples-analyze.log`, `/tmp/cfm-publish-dry-run.log`.
+
+Equipo Astra invocado por el usuario: Luna low para fuentes oficiales, Terra medium para retirar híbrido/migrar example, Sol high para revisión independiente de solo lectura. Principal previsto Astra/high por la skill, sin metadatos de cliente suficientes para verificar modelo/esfuerzo.
+
+## Preparación de entrega 0.3.0 - 2026-09-19
+
+- Usuario solicitó subir la versión con las correcciones del changelog para actualizar la presentación pública.
+- Pubspec/podspec sincronizados en 0.3.0. Notas trasladadas a CHANGELOG; eliminado borrador next-release. README, guía de agentes, ejemplo y migración describen la versión concreta.
+- Pub.dev confirmó 0.2.1 como latest antes de la entrega y que 0.3.0 aún no existe. Sus enlaces relativos de documentación apuntan a GitHub/main: se requiere sincronizar las fuentes para no publicar enlaces nuevos rotos.
+- Metadatos 0.3.0 alineados en pubspec/podspec/lock del example; changelog comienza en 0.3.0 y enlaces locales correctos. `flutter analyze --no-pub` sin incidencias; dry run 119 KB con solo las dos advertencias Git esperadas (árbol modificado y router eliminado aún indexado). No hay cambios de código ni ejecución de tests/app en esta continuación.
+- `origin/main` comprobado por ls-remote en `080aa0004e6bcde2b76b650b1bb1010e3bcba2ad`, coincide con el HEAD de partida. Usuario confirmó: «Subirlo, tanto a git como a pub.dev». Se documenta política `main` para entregas autorizadas y se prepara commit/push y publicación de 0.3.0. Los resultados remotos se registrarán tras verificarlos.
+- Logs de esta preparación: `/tmp/cfm-030-analyze.log` y `/tmp/cfm-030-dry-run.log`.
+
+## Historial conservado
+
+Las secciones siguientes son registros fechados, no la especificación vigente. Sus referencias a híbrido, proveedores externos, versiones beta o APIs deshabilitadas describen aquel estado. Para comportamiento actual, prevalece el contrato de arriba y la documentación vigente.
 
 ## Implementado en 2026-06-11
 
@@ -596,6 +292,45 @@ El estado nativo vive en `SessionRegistry` actor. Dart solo conserva handles y s
 - `pubspec.yaml`, el podspec iOS, la dependencia mostrada en `README.md` y `CHANGELOG.md` quedaron sincronizados con `0.2.1`.
 - La entrega autorizada tiene como destino directo `main`, `origin/main` y pub.dev. No incluye pruebas nuevas ni ejecucion de tests por la regla del repositorio.
 - Validaciones de la candidata: `dart format` sin cambios, `flutter analyze` limpio, `git diff --check` limpio, build iOS release sin firma con Xcode 27 beta 5 exitoso (`Runner.app` de 16.9 MB) y `dart pub publish --dry-run` valido el archivo comprimido de 102 KB. Antes del commit, el unico aviso del dry-run fue el arbol Git modificado esperado.
+
+## Iteracion 2026-09-01 - Auditoria actual iOS 27 y estabilidad integral
+
+- La documentacion publica de Apple consultada el 2026-09-01 identifica iOS/iPadOS 27 beta 8 `24A5430a` y Xcode 27 beta 6 `27A5252f` como betas vigentes. El equipo local usa Xcode 27 beta 6 `27A5252f`, SDK iOS 27 `24A5422a` y Swift 6.4; el build local aun no demuestra comportamiento runtime de beta 8.
+- Se inspeccionaron las interfaces Swift instaladas para `FoundationModels`, `Speech`, `AVFoundation`, PCC, opciones de generacion, errores tipados, streaming, tools y proveedores de captura. Apple mantiene una sola solicitud activa por `LanguageModelSession`, exige una salida para tool calling `required` y expone finalizacion/cancelacion explicitas en `SpeechAnalyzer`.
+- Los streams de generacion ya no comparten un `EventChannel`: `CupertinoFoundationModelsPlugin.swift` y `method_channel_cupertino_foundation_models.dart` multiplexan callbacks por `requestId`, permiten streams simultaneos de sesiones distintas y esperan cancelacion nativa antes de reutilizar o descartar una sesion.
+- `SessionRegistry` recibe `ToolBridge` atomicamente en su inicializador; las sesiones permanecen reservadas durante cancelacion; los callbacks terminales liberan tracking antes de notificar a Dart; y un timeout de stream no libera `_requestActive` hasta que la cancelacion Apple termina.
+- El tracking nativo usa tokens UUID para impedir que una tarea vieja elimine una nueva. `ToolBridge.swift` resuelve continuaciones una sola vez, tiene timeout/cancelacion nativos y limita la salida; `GenerationOptions.maximumToolCalls` agrega un presupuesto por solicitud de 1 a 128, con default 16.
+- `LiveTranscriptionService.swift` prepara el analyzer, conserva y encadena toda limpieza anterior incluso tras `EventChannel.onCancel`, y serializa `AVCaptureSession.startRunning`/`stopRunning`. `SpeechTranscriptionService.swift` prepara el analyzer antes de consumir audio.
+- Los adjuntos se limitan antes de leerlos; los PDF acotan texto extraido; las imagenes bajan a 2048 px y ejecutan OCR, clasificacion y codigos en una sola pasada Vision. El ABI nativo de imagen y los getters PCC que provocaron crashes en beta 5 siguen deshabilitados hasta tener evidencia fisica nueva.
+- `AvailabilityService.swift` deja de anunciar Dynamic Profiles, que aun no tienen bridge, solo reporta `fullPower` si PCC esta disponible y ya no infiere soporte por la version de iOS cuando el SDK compilador carece de `FoundationModels`. Los motivos PCC usan los casos tipados actuales del SDK instalado.
+- Los entry points Flutter/UIKit quedaron aislados en `@MainActor`; `SessionRegistry` conserva el estado de modelos dentro de su actor; `FlutterChannelValue` transporta exclusivamente payloads inmutables del codec; y los callbacks Speech capturan snapshots `Sendable` antes de reanudar trabajo asincrono. SPM y CocoaPods pasan `SWIFT_STRICT_CONCURRENCY=complete` con warnings Swift tratados como errores.
+- Flutter estable vigente es 3.47.2 con Dart 3.13.2. Se descargo una copia arm64 temporal, se verifico su SHA-256 oficial y se uso sin modificar el SDK compartido 3.44.4. Flutter 3.47 actualizo las exclusiones del analyzer, sincronizo `example/pubspec.lock` con la version local 0.2.1 y actualizo el checksum Flutter de `example/ios/Podfile.lock`; no se agregaron dependencias runtime.
+- Documentacion sincronizada en `README.md`, `CHANGELOG.md`, `implementation_for_agents.md` y `doc/ios-27-current-audit-2026-09-01.md`. No se cambio version, API de deployment iOS 15, dependencias runtime, podspec ni manifiesto SPM.
+- Validaciones autorizadas: `flutter analyze` limpio; 26 tests Dart aprobados; build iOS release sin firma exitoso por SPM con Xcode 27 beta 5; SPM y el framework CocoaPods compilan y pasan `xcodebuild analyze` en modo Swift 6, concurrencia completa y warnings como errores; CocoaPods tambien cubre simulador arm64/x86_64 al forzar iOS 15. La copia aislada Flutter 3.47.2 repitio analyze, 26 tests y build release de 17.1 MB. `dart pub publish --dry-run` con Dart 3.13.2 construyo y valido el archivo de 114 KB; su unico warning y codigo de salida 65 corresponden al arbol sin commit esperado. `pod lib lint` sin override queda bloqueado por su fixture Flutter 3.13 con target iOS 11, incompatible con el minimo de simulador de Xcode 27, no por el plugin.
+- Apple confirma que `24A5430a` es iOS 27 beta 8. El `iPhone Sebas`, compatible con Apple Intelligence y con Developer Mode activo, sigue `unavailable` en CoreDevice; no se pudo abrir la app ni ejecutar la matriz fisica. Tampoco se abrio simulador porque la politica global exige que el usuario solicite DeviceHub explicitamente.
+- Pendiente para afirmar validacion runtime completa: instalar Xcode 27 beta 6 o posterior y ejecutar la matriz descrita en el documento de auditoria sobre un iPhone Apple Intelligence con iOS 27 beta 8 o posterior, incluyendo crashes `.ips`, streams concurrentes/cancelados, PCC, tools, Speech, adjuntos e Instruments.
+- No se creo rama, commit, push, publicacion ni despliegue.
+
+## Iteracion 2026-09-01 - Selector Speech y guarda preventiva de PCC
+
+- `example/lib/main.dart` separa visualmente el backend que genera respuestas del motor de transcripcion en vivo. El selector junto al microfono ofrece Automatic, On-device only y Apple Speech server; cambiarlo detiene limpiamente la captura activa sin borrar el texto dictado.
+- Automatic prioriza `SpeechAnalyzer` local y conserva el fallback existente; On-device only impide la ruta remota; Apple Speech server usa `SFSpeechRecognizer`, requiere red y no es Private Cloud Compute.
+- `PrivateCloudComputeAccess.swift`, `AvailabilityService.swift` y `SessionRegistry.swift` exigen el opt-in `CupertinoFoundationModelsPrivateCloudComputeEnabled=true` antes de inicializar `PrivateCloudComputeLanguageModel`. Sin el opt-in, PCC devuelve `missingEntitlement`; el modo Automatic continua hacia el modelo local.
+- El opt-in complementa, pero no reemplaza, el entitlement administrado `com.apple.developer.private-cloud-compute` y la firma/provisioning correspondiente. El example lo mantiene en `false` para fallar de forma recuperable hasta que Apple conceda y se configure el entitlement.
+- Documentacion sincronizada en `README.md`, `example/README.md`, `implementation_for_agents.md` y `CHANGELOG.md`. No se agregaron dependencias, no cambio la API Dart publica, el deployment target sigue en iOS 15 y se preservaron los cambios preexistentes sin commit.
+- Validaciones de esta iteracion: `dart format example/lib/main.dart` sin cambios; `plutil -lint` limpio; `git diff --check` limpio; `flutter analyze` limpio en raiz y example; build iOS release sin firma exitoso con Xcode 27 beta 6 (`27A5252f`), generando `Runner.app` de 17.0 MB. No se ejecutaron tests, app, simulador ni dispositivo; la confirmacion visual y la reproduccion runtime de PCC/Speech quedan pendientes en hardware con la firma y el entitlement correctos.
+- Ejecucion fisica autorizada posterior: Flutter detecto `iPhone Sebas` (`00008150-0012689E3640401C`, iPhone 17 Pro Max), compilo el example en release con firma del team `MYFZ6WK59C`, lo instalo y lo lanzo. Luego CoreDevice relanzo directamente `com.example.cupertinoFundationsModelsExample` y confirmo vivo el ejecutable exacto instalado como PID `6909`. La app quedo abierta; no se hizo una auditoria visual ni se ejercitaron PCC o Speech desde la interfaz.
+
+## Iteracion 2026-09-01 - Xcode beta 6, runtimes y cierre fisico iOS 27 beta 8
+
+- Se reemplazo la instalacion activa por Xcode 27 beta 6 `27A5252f`, SDK iPhoneOS 27 `24A5422a` y Swift 6.4; `xcode-select` apunta a `/Applications/Xcode-beta.app/Contents/Developer`. La firma y Gatekeeper de la aplicacion descargada fueron validados antes del reemplazo.
+- Se instalo el runtime iOS 27 recomendado por ese Xcode, build `24A5423a`, y se elimino el runtime anterior `24A5355p` junto con sus dispositivos viejos. Se crearon simuladores actuales de iPhone 17/17 Pro/17 Pro Max/17e/Air y iPad A16/Air M4/mini A17 Pro/Pro M5. Se preservaron dos simuladores `Codex SemillaX QA` creados y usados por otra tarea concurrente.
+- `example/lib/smoke_test.dart` y el flag `CFM_SMOKE_TEST` agregan una matriz release reproducible que persiste su resultado JSON en el contenedor temporal. No cambia la ejecucion normal ni agrega dependencias.
+- El iPhone fisico `00008150-0012689E3640401C`, iPhone 17 Pro Max con iOS 27 beta 8 `24A5430a`, completo la matriz final en 7.886 segundos: capabilities, 29 idiomas, diagnostics, availability, audio por `SpeechAnalyzer`, inicio/cancelacion de captura en vivo, tokenizacion, prewarm/respuesta/usage, structured output, una tool real, stream completo, cancelacion y reutilizacion, dos streams simultaneos, content tagging e imagen por Vision. Todas las comprobaciones ejecutables aprobaron.
+- PCC devolvio `missingEntitlement`, comportamiento esperado del example sin el entitlement administrado de Apple; no se afirma una generacion PCC. El ABI nativo de imagen y los getters PCC que fallaron en beta 5 permanecen deshabilitados, usando Vision y diagnosticos protegidos.
+- Se encontro un `.ips` de Runner de las 14:00 anterior a la matriz final, con `SIGTRAP`/assert de cancelacion dentro del framework Foundation Models de Apple. Las matrices endurecidas posteriores no generaron un `.ips` nuevo; el resultado verde corresponde a esas ejecuciones posteriores.
+- Validaciones finales: `flutter analyze` limpio, 26 tests Dart aprobados, build y analyze SPM/CocoaPods con Swift 6 strict concurrency y warnings como errores, build iOS release firmado de 17.1 MB, e instalacion de la ejecucion normal `0.0.1` en el iPhone mediante CoreDevice. No se hizo commit, push, publicacion ni cambio de version del paquete.
+- Limpieza: queda una sola seleccion activa de Xcode y un solo runtime iOS 27. Los artefactos descargados y la copia vieja propiedad del usuario actual fueron retirados. macOS impidio retirar una copia historica oculta propiedad de UID 502 y el XIP beta 4 protegido en Descargas sin elevacion o confirmacion de Finder; ninguno esta seleccionado ni registrado como toolchain activo.
 
 ## Regla de mantenimiento de contexto
 

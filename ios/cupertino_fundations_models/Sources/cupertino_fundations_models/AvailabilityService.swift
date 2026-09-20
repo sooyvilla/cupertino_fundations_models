@@ -6,6 +6,7 @@ import FoundationModels
 import Speech
 #endif
 
+@MainActor
 final class AvailabilityService {
     func capabilities() -> [String: Any] {
         let majorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
@@ -16,50 +17,46 @@ final class AvailabilityService {
         var preferredMode: String = "local"
         var supportsFullPower: Bool = false
         var supportedLanguages: [String] = []
+        var foundationModelsRuntime: Bool = false
+        var dynamicProfilesSdkAvailable: Bool = false
 
-        if majorVersion >= 26 {
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *) {
+            foundationModelsRuntime = true
             capabilities.append(contentsOf: [
                 "localText",
                 "streaming",
                 "toolCalling",
                 "structuredOutput"
             ])
-            contextSize = 4096
-        }
-
-        #if compiler(>=6.4)
-        if majorVersion > 26 || majorVersion == 26 && minorVersion >= 4 {
-            capabilities.append("tokenCounting")
-        }
-        if majorVersion >= 27 {
-            capabilities.append(contentsOf: [
-                "privateCloudCompute",
-                "dynamicProfiles",
-                "fullPower"
-            ])
-            privateCloudContextSize = 32768
-        }
-        #endif
-
-        #if canImport(FoundationModels)
-        if #available(iOS 26.0, *) {
             let model: SystemLanguageModel = SystemLanguageModel.default
             contextSize = model.contextSize
             supportedLanguages = languageIdentifiers(from: model.supportedLanguages)
         }
         #if compiler(>=6.4)
+        if majorVersion > 26 || majorVersion == 26 && minorVersion >= 4 {
+            capabilities.append("tokenCounting")
+        }
         if #available(iOS 27.0, *) {
+            dynamicProfilesSdkAvailable = true
+            capabilities.append("privateCloudCompute")
+            privateCloudContextSize = 32768
             let localModel: SystemLanguageModel = SystemLanguageModel.default
             if localModel.capabilities.contains(.reasoning) {
                 capabilities.append("reasoning")
             }
-            let privateCloudModel: PrivateCloudComputeLanguageModel =
-                PrivateCloudComputeLanguageModel()
-            let privateCloud: [String: Any] = privateCloudAvailability(
-                model: privateCloudModel,
-                mode: "privateCloudCompute"
-            )
-            supportsFullPower = privateCloud["isAvailable"] as? Bool ?? false
+            if PrivateCloudComputeAccess.isEnabled {
+                let privateCloudModel: PrivateCloudComputeLanguageModel =
+                    PrivateCloudComputeLanguageModel()
+                let privateCloud: [String: Any] = privateCloudAvailability(
+                    model: privateCloudModel,
+                    mode: "privateCloudCompute"
+                )
+                supportsFullPower = privateCloud["isAvailable"] as? Bool ?? false
+                if supportsFullPower {
+                    capabilities.append("fullPower")
+                }
+            }
             preferredMode = supportsFullPower ? "privateCloudCompute" : "local"
         } else {
             preferredMode = "local"
@@ -78,8 +75,11 @@ final class AvailabilityService {
             "privateCloudContextSize": privateCloudContextSize as Any,
             "supportedLanguages": supportedLanguages,
             "details": [
-                "foundationModelsRuntime": majorVersion >= 26,
+                "foundationModelsRuntime": foundationModelsRuntime,
                 "ios27PrimaryRuntime": majorVersion >= 27,
+                "appleDynamicProfilesSdkAvailable": dynamicProfilesSdkAvailable,
+                "dynamicProfilesExposedByPackage": false,
+                "privateCloudHostOptIn": PrivateCloudComputeAccess.isEnabled,
                 "nativeImageAttachmentsUsable": false,
                 "imageFallback": "visionPreprocessing"
             ]
@@ -138,12 +138,14 @@ final class AvailabilityService {
         var localSupportsCurrentLocale: Any = NSNull()
         var localPreferredLanguageSupport: [[String: Any]] = []
         var privateCloudAvailabilityValue: Any = NSNull()
-        var privateCloudSupportedLanguages: [String] = []
-        var privateCloudSupportsCurrentLocale: Any = NSNull()
-        var privateCloudPreferredLanguageSupport: [[String: Any]] = []
+        let privateCloudSupportedLanguages: [String] = []
+        let privateCloudSupportsCurrentLocale: Any = NSNull()
+        let privateCloudPreferredLanguageSupport: [[String: Any]] = []
+        var foundationModelsRuntime: Bool = false
 
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
+            foundationModelsRuntime = true
             let model: SystemLanguageModel = SystemLanguageModel.default
             localSupportedLanguages = languageIdentifiers(from: model.supportedLanguages)
             localSupportsCurrentLocale = model.supportsLocale(targetLocale)
@@ -156,11 +158,17 @@ final class AvailabilityService {
         }
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
-            let privateCloud: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
-            privateCloudAvailabilityValue = privateCloudAvailability(
-                model: privateCloud,
-                mode: "privateCloudCompute"
-            )
+            if PrivateCloudComputeAccess.isEnabled {
+                let privateCloud: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
+                privateCloudAvailabilityValue = privateCloudAvailability(
+                    model: privateCloud,
+                    mode: "privateCloudCompute"
+                )
+            } else {
+                privateCloudAvailabilityValue = privateCloudOptInUnavailable(
+                    mode: "privateCloudCompute"
+                )
+            }
         } else if majorVersion >= 27 {
             privateCloudAvailabilityValue = unavailable(
                 mode: "privateCloudCompute",
@@ -179,7 +187,7 @@ final class AvailabilityService {
             "currentLocaleIdentifier": currentLocale.identifier,
             "targetLocaleIdentifier": targetLocaleIdentifier,
             "preferredLanguages": Locale.preferredLanguages,
-            "localAvailability": localAvailability(mode: "local"),
+            "localAvailability": localAvailability(mode: "local", localeIdentifier: targetLocaleIdentifier),
             "localSupportsCurrentLocale": localSupportsCurrentLocale,
             "localSupportedLanguages": localSupportedLanguages,
             "localPreferredLanguageSupport": localPreferredLanguageSupport,
@@ -188,7 +196,7 @@ final class AvailabilityService {
             "privateCloudSupportedLanguages": privateCloudSupportedLanguages,
             "privateCloudPreferredLanguageSupport": privateCloudPreferredLanguageSupport,
             "details": [
-                "foundationModelsRuntime": majorVersion >= 26,
+                "foundationModelsRuntime": foundationModelsRuntime,
                 "ios27PrimaryRuntime": majorVersion >= 27,
                 "canReadSiriLanguage": false,
                 "canReadPrivateCloudLanguageSupport": false
@@ -211,6 +219,14 @@ final class AvailabilityService {
         }
 
         if mode == "privateCloudCompute" {
+            guard cloudPolicy != "never" else {
+                return unavailable(
+                    mode: mode,
+                    status: "restricted",
+                    reason: "CloudPolicy.never forbids Private Cloud Compute.",
+                    recoverySuggestion: "Use local mode or explicitly authorize PCC with CloudPolicy.whenExplicit."
+                )
+            }
             if majorVersion < 27 {
                 return unavailable(
                     mode: mode,
@@ -223,6 +239,9 @@ final class AvailabilityService {
             #if canImport(FoundationModels)
             #if compiler(>=6.4)
             if #available(iOS 27.0, *) {
+                guard PrivateCloudComputeAccess.isEnabled else {
+                    return privateCloudOptInUnavailable(mode: "privateCloudCompute")
+                }
                 return privateCloudAvailability(
                     model: PrivateCloudComputeLanguageModel(),
                     mode: "privateCloudCompute"
@@ -239,10 +258,10 @@ final class AvailabilityService {
             )
         }
 
-        if mode == "automatic" && cloudPolicy != "never" {
+        if mode == "automatic" && cloudPolicy == "automaticWithUserConsent" {
             #if canImport(FoundationModels)
             #if compiler(>=6.4)
-            if #available(iOS 27.0, *) {
+            if #available(iOS 27.0, *), PrivateCloudComputeAccess.isEnabled {
                 let privateCloud: [String: Any] = privateCloudAvailability(
                     model: PrivateCloudComputeLanguageModel(),
                     mode: "privateCloudCompute"
@@ -255,10 +274,13 @@ final class AvailabilityService {
             #endif
         }
 
-        return localAvailability(mode: mode == "automatic" ? "local" : mode)
+        return localAvailability(
+            mode: mode == "automatic" ? "local" : mode,
+            localeIdentifier: arguments["localeIdentifier"] as? String
+        )
     }
 
-    private func localAvailability(mode: String) -> [String: Any] {
+    private func localAvailability(mode: String, localeIdentifier: String? = nil) -> [String: Any] {
         let majorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
 
         #if canImport(FoundationModels)
@@ -266,11 +288,19 @@ final class AvailabilityService {
             let model: SystemLanguageModel = SystemLanguageModel.default
             switch model.availability {
             case .available:
+                if let localeIdentifier, !model.supportsLocale(Locale(identifier: localeIdentifier)) {
+                    return unavailable(
+                        mode: "local",
+                        status: "unsupportedLanguage",
+                        reason: "The on-device model does not support the requested locale.",
+                        recoverySuggestion: "Choose a locale supported by the on-device model."
+                    )
+                }
                 return [
                     "mode": "local",
                     "status": "available",
                     "isAvailable": true,
-                    "supportsFullPower": majorVersion >= 27,
+                    "supportsFullPower": false,
                     "reason": NSNull(),
                     "recoverySuggestion": NSNull(),
                     "contextSize": model.contextSize,
@@ -284,7 +314,7 @@ final class AvailabilityService {
                 let reasonText: String = String(describing: reason)
                 return unavailable(
                     mode: "local",
-                    status: availabilityStatus(from: reasonText),
+                    status: ErrorMapper.localAvailabilityCode(reason),
                     reason: reasonText,
                     recoverySuggestion: "Check Apple Intelligence settings, supported language, model assets, and device compatibility."
                 )
@@ -299,20 +329,12 @@ final class AvailabilityService {
         }
         #endif
 
-        return [
-            "mode": mode,
-            "status": "available",
-            "isAvailable": true,
-            "supportsFullPower": majorVersion >= 27,
-            "reason": NSNull(),
-            "recoverySuggestion": NSNull(),
-            "contextSize": 4096,
-            "quota": NSNull(),
-            "details": [
-                "runtimeChecked": false,
-                "ios27PrimaryRuntime": majorVersion >= 27
-            ]
-        ]
+        return unavailable(
+            mode: mode,
+            status: "unsupportedOsVersion",
+            reason: "Foundation Models is not available in the SDK used to build this app.",
+            recoverySuggestion: "Build with an Xcode SDK that includes Foundation Models and retry on iOS 26 or later."
+        )
     }
 
     #if canImport(FoundationModels) && compiler(>=6.4)
@@ -339,13 +361,29 @@ final class AvailabilityService {
                 ]
             ]
         case .unavailable(let reason):
-            let reasonText: String = String(describing: reason)
-            return unavailable(
-                mode: mode,
-                status: privateCloudStatus(from: reasonText),
-                reason: reasonText,
-                recoverySuggestion: "Check Apple Intelligence, network availability, device eligibility, PCC quota, and iCloud account state."
-            )
+            switch reason {
+            case .deviceNotEligible:
+                return unavailable(
+                    mode: mode,
+                    status: "unsupportedPlatform",
+                    reason: String(describing: reason),
+                    recoverySuggestion: "Use a device and account eligible for Apple Intelligence and Private Cloud Compute."
+                )
+            case .systemNotReady:
+                return unavailable(
+                    mode: mode,
+                    status: "unavailable",
+                    reason: String(describing: reason),
+                    recoverySuggestion: "Check Apple Intelligence, network availability, PCC entitlement, quota, and iCloud account state."
+                )
+            @unknown default:
+                return unavailable(
+                    mode: mode,
+                    status: "unknown",
+                    reason: String(describing: reason),
+                    recoverySuggestion: "Retry on the latest iOS 27 beta or later."
+                )
+            }
         @unknown default:
             return unavailable(
                 mode: mode,
@@ -389,6 +427,15 @@ final class AvailabilityService {
     }
     #endif
 
+    private func privateCloudOptInUnavailable(mode: String) -> [String: Any] {
+        return unavailable(
+            mode: mode,
+            status: "missingEntitlement",
+            reason: PrivateCloudComputeAccess.unavailableReason,
+            recoverySuggestion: PrivateCloudComputeAccess.recoverySuggestion
+        )
+    }
+
     private func unavailable(mode: String, status: String, reason: String, recoverySuggestion: String) -> [String: Any] {
         return [
             "mode": mode,
@@ -403,52 +450,17 @@ final class AvailabilityService {
         ]
     }
 
-    private func availabilityStatus(from reason: String) -> String {
-        let normalized: String = reason.lowercased()
-        if normalized.contains("appleintelligence") || normalized.contains("intelligence") {
-            return "appleIntelligenceDisabled"
-        }
-        if normalized.contains("asset") || normalized.contains("modelnotready") || normalized.contains("not ready") {
-            return "assetsUnavailable"
-        }
-        if normalized.contains("devicenoteligible") || normalized.contains("not eligible") {
-            return "unsupportedPlatform"
-        }
-        if normalized.contains("language") || normalized.contains("locale") {
-            return "unsupportedLanguage"
-        }
-        if normalized.contains("restricted") {
-            return "restricted"
-        }
-        return "unavailable"
-    }
-
-    private func privateCloudStatus(from reason: String) -> String {
-        let normalized: String = reason.lowercased()
-        if normalized.contains("noteligible") || normalized.contains("not eligible") {
-            return "unsupportedPlatform"
-        }
-        if normalized.contains("systemnotready") || normalized.contains("not ready") {
-            return "unavailable"
-        }
-        if normalized.contains("quota") || normalized.contains("limit") {
-            return "quotaExceeded"
-        }
-        if normalized.contains("network") {
-            return "networkUnavailable"
-        }
-        if normalized.contains("appleintelligence") || normalized.contains("intelligence") {
-            return "appleIntelligenceDisabled"
-        }
-        return "unavailable"
-    }
-
     private func operatingSystemVersionString() -> String {
         let version: OperatingSystemVersion = ProcessInfo.processInfo.operatingSystemVersion
         return "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)"
     }
 
     private func sdkVersionString() -> String {
+        if let sdkName: String = Bundle.main.object(
+            forInfoDictionaryKey: "DTSDKName"
+        ) as? String, !sdkName.isEmpty {
+            return sdkName
+        }
         #if compiler(>=6.4)
         return "27-or-newer"
         #else

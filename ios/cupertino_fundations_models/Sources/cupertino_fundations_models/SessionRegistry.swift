@@ -1,5 +1,5 @@
 import Foundation
-import Flutter
+@preconcurrency import Flutter
 import ImageIO
 import PDFKit
 import UIKit
@@ -10,13 +10,16 @@ import FoundationModels
 
 actor SessionRegistry {
     private var sessions: [String: NativeSession] = [:]
-    private var toolBridge: ToolBridge?
+    private let toolBridge: ToolBridge
 
-    func configure(toolBridge: ToolBridge) {
+    init(toolBridge: ToolBridge) {
         self.toolBridge = toolBridge
     }
 
-    func createSession(arguments: [String: Any]) throws -> [String: Any] {
+    func createSession(
+        arguments message: FlutterChannelValue<[String: Any]>
+    ) throws -> FlutterChannelValue<[String: Any]> {
+        let arguments: [String: Any] = message.value
         let id: String = UUID().uuidString
         let mode: String = arguments["mode"] as? String ?? "automatic"
         let cloudPolicy: String = arguments["cloudPolicy"] as? String ?? "never"
@@ -25,19 +28,21 @@ actor SessionRegistry {
             mode: mode,
             cloudPolicy: cloudPolicy,
             instructions: arguments["instructions"] as? String,
+            localeIdentifier: arguments["localeIdentifier"] as? String,
             useCase: arguments["useCase"] as? String,
             transcriptErrorHandlingPolicy: arguments["transcriptErrorHandlingPolicy"] as? String,
             toolMaps: arguments["tools"] as? [[String: Any]] ?? [],
             metadata: arguments["metadata"] as? [String: Any] ?? [:]
         )
         sessions[id] = session
-        return [
+        return FlutterChannelValue([
             "sessionId": id,
             "mode": session.mode
-        ]
+        ])
     }
 
-    func prewarm(arguments: [String: Any]) throws {
+    func prewarm(arguments message: FlutterChannelValue<[String: Any]>) throws {
+        let arguments: [String: Any] = message.value
         guard let id: String = arguments["sessionId"] as? String,
               let session: NativeSession = sessions[id] else {
             throw NativeSessionError.sessionNotFound
@@ -56,7 +61,8 @@ actor SessionRegistry {
         #endif
     }
 
-    func countTokens(arguments: [String: Any]) async throws -> Int {
+    func countTokens(arguments message: FlutterChannelValue<[String: Any]>) async throws -> Int {
+        let arguments: [String: Any] = message.value
         #if canImport(FoundationModels) && compiler(>=6.4)
         if #available(iOS 26.4, *) {
             let model: SystemLanguageModel = SystemLanguageModel.default
@@ -91,7 +97,10 @@ actor SessionRegistry {
         )
     }
 
-    func respondStructured(arguments: [String: Any]) async throws -> [String: Any] {
+    func respondStructured(
+        arguments message: FlutterChannelValue<[String: Any]>
+    ) async throws -> FlutterChannelValue<[String: Any]> {
+        let arguments: [String: Any] = message.value
         guard let id: String = arguments["sessionId"] as? String,
               let session: NativeSession = sessions[id] else {
             throw NativeSessionError.sessionNotFound
@@ -104,7 +113,8 @@ actor SessionRegistry {
            let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
             let prompt: Prompt = try makePrompt(promptMap: promptMap)
             let optionsMap: [String: Any] = arguments["options"] as? [String: Any] ?? [:]
-            let options: GenerationOptions = makeGenerationOptions(arguments: optionsMap)
+            let options: GenerationOptions = try makeGenerationOptions(arguments: optionsMap)
+            try await prepareToolBudget(session: session, arguments: optionsMap)
             let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] ?? [:]
             let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
             #if compiler(>=6.4)
@@ -116,15 +126,15 @@ actor SessionRegistry {
                     contextOptions: makeContextOptions(arguments: optionsMap)
                 )
                 let jsonString: String = response.content.jsonString
-                return [
+                return FlutterChannelValue([
                     "text": jsonString,
                     "usedMode": session.mode,
-                    "structuredValue": SchemaMapper.structuredValue(fromJsonString: jsonString),
+                    "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
                     "metadata": [
                         "rawContent": String(describing: response.rawContent)
                     ],
                     "usage": responseUsage(response.usage)
-                ]
+                ])
             }
             #endif
 
@@ -136,20 +146,23 @@ actor SessionRegistry {
                 options: options
             )
             let jsonString: String = response.content.jsonString
-            return [
+            return FlutterChannelValue([
                 "text": jsonString,
                 "usedMode": session.mode,
-                "structuredValue": SchemaMapper.structuredValue(fromJsonString: jsonString),
+                "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
                 "metadata": [:],
                 "usage": NSNull()
-            ]
+            ])
         }
         #endif
 
         throw NativeSessionError.foundationModelsUnavailable
     }
 
-    func respond(arguments: [String: Any]) async throws -> [String: Any] {
+    func respond(
+        arguments message: FlutterChannelValue<[String: Any]>
+    ) async throws -> FlutterChannelValue<[String: Any]> {
+        let arguments: [String: Any] = message.value
         guard let id: String = arguments["sessionId"] as? String,
               let session: NativeSession = sessions[id] else {
             throw NativeSessionError.sessionNotFound
@@ -162,7 +175,8 @@ actor SessionRegistry {
            let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
             let prompt: Prompt = try makePrompt(promptMap: promptMap)
             let optionsMap: [String: Any] = arguments["options"] as? [String: Any] ?? [:]
-            let options: GenerationOptions = makeGenerationOptions(arguments: optionsMap)
+            let options: GenerationOptions = try makeGenerationOptions(arguments: optionsMap)
+            try await prepareToolBudget(session: session, arguments: optionsMap)
             #if compiler(>=6.4)
             if #available(iOS 27.0, *) {
                 let contextOptions: ContextOptions = makeContextOptions(arguments: optionsMap)
@@ -171,7 +185,7 @@ actor SessionRegistry {
                     options: options,
                     contextOptions: contextOptions
                 )
-                return [
+                return FlutterChannelValue([
                     "text": response.content,
                     "usedMode": session.mode,
                     "structuredValue": NSNull(),
@@ -179,12 +193,12 @@ actor SessionRegistry {
                         "rawContent": String(describing: response.rawContent)
                     ],
                     "usage": responseUsage(response.usage)
-                ]
+                ])
             }
             #endif
 
             let response = try await languageSession.respond(to: prompt, options: options)
-            return [
+            return FlutterChannelValue([
                 "text": response.content,
                 "usedMode": session.mode,
                 "structuredValue": NSNull(),
@@ -192,25 +206,28 @@ actor SessionRegistry {
                     "rawContent": String(describing: response.rawContent)
                 ],
                 "usage": NSNull()
-            ]
+            ])
         }
         #endif
 
         throw NativeSessionError.foundationModelsUnavailable
     }
 
-    func stream(arguments: [String: Any], eventSink: @escaping FlutterEventSink) async {
+    func stream(
+        arguments message: FlutterChannelValue<[String: Any]>,
+        onEvent: @escaping @Sendable (FlutterChannelValue<[String: Any]>) -> Void,
+        onError: @escaping @Sendable (FlutterChannelValue<FlutterError>) -> Void
+    ) async {
+        let arguments: [String: Any] = message.value
         do {
             guard let id: String = arguments["sessionId"] as? String,
                   let session: NativeSession = sessions[id] else {
-                emit(
+                onError(FlutterChannelValue(
                     ErrorMapper.flutterError(
                         code: "invalidRequest",
                         message: "The requested session does not exist."
-                    ),
-                    to: eventSink
-                )
-                emit(FlutterEndOfEventStream, to: eventSink)
+                    )
+                ))
                 return
             }
 
@@ -222,7 +239,8 @@ actor SessionRegistry {
                let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
                 let prompt: Prompt = try makePrompt(promptMap: promptMap)
                 let optionsMap: [String: Any] = arguments["options"] as? [String: Any] ?? [:]
-                let options: GenerationOptions = makeGenerationOptions(arguments: optionsMap)
+                let options: GenerationOptions = try makeGenerationOptions(arguments: optionsMap)
+                try await prepareToolBudget(session: session, arguments: optionsMap)
                 let stream: LanguageModelSession.ResponseStream<String>
                 #if compiler(>=6.4)
                 if #available(iOS 27.0, *) {
@@ -246,13 +264,13 @@ actor SessionRegistry {
                         latestUsage = responseUsage(response.usage)
                     }
                     #endif
-                    emit([
+                    onEvent(FlutterChannelValue([
                         "type": "textSnapshot",
                         "requestId": requestId,
                         "text": response.content
-                    ], to: eventSink)
+                    ]))
                 }
-                emit([
+                onEvent(FlutterChannelValue([
                     "type": "completed",
                     "requestId": requestId,
                     "response": [
@@ -262,23 +280,19 @@ actor SessionRegistry {
                         "metadata": [:],
                         "usage": latestUsage
                     ]
-                ], to: eventSink)
-                emit(FlutterEndOfEventStream, to: eventSink)
+                ]))
                 return
             }
             #endif
 
-            emit(
+            onError(FlutterChannelValue(
                 ErrorMapper.flutterError(
                     code: "modelUnavailable",
                     message: "Foundation Models streaming is not available in this runtime or SDK."
-                ),
-                to: eventSink
-            )
-            emit(FlutterEndOfEventStream, to: eventSink)
+                )
+            ))
         } catch {
-            emit(ErrorMapper.flutterError(from: error), to: eventSink)
-            emit(FlutterEndOfEventStream, to: eventSink)
+            onError(FlutterChannelValue(ErrorMapper.flutterError(from: error)))
         }
     }
 
@@ -294,43 +308,84 @@ actor SessionRegistry {
         mode: String,
         cloudPolicy: String,
         instructions: String?,
+        localeIdentifier: String?,
         useCase: String?,
         transcriptErrorHandlingPolicy: String?,
         toolMaps: [[String: Any]],
         metadata: [String: Any]
     ) throws -> NativeSession {
+        guard ["local", "automatic", "privateCloudCompute"].contains(mode),
+              ["never", "whenExplicit", "automaticWithUserConsent"].contains(cloudPolicy) else {
+            throw NativeSessionError.invalidRequest("Unknown model mode or cloud policy.")
+        }
+        if mode == "privateCloudCompute" && cloudPolicy == "never" {
+            throw NativeSessionError.invalidRequest("CloudPolicy.never forbids Private Cloud Compute. Use local mode or explicitly authorize PCC.")
+        }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *) {
-            let tools: [any Tool] = try makeTools(id: id, toolMaps: toolMaps)
+            let toolCallBudget: ToolCallBudget? = toolMaps.isEmpty ? nil : ToolCallBudget()
+            let tools: [any Tool] = try makeTools(
+                id: id,
+                toolMaps: toolMaps,
+                budget: toolCallBudget
+            )
 
-            if mode == "privateCloudCompute" || mode == "automatic" && cloudPolicy != "never" {
+            if mode == "privateCloudCompute" || mode == "automatic" && cloudPolicy == "automaticWithUserConsent" {
                 #if compiler(>=6.4)
                 if #available(iOS 27.0, *) {
-                    let privateCloud: PrivateCloudComputeLanguageModel = PrivateCloudComputeLanguageModel()
-                    if case .available = privateCloud.availability {
-                        let languageSession: LanguageModelSession = makePrivateCloudSession(
-                            model: privateCloud,
-                            tools: tools,
-                            instructions: instructions
-                        )
-                        applyTranscriptErrorHandlingPolicy(
-                            transcriptErrorHandlingPolicy,
-                            to: languageSession
-                        )
-                        return NativeSession(
-                            id: id,
-                            mode: "privateCloudCompute",
-                            instructions: instructions,
-                            metadata: metadata,
-                            languageSession: languageSession
-                        )
-                    }
-                    if mode == "privateCloudCompute" {
-                        throw NativeSessionError.modelUnavailable(
-                            code: "privateCloudUnavailable",
-                            message: String(describing: privateCloud.availability),
-                            recoverySuggestion: "Check Apple Intelligence, network availability, device eligibility, PCC quota, and iCloud account state."
-                        )
+                    if !PrivateCloudComputeAccess.isEnabled {
+                        if mode == "privateCloudCompute" {
+                            throw NativeSessionError.modelUnavailable(
+                                code: "missingEntitlement",
+                                message: PrivateCloudComputeAccess.unavailableReason,
+                                recoverySuggestion: PrivateCloudComputeAccess.recoverySuggestion
+                            )
+                        }
+                    } else {
+                        let privateCloud: PrivateCloudComputeLanguageModel =
+                            PrivateCloudComputeLanguageModel()
+                        if case .available = privateCloud.availability {
+                            let languageSession: LanguageModelSession = makePrivateCloudSession(
+                                model: privateCloud,
+                                tools: tools,
+                                instructions: instructions
+                            )
+                            applyTranscriptErrorHandlingPolicy(
+                                transcriptErrorHandlingPolicy,
+                                to: languageSession
+                            )
+                            return NativeSession(
+                                id: id,
+                                mode: "privateCloudCompute",
+                                instructions: instructions,
+                                metadata: metadata,
+                                languageSession: languageSession,
+                                toolCallBudget: toolCallBudget
+                            )
+                        }
+                        if mode == "privateCloudCompute" {
+                            let statusCode: String
+                            switch privateCloud.availability {
+                            case .available:
+                                statusCode = "privateCloudUnavailable"
+                            case .unavailable(let reason):
+                                switch reason {
+                                case .deviceNotEligible:
+                                    statusCode = "unsupportedPlatform"
+                                case .systemNotReady:
+                                    statusCode = "privateCloudUnavailable"
+                                @unknown default:
+                                    statusCode = "privateCloudUnavailable"
+                                }
+                            @unknown default:
+                                statusCode = "privateCloudUnavailable"
+                            }
+                            throw NativeSessionError.modelUnavailable(
+                                code: statusCode,
+                                message: String(describing: privateCloud.availability),
+                                recoverySuggestion: "Check Apple Intelligence, network availability, device eligibility, PCC entitlement, quota, and iCloud account state."
+                            )
+                        }
                     }
                 } else if mode == "privateCloudCompute" {
                     throw NativeSessionError.modelUnavailable(
@@ -355,6 +410,13 @@ actor SessionRegistry {
                 : SystemLanguageModel.default
             switch model.availability {
             case .available:
+                if let localeIdentifier, !model.supportsLocale(Locale(identifier: localeIdentifier)) {
+                    throw NativeSessionError.modelUnavailable(
+                        code: "unsupportedLanguage",
+                        message: "The on-device model does not support the requested locale.",
+                        recoverySuggestion: "Choose a supported locale and create a new session."
+                    )
+                }
                 let languageSession: LanguageModelSession = makeLocalSession(
                     model: model,
                     tools: tools,
@@ -373,12 +435,13 @@ actor SessionRegistry {
                     mode: "local",
                     instructions: instructions,
                     metadata: metadata,
-                    languageSession: languageSession
+                    languageSession: languageSession,
+                    toolCallBudget: toolCallBudget
                 )
             case .unavailable(let reason):
                 let reasonText: String = String(describing: reason)
                 throw NativeSessionError.modelUnavailable(
-                    code: errorCode(from: reasonText),
+                    code: ErrorMapper.localAvailabilityCode(reason),
                     message: reasonText,
                     recoverySuggestion: "Enable Apple Intelligence, verify supported language settings, and wait for model assets to finish downloading."
                 )
@@ -401,17 +464,36 @@ actor SessionRegistry {
 
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
-    private func makeTools(id: String, toolMaps: [[String: Any]]) throws -> [any Tool] {
-        guard let toolBridge, !toolMaps.isEmpty else {
+    private func makeTools(
+        id: String,
+        toolMaps: [[String: Any]],
+        budget: ToolCallBudget?
+    ) throws -> [any Tool] {
+        guard !toolMaps.isEmpty else {
             return []
         }
         var tools: [any Tool] = []
+        var names: Set<String> = []
         for toolMap in toolMaps {
             guard let name: String = toolMap["name"] as? String, !name.isEmpty else {
-                continue
+                throw NativeSessionError.invalidRequest("Every tool must have a non-empty name.")
+            }
+            guard names.insert(name).inserted else {
+                throw NativeSessionError.invalidRequest("Tool names must be unique within a session.")
+            }
+            let timeoutMilliseconds: Int = intValue(
+                from: toolMap["timeoutMilliseconds"]
+            ) ?? 20_000
+            guard (1...600_000).contains(timeoutMilliseconds) else {
+                throw NativeSessionError.invalidRequest(
+                    "Tool timeouts must be between 1 millisecond and 10 minutes."
+                )
             }
             let parametersMap: [String: Any] = toolMap["parameters"] as? [String: Any]
                 ?? ["type": "object", "properties": [:]]
+            guard parametersMap["type"] as? String == "object" else {
+                throw NativeSessionError.invalidRequest("Tool parameters must use an object schema.")
+            }
             let parameters: GenerationSchema = try SchemaMapper.generationSchema(from: parametersMap)
             tools.append(
                 DynamicTool(
@@ -419,7 +501,9 @@ actor SessionRegistry {
                     description: toolMap["description"] as? String ?? "",
                     parameters: parameters,
                     sessionId: id,
-                    bridge: toolBridge
+                    bridge: toolBridge,
+                    budget: budget,
+                    timeoutMilliseconds: timeoutMilliseconds
                 )
             )
         }
@@ -468,39 +552,69 @@ actor SessionRegistry {
     #endif
     #endif
 
-    private nonisolated func emit(_ value: Any, to eventSink: @escaping FlutterEventSink) {
-        DispatchQueue.main.async {
-            eventSink(value)
-        }
-    }
-
-    private nonisolated func errorCode(from reason: String) -> String {
-        let normalized: String = reason.lowercased()
-        if normalized.contains("appleintelligence") || normalized.contains("intelligence") {
-            return "appleIntelligenceDisabled"
-        }
-        if normalized.contains("asset") || normalized.contains("modelnotready") || normalized.contains("not ready") {
-            return "assetsUnavailable"
-        }
-        if normalized.contains("devicenoteligible") || normalized.contains("not eligible") {
-            return "unsupportedPlatform"
-        }
-        if normalized.contains("language") || normalized.contains("locale") {
-            return "unsupportedLanguage"
-        }
-        return "modelUnavailable"
-    }
-
     #if canImport(FoundationModels)
     @available(iOS 26.0, *)
-    private nonisolated func makeGenerationOptions(arguments: [String: Any]) -> GenerationOptions {
-        let samplingMode: GenerationOptions.SamplingMode? = makeSamplingMode(
+    private func prepareToolBudget(
+        session: NativeSession,
+        arguments: [String: Any]
+    ) async throws {
+        try Task.checkCancellation()
+        if session.mode == "privateCloudCompute", arguments["cloudPolicy"] as? String == "never" {
+            throw NativeSessionError.invalidRequest("This request forbids cloud use. Create a local session for this request.")
+        }
+        let mode: String = arguments["toolCallingMode"] as? String ?? "allowed"
+        #if compiler(<6.4)
+        if mode != "allowed" || (arguments["reasoningLevel"] as? String ?? "automatic") != "automatic" {
+            throw NativeSessionError.modelUnavailable(
+                code: "unsupportedCapability",
+                message: "This build cannot apply explicit tool calling modes or reasoning levels.",
+                recoverySuggestion: "Build with Xcode 27 or use the default generation options."
+            )
+        }
+        #endif
+        if #available(iOS 27.0, *) {
+            if mode == "required" && session.toolCallBudget == nil {
+                throw NativeSessionError.invalidRequest("Required tool calling needs at least one registered tool.")
+            }
+        } else if mode != "allowed" || (arguments["reasoningLevel"] as? String ?? "automatic") != "automatic" {
+            throw NativeSessionError.modelUnavailable(
+                code: "unsupportedCapability",
+                message: "Explicit tool calling modes and reasoning levels require iOS 27.",
+                recoverySuggestion: "Use the default options on iOS 26."
+            )
+        }
+        guard let budget: ToolCallBudget = session.toolCallBudget else {
+            return
+        }
+        let maximumCalls: Int = intValue(from: arguments["maximumToolCalls"]) ?? 16
+        guard (1...128).contains(maximumCalls) else {
+            throw NativeSessionError.invalidRequest(
+                "maximumToolCalls must be between 1 and 128."
+            )
+        }
+        await budget.reset(maximumCalls: maximumCalls)
+    }
+
+    @available(iOS 26.0, *)
+    private nonisolated func makeGenerationOptions(arguments: [String: Any]) throws -> GenerationOptions {
+        let samplingMode: GenerationOptions.SamplingMode? = try makeSamplingMode(
             arguments: arguments
         )
         let temperature: Double? = doubleValue(from: arguments["temperature"])
         let maximumResponseTokens: Int? = intValue(
             from: arguments["maximumResponseTokens"]
         )
+        if let temperature,
+           !temperature.isFinite || temperature < 0 || temperature > 1 {
+            throw NativeSessionError.invalidRequest(
+                "Generation temperature must be a finite value between zero and one."
+            )
+        }
+        if let maximumResponseTokens, maximumResponseTokens <= 0 {
+            throw NativeSessionError.invalidRequest(
+                "maximumResponseTokens must be greater than zero."
+            )
+        }
 
         #if compiler(>=6.4)
         if #available(iOS 27.0, *) {
@@ -531,7 +645,7 @@ actor SessionRegistry {
     @available(iOS 26.0, *)
     private nonisolated func makeSamplingMode(
         arguments: [String: Any]
-    ) -> GenerationOptions.SamplingMode? {
+    ) throws -> GenerationOptions.SamplingMode? {
         let seedValue: Int? = intValue(from: arguments["samplingSeed"])
         let seed: UInt64? = seedValue.flatMap { value in
             value >= 0 ? UInt64(value) : nil
@@ -540,7 +654,12 @@ actor SessionRegistry {
         case "greedy":
             return .greedy
         case "randomTopK":
-            let top: Int = max(1, intValue(from: arguments["samplingTopK"]) ?? 40)
+            let top: Int = intValue(from: arguments["samplingTopK"]) ?? 40
+            guard top > 0 else {
+                throw NativeSessionError.invalidRequest(
+                    "samplingTopK must be greater than zero."
+                )
+            }
             #if compiler(>=6.4)
             return .random(top: top, seed: seed)
             #else
@@ -550,13 +669,18 @@ actor SessionRegistry {
             let threshold: Double = doubleValue(
                 from: arguments["samplingProbabilityThreshold"]
             ) ?? 0.95
+            guard threshold.isFinite, threshold >= 0, threshold <= 1 else {
+                throw NativeSessionError.invalidRequest(
+                    "samplingProbabilityThreshold must be a finite value between zero and one."
+                )
+            }
             #if compiler(>=6.4)
             return .random(
-                probabilityThreshold: min(max(threshold, 0), 1),
+                probabilityThreshold: threshold,
                 seed: seed
             )
             #else
-            return .random(probabilityThreshold: min(max(threshold, 0), 1))
+            return .random(probabilityThreshold: threshold)
             #endif
         default:
             return nil
@@ -632,14 +756,30 @@ actor SessionRegistry {
         let path: String? = attachment["path"] as? String
 
         if isPdfAttachment(path: path, mimeType: mimeType) {
-            guard let data: Data = try attachmentData(attachment),
+            guard let data: Data = try attachmentData(
+                attachment,
+                maximumBytes: 20 * 1024 * 1024
+            ),
                   let document: PDFDocument = PDFDocument(data: data) else {
                 throw NativeSessionError.invalidRequest(
                     "The PDF attachment could not be opened."
                 )
             }
-            let content: String = (0..<document.pageCount)
-                .compactMap { document.page(at: $0)?.string }
+            var pages: [String] = []
+            var extractedByteCount: Int = 0
+            for index in 0..<document.pageCount {
+                guard let pageText: String = document.page(at: index)?.string else {
+                    continue
+                }
+                extractedByteCount += pageText.lengthOfBytes(using: .utf8)
+                guard extractedByteCount <= 5 * 1024 * 1024 else {
+                    throw NativeSessionError.invalidRequest(
+                        "Extracted PDF text must be 5 MB or smaller. Split the document before attaching it."
+                    )
+                }
+                pages.append(pageText)
+            }
+            let content: String = pages
                 .joined(separator: "\n\n")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !content.isEmpty else {
@@ -653,20 +793,21 @@ actor SessionRegistry {
         guard isTextAttachment(path: path, mimeType: mimeType) else {
             return nil
         }
-        guard let data: Data = try attachmentData(attachment) else {
+        guard let data: Data = try attachmentData(
+            attachment,
+            maximumBytes: 5 * 1024 * 1024
+        ) else {
             throw NativeSessionError.invalidRequest(
                 "The text attachment could not be read."
-            )
-        }
-        guard data.count <= 5 * 1024 * 1024 else {
-            throw NativeSessionError.invalidRequest(
-                "Text attachments must be 5 MB or smaller."
             )
         }
         guard let content: String = String(data: data, encoding: .utf8) else {
             throw NativeSessionError.invalidRequest(
                 "Text attachments must use UTF-8 encoding."
             )
+        }
+        guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw NativeSessionError.invalidRequest("The text attachment is empty.")
         }
         return Prompt(labeledContent(label: label, content: content))
     }
@@ -698,19 +839,50 @@ actor SessionRegistry {
     }
 
     @available(iOS 26.0, *)
-    private nonisolated func attachmentData(_ attachment: [String: Any]) throws -> Data? {
+    private nonisolated func attachmentData(
+        _ attachment: [String: Any],
+        maximumBytes: Int
+    ) throws -> Data? {
         if let path: String = attachment["path"] as? String, !path.isEmpty {
             guard FileManager.default.isReadableFile(atPath: path) else {
                 throw NativeSessionError.invalidRequest(
                     "The attachment file is missing or cannot be read."
                 )
             }
-            return try Data(contentsOf: URL(fileURLWithPath: path), options: [.mappedIfSafe])
+            let attributes: [FileAttributeKey: Any] = try FileManager.default.attributesOfItem(
+                atPath: path
+            )
+            let fileSize: Int64 = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+            guard fileSize <= Int64(maximumBytes) else {
+                throw NativeSessionError.invalidRequest(
+                    "The attachment exceeds the allowed size of \(maximumBytes / 1024 / 1024) MB."
+                )
+            }
+            let data: Data = try Data(
+                contentsOf: URL(fileURLWithPath: path),
+                options: [.mappedIfSafe]
+            )
+            guard data.count <= maximumBytes else {
+                throw NativeSessionError.invalidRequest(
+                    "The attachment exceeds the allowed size of \(maximumBytes / 1024 / 1024) MB."
+                )
+            }
+            return data
         }
         if let typedData: FlutterStandardTypedData = attachment["bytes"] as? FlutterStandardTypedData {
+            guard typedData.data.count <= maximumBytes else {
+                throw NativeSessionError.invalidRequest(
+                    "The attachment exceeds the allowed size of \(maximumBytes / 1024 / 1024) MB."
+                )
+            }
             return typedData.data
         }
         if let values: [Any] = attachment["bytes"] as? [Any] {
+            guard values.count <= maximumBytes else {
+                throw NativeSessionError.invalidRequest(
+                    "The attachment exceeds the allowed size of \(maximumBytes / 1024 / 1024) MB."
+                )
+            }
             var bytes: [UInt8] = []
             bytes.reserveCapacity(values.count)
             for value in values {
@@ -739,18 +911,16 @@ actor SessionRegistry {
         let label: String? = attachment["label"] as? String
         let path: String? = attachment["path"] as? String
         let declaredAsImage: Bool = isImageAttachment(path: path, mimeType: mimeType)
-        guard let data: Data = try attachmentData(attachment), !data.isEmpty else {
+        guard let data: Data = try attachmentData(
+            attachment,
+            maximumBytes: 50 * 1024 * 1024
+        ), !data.isEmpty else {
             if declaredAsImage {
                 throw NativeSessionError.invalidRequest(
                     "The image attachment is empty or cannot be read."
                 )
             }
             return nil
-        }
-        guard data.count <= 50 * 1024 * 1024 else {
-            throw NativeSessionError.invalidRequest(
-                "Image attachments must be 50 MB or smaller."
-            )
         }
         guard let source: CGImageSource = CGImageSourceCreateWithData(data as CFData, nil) else {
             if declaredAsImage {
@@ -763,7 +933,7 @@ actor SessionRegistry {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 4096,
+            kCGImageSourceThumbnailMaxPixelSize: 2048,
             kCGImageSourceShouldCacheImmediately: true
         ]
         guard let cgImage: CGImage = CGImageSourceCreateThumbnailAtIndex(
@@ -775,22 +945,18 @@ actor SessionRegistry {
                 "The image could not be decoded."
             )
         }
-        return Prompt(visionImageContext(cgImage: cgImage, label: label))
+        return Prompt(try visionImageContext(cgImage: cgImage, label: label))
     }
 
     @available(iOS 27.0, *)
-    private nonisolated func visionImageContext(cgImage: CGImage, label: String?) -> String {
+    private nonisolated func visionImageContext(cgImage: CGImage, label: String?) throws -> String {
         let handler: VNImageRequestHandler = VNImageRequestHandler(cgImage: cgImage)
         let textRequest: VNRecognizeTextRequest = VNRecognizeTextRequest()
         textRequest.recognitionLevel = .accurate
         textRequest.usesLanguageCorrection = true
-        try? handler.perform([textRequest])
-
         let classificationRequest: VNClassifyImageRequest = VNClassifyImageRequest()
-        try? handler.perform([classificationRequest])
-
         let barcodeRequest: VNDetectBarcodesRequest = VNDetectBarcodesRequest()
-        try? handler.perform([barcodeRequest])
+        try handler.perform([textRequest, classificationRequest, barcodeRequest])
 
         let recognizedText: String = (textRequest.results ?? [])
             .compactMap { $0.topCandidates(1).first?.string }
@@ -916,16 +1082,50 @@ struct DynamicTool: Tool {
     let parameters: GenerationSchema
     let sessionId: String
     let bridge: ToolBridge
+    let budget: ToolCallBudget?
+    let timeoutMilliseconds: Int
 
     func call(arguments: GeneratedContent) async throws -> String {
-        await bridge.callTool(
+        if let budget {
+            try await budget.consume()
+        }
+        return await bridge.callTool(
             sessionId: sessionId,
             name: name,
-            argumentsJson: arguments.jsonString
+            argumentsJson: arguments.jsonString,
+            timeoutMilliseconds: timeoutMilliseconds
         )
     }
 }
 #endif
+
+actor ToolCallBudget {
+    private var maximumCalls: Int = 16
+    private var consumedCalls: Int = 0
+
+    func reset(maximumCalls: Int) {
+        self.maximumCalls = maximumCalls
+        consumedCalls = 0
+    }
+
+    func consume() throws {
+        guard consumedCalls < maximumCalls else {
+            throw ToolCallBudgetError.maximumCallsExceeded(maximumCalls)
+        }
+        consumedCalls += 1
+    }
+}
+
+enum ToolCallBudgetError: LocalizedError {
+    case maximumCallsExceeded(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .maximumCallsExceeded(let maximumCalls):
+            return "The model exceeded the per-request limit of \(maximumCalls) tool calls."
+        }
+    }
+}
 
 struct NativeSession {
     let id: String
@@ -933,13 +1133,22 @@ struct NativeSession {
     let instructions: String?
     let metadata: [String: Any]
     let languageSession: Any?
+    let toolCallBudget: ToolCallBudget?
 
-    init(id: String, mode: String, instructions: String?, metadata: [String: Any], languageSession: Any? = nil) {
+    init(
+        id: String,
+        mode: String,
+        instructions: String?,
+        metadata: [String: Any],
+        languageSession: Any? = nil,
+        toolCallBudget: ToolCallBudget? = nil
+    ) {
         self.id = id
         self.mode = mode
         self.instructions = instructions
         self.metadata = metadata
         self.languageSession = languageSession
+        self.toolCallBudget = toolCallBudget
     }
 }
 

@@ -10,7 +10,10 @@ import 'transcription.dart';
 /// Main entry point for Apple Foundation Models from Flutter.
 final class CupertinoFoundationModels {
   CupertinoFoundationModels({CupertinoFoundationModelsPlatform? platform})
-    : _platform = platform ?? MethodChannelCupertinoFoundationModels();
+    : _platform = platform ?? _defaultPlatform;
+
+  static final CupertinoFoundationModelsPlatform _defaultPlatform =
+      MethodChannelCupertinoFoundationModels();
 
   final CupertinoFoundationModelsPlatform _platform;
 

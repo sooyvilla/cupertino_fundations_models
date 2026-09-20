@@ -1,52 +1,56 @@
-# Cupertino Foundations Models Example
+# Apple native example
 
-Chat app that shows Apple Foundation Models from Flutter on a real Apple device: on-device AI generation with streaming, multi-turn conversation context, live microphone transcription, image attachments, and hybrid routing to an external provider.
+A Flutter chat demonstrating the native Apple API in version 0.3.0. For apps
+using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
-The app demonstrates:
+- Persistent Apple on-device session, cumulative streaming snapshots and a
+  bounded `DeviceTimeTool`.
+- Explicit Private Cloud Compute selection; local generation is the default.
+- Live Speech transcription with separate on-device/automatic/server choices.
+- Shared language selection, availability diagnostics and typed error display.
+- Text/PDF extraction and Vision-backed image context through the document picker.
+- Request cancellation, draft recovery and serialized session disposal.
 
-- Hybrid chat through `FoundationModelsOrchestrator.startChat()` with streaming message bubbles.
-- Conversation context that survives fallback between Apple local, Private Cloud Compute, and an optional Gemini provider.
-- Live microphone transcription with `CupertinoFoundationModels.liveTranscription()` feeding the chat input while you speak.
-- A searchable language selector backed by `getSupportedLanguages()`; one locale controls model responses and live transcription.
-- Image attachments through the native document picker.
-- Availability checks and runtime diagnostics.
+Source: [lib/main.dart](lib/main.dart). External API routing belongs to the host
+application; there is no Gemini client or provider key in this example.
 
-## Full Source
+## Setup
 
-The full example lives in [`lib/main.dart`](lib/main.dart). The code shows how to wire:
+Use Flutter 3.41+/Dart 3.11+, an Apple Intelligence-capable device with its model
+ready, and a suitable Xcode SDK. Generation needs iOS 26+, token counts need
+26.4+, and PCC/new tool modes need iOS 27+. Development was compiled with Xcode
+27.2 beta; this does not establish runtime compatibility with every OS version.
 
-- `FoundationModelsOrchestrator` with `FoundationModelsRoutingPolicy.hybrid()`
-- `FoundationModelsChatSession.sendStream()` with `OrchestratedChatTextEvent` and `OrchestratedChatCompletionEvent`
-- A custom `FoundationModelsExternalProvider` (Gemini REST adapter, no third-party packages)
-- `CupertinoFoundationModels.liveTranscription()`
-- `CupertinoFoundationModels.getSupportedLanguages()`
-- `CupertinoFoundationModels.pickFile()` and prompt attachments
-- `CupertinoFoundationModels.checkAvailability()` and `getDiagnostics()`
+The example includes the Speech and microphone usage descriptions. Grant those
+permissions only when using dictation. On-device Speech assets may need an initial
+download. Choosing an Apple Speech server mode is independent of PCC selection.
 
-## Run
+For PCC, obtain Apple's managed entitlement, configure signing and explicitly
+set `CupertinoFoundationModelsPrivateCloudComputeEnabled` in the host Info.plist.
+The example leaves this flag off; changing it does not grant the entitlement.
+Consult the [package setup](../README.md) before enabling it.
+
+From the example directory, on your own device when you choose to run it:
 
 ```bash
-cd example
 flutter pub get
-flutter run -d <ios-device-id>
+flutter run
 ```
 
-To demo hybrid routing with a Gemini fallback, pass an API key:
+No API key is needed for local generation. A simulator is not a substitute for
+validating Apple Intelligence, microphone, assets, permissions or PCC on a device.
 
-```bash
-flutter run -d <ios-device-id> --dart-define=GEMINI_API_KEY=your_key
-```
+## Behavior and limits
 
-Use a physical iOS 27 device for the strongest Foundation Models path. Features that require iOS 27 must be compiled with Xcode 27, either the beta or the official release if it is already available. Private Cloud Compute requires Apple's managed entitlement.
+A route/language change resets the native conversation. One session accepts one
+request at a time. Images are preprocessed with Vision into text; native image
+Attachment calls are disabled. Large documents need application-side chunking.
+This sample is not an autonomous agent or a tool authorization framework.
 
-For Xcode beta builds:
+The existing `CFM_SMOKE_TEST` entry point is an **opt-in device harness**, not
+normal app startup and not evidence that current tests passed. It runs only when
+explicitly enabled with `--dart-define=CFM_SMOKE_TEST=true`. It was not executed
+during the September 19 audit. Do not enable it in distributed application builds.
 
-```bash
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer flutter run -d <ios-device-id>
-```
-
-Apple Intelligence must be enabled, the device language and Siri language must be supported, and model assets must finish downloading before local generation is available.
-
-The language button shows only locales supported by both the on-device model and modern live transcription. A speech icon means the transcription asset is installed; a download icon means iOS may download it on first use. Apple Intelligence availability can still depend on the device and Siri language configuration.
-
-Live transcription and speech features require the microphone and speech recognition permissions already declared in this example's `Info.plist`.
+See [known failures and recovery](../doc/troubleshooting.md) and the
+[current audit](../doc/ios-27.2-audit-2026-09-19.md) for evidence boundaries.

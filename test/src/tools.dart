@@ -6,6 +6,11 @@ import 'test_helpers.dart';
 void main() {
   group('tools', () {
     test('definitions and results serialize', () {
+      const declaration = ToolDefinition(
+        name: 'lookup',
+        description: 'Lookup',
+        parameters: <String, Object?>{'type': 'object'},
+      );
       final tool = TestTool(
         name: 'search',
         description: 'Search',
@@ -17,6 +22,24 @@ void main() {
       expect(
         ToolDefinition.fromTool(tool).toMap()['timeoutMilliseconds'],
         1000,
+      );
+      expect(declaration.toMap()['name'], 'lookup');
+      expect(
+        () => const ToolDefinition(
+          name: '',
+          description: 'Invalid',
+          parameters: <String, Object?>{},
+        ).toMap(),
+        throwsArgumentError,
+      );
+      expect(
+        () => const ToolDefinition(
+          name: 'slow',
+          description: 'Invalid',
+          parameters: <String, Object?>{},
+          timeout: Duration(minutes: 11),
+        ).toMap(),
+        throwsArgumentError,
       );
       expect(
         const ToolResult.success(<String>['ok']).toMap()['isError'],

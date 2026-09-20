@@ -1,3 +1,5 @@
+> Historical August 12 snapshot. For current contracts and validation boundaries, see the [September 19 iOS 27.2 audit](ios-27.2-audit-2026-09-19.md).
+
 # iOS 27 beta 5 and Foundation Models
 
 Research date: 2026-08-12

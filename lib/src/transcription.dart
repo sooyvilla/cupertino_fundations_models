@@ -36,6 +36,16 @@ final class AudioTranscriptionRequest {
 
   /// Converts this request into a platform-channel payload.
   Map<String, Object?> toMap() {
+    if (filePath.trim().isEmpty || localeIdentifier.trim().isEmpty) {
+      throw ArgumentError('An audio file path and locale are required.');
+    }
+    if (timeout.inMilliseconds < 1) {
+      throw ArgumentError.value(
+        timeout,
+        'timeout',
+        'Must be at least 1 millisecond.',
+      );
+    }
     return <String, Object?>{
       'filePath': filePath,
       'localeIdentifier': localeIdentifier,

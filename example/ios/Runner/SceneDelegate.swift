@@ -1,4 +1,4 @@
-import Flutter
+@preconcurrency import Flutter
 import UIKit
 
 class SceneDelegate: FlutterSceneDelegate {

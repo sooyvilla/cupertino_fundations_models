@@ -26,6 +26,7 @@ void main() {
         samplingMode: SamplingMode.randomTopK,
         temperature: 0.4,
         maximumResponseTokens: 20,
+        maximumToolCalls: 4,
         toolCallingMode: ToolCallingMode.required,
         reasoningLevel: ReasoningLevel.deep,
         cloudPolicy: CloudPolicy.automaticWithUserConsent,
@@ -33,6 +34,11 @@ void main() {
         timeout: Duration(milliseconds: 7),
       );
       expect(options.toMap()['timeoutMilliseconds'], 7);
+      expect(options.toMap()['maximumToolCalls'], 4);
+      expect(
+        () => const GenerationOptions(timeout: Duration.zero).toMap(),
+        throwsArgumentError,
+      );
     });
 
     test('model and structured responses parse maps', () {

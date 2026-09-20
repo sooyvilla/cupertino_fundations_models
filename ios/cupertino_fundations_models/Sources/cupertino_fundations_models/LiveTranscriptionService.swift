@@ -1,40 +1,68 @@
-import AVFoundation
-import Flutter
+@preconcurrency import AVFoundation
+@preconcurrency import Flutter
 import Foundation
 import Speech
 
-final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
+@MainActor
+final class LiveTranscriptionService: NSObject, @preconcurrency FlutterStreamHandler {
     private let audioEngine: AVAudioEngine = AVAudioEngine()
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var analyzerFinishInput: (() -> Void)?
-    private var analyzerCancel: (() -> Void)?
+    private var analyzerCancel: (() async -> Void)?
     private var analyzerResultsTask: Task<Void, Never>?
     private var captureProvider: AnyObject?
     private var captureSession: AVCaptureSession?
+    private let captureQueue: DispatchQueue = DispatchQueue(
+        label: "cupertino_fundations_models.live_capture",
+        qos: .userInitiated
+    )
+    private var cleanupTask: Task<Void, Never>?
+    private var cleanupToken: UUID?
     private var startTask: Task<Void, Never>?
     private var activeToken: UUID?
     private var eventSink: FlutterEventSink?
 
     func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        stopCapture()
+        let cleanupTask: Task<Void, Never>? = stopCapture()
         let payload: [String: Any] = MessageCodec.dictionary(from: arguments)
         let token: UUID = UUID()
         activeToken = token
         eventSink = events
         startTask = Task { [weak self] in
+            await cleanupTask?.value
+            guard !Task.isCancelled else {
+                return
+            }
             await self?.start(arguments: payload, token: token)
         }
         return nil
     }
 
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        stopCapture()
+        _ = stopCapture()
         eventSink = nil
         return nil
     }
 
+    func stop() async {
+        let pendingCleanup: Task<Void, Never>? = stopCapture()
+        eventSink = nil
+        await pendingCleanup?.value
+    }
+
     private func start(arguments: [String: Any], token: UUID) async {
+        do {
+            try SpeechPermissions.validate(requiresMicrophone: true)
+        } catch {
+            fail(
+                token: token,
+                code: "invalidRequest",
+                message: "The host app is missing a speech or microphone usage description.",
+                recoverySuggestion: "Add NSSpeechRecognitionUsageDescription and NSMicrophoneUsageDescription to Info.plist."
+            )
+            return
+        }
         let speechStatus: SFSpeechRecognizerAuthorizationStatus = await requestSpeechAuthorization()
         guard isActive(token) else {
             return
@@ -119,9 +147,12 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
 
             let analyzer: SpeechAnalyzer = SpeechAnalyzer(modules: modules)
             analyzerCancel = {
-                Task {
-                    await analyzer.cancelAndFinishNow()
-                }
+                await analyzer.cancelAndFinishNow()
+            }
+            try await analyzer.prepareToAnalyze(in: nil)
+            guard isActive(token) else {
+                await analyzer.cancelAndFinishNow()
+                return false
             }
             startAnalyzerResults(
                 transcriber: transcriber,
@@ -142,7 +173,7 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
             guard let analyzerFormat: AVAudioFormat = await SpeechAnalyzer
                 .bestAvailableAudioFormat(compatibleWith: modules),
                 isActive(token) else {
-                cleanupCaptureComponents()
+                await cleanupCaptureComponentsNow()
                 return false
             }
 
@@ -170,7 +201,7 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
 
             try await analyzer.start(inputSequence: inputSequence)
             guard isActive(token) else {
-                cleanupCaptureComponents()
+                await cleanupCaptureComponentsNow()
                 return false
             }
 
@@ -212,7 +243,7 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
             try audioEngine.start()
             return true
         } catch {
-            cleanupCaptureComponents()
+            await cleanupCaptureComponentsNow()
             return false
         }
     }
@@ -247,7 +278,11 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
 
         captureProvider = provider
         captureSession = provider.captureSession
-        provider.captureSession.startRunning()
+        await startCaptureSession(provider.captureSession)
+        guard isActive(token) else {
+            await cleanupCaptureComponentsNow()
+            return false
+        }
         guard provider.captureSession.isRunning else {
             throw NativeSessionError.modelUnavailable(
                 code: "speechRecognitionUnavailable",
@@ -378,7 +413,7 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
             audioEngine.prepare()
             try audioEngine.start()
         } catch {
-            cleanupCaptureComponents()
+            _ = scheduleCaptureCleanup()
             fail(
                 token: token,
                 code: "speechRecognitionUnavailable",
@@ -389,27 +424,31 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
         }
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else {
-                return
-            }
             if let result {
-                self.emit(
-                    token: token,
-                    text: result.bestTranscription.formattedString,
-                    isFinal: result.isFinal,
-                    mode: mode,
-                    localeIdentifier: localeIdentifier,
-                    engine: "sfSpeech"
-                )
+                let text: String = result.bestTranscription.formattedString
+                let isFinal: Bool = result.isFinal
+                Task { @MainActor [weak self] in
+                    self?.emit(
+                        token: token,
+                        text: text,
+                        isFinal: isFinal,
+                        mode: mode,
+                        localeIdentifier: localeIdentifier,
+                        engine: "sfSpeech"
+                    )
+                }
                 return
             }
             if let error {
-                self.fail(
-                    token: token,
-                    code: "speechRecognitionUnavailable",
-                    message: error.localizedDescription,
-                    recoverySuggestion: "Retry live transcription or check speech availability."
-                )
+                let message: String = error.localizedDescription
+                Task { @MainActor [weak self] in
+                    self?.fail(
+                        token: token,
+                        code: "speechRecognitionUnavailable",
+                        message: message,
+                        recoverySuggestion: "Retry live transcription or check speech availability."
+                    )
+                }
             }
         }
     }
@@ -422,24 +461,22 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
         localeIdentifier: String,
         engine: String
     ) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.activeToken == token, let sink = self.eventSink else {
-                return
-            }
-            sink([
-                "text": text,
-                "isFinal": isFinal,
-                "metadata": [
-                    "usedMode": mode,
-                    "localeIdentifier": localeIdentifier,
-                    "engine": engine
-                ]
-            ])
-            if isFinal {
-                sink(FlutterEndOfEventStream)
-                self.eventSink = nil
-                self.stopCapture()
-            }
+        guard activeToken == token, let sink = eventSink else {
+            return
+        }
+        sink([
+            "text": text,
+            "isFinal": isFinal,
+            "metadata": [
+                "usedMode": mode,
+                "localeIdentifier": localeIdentifier,
+                "engine": engine
+            ]
+        ])
+        if isFinal {
+            sink(FlutterEndOfEventStream)
+            eventSink = nil
+            _ = stopCapture()
         }
     }
 
@@ -449,36 +486,67 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
         message: String,
         recoverySuggestion: String
     ) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.activeToken == token, let sink = self.eventSink else {
+        guard activeToken == token, let sink = eventSink else {
+            return
+        }
+        sink(
+            ErrorMapper.flutterError(
+                code: code,
+                message: message,
+                details: ["recoverySuggestion": recoverySuggestion]
+            )
+        )
+        sink(FlutterEndOfEventStream)
+        eventSink = nil
+        _ = stopCapture()
+    }
+
+    @discardableResult
+    private func stopCapture() -> Task<Void, Never>? {
+        activeToken = nil
+        let startingTask: Task<Void, Never>? = startTask
+        startingTask?.cancel()
+        startTask = nil
+        return scheduleCaptureCleanup(startingTask: startingTask)
+    }
+
+    private func scheduleCaptureCleanup(startingTask: Task<Void, Never>? = nil) -> Task<Void, Never>? {
+        let previousTask: Task<Void, Never>? = cleanupTask
+        let cleanup: (() async -> Void)? = takeCaptureCleanup()
+        guard previousTask != nil || cleanup != nil || startingTask != nil else {
+            return nil
+        }
+        let token: UUID = UUID()
+        cleanupToken = token
+        let task: Task<Void, Never> = Task { [weak self] in
+            await previousTask?.value
+            if let cleanup {
+                await cleanup()
+            }
+            await startingTask?.value
+            guard self?.cleanupToken == token else {
                 return
             }
-            sink(
-                ErrorMapper.flutterError(
-                    code: code,
-                    message: message,
-                    details: ["recoverySuggestion": recoverySuggestion]
-                )
-            )
-            sink(FlutterEndOfEventStream)
-            self.eventSink = nil
-            self.stopCapture()
+            self?.cleanupTask = nil
+            self?.cleanupToken = nil
         }
+        cleanupTask = task
+        return task
     }
 
-    private func stopCapture() {
-        activeToken = nil
-        startTask?.cancel()
-        startTask = nil
-        cleanupCaptureComponents()
+    private func cleanupCaptureComponentsNow() async {
+        guard let cleanup: (() async -> Void) = takeCaptureCleanup() else {
+            return
+        }
+        await cleanup()
     }
 
-    private func cleanupCaptureComponents() {
+    private func takeCaptureCleanup() -> (() async -> Void)? {
         if audioEngine.isRunning {
             audioEngine.stop()
         }
         audioEngine.inputNode.removeTap(onBus: 0)
-        captureSession?.stopRunning()
+        let sessionToStop: AVCaptureSession? = captureSession
         captureSession = nil
         captureProvider = nil
         recognitionRequest?.endAudio()
@@ -487,7 +555,7 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
         recognitionTask = nil
         analyzerFinishInput?()
         analyzerFinishInput = nil
-        analyzerCancel?()
+        let cancelAnalyzer: (() async -> Void)? = analyzerCancel
         analyzerCancel = nil
         analyzerResultsTask?.cancel()
         analyzerResultsTask = nil
@@ -495,6 +563,34 @@ final class LiveTranscriptionService: NSObject, FlutterStreamHandler {
             false,
             options: .notifyOthersOnDeactivation
         )
+        guard sessionToStop != nil || cancelAnalyzer != nil else {
+            return nil
+        }
+        let captureQueue: DispatchQueue = self.captureQueue
+        return {
+            if let sessionToStop {
+                await withCheckedContinuation { continuation in
+                    captureQueue.async {
+                        if sessionToStop.isRunning {
+                            sessionToStop.stopRunning()
+                        }
+                        continuation.resume()
+                    }
+                }
+            }
+            if let cancelAnalyzer {
+                await cancelAnalyzer()
+            }
+        }
+    }
+
+    private func startCaptureSession(_ session: AVCaptureSession) async {
+        await withCheckedContinuation { continuation in
+            captureQueue.async {
+                session.startRunning()
+                continuation.resume()
+            }
+        }
     }
 
     private func isActive(_ token: UUID) -> Bool {

@@ -35,6 +35,9 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   FoundationModelsCapabilities capabilities = testCapabilities();
   final List<String> calls = <String>[];
   final List<String> disposedSessionIds = <String>[];
+  Completer<ModelResponse>? respondCompleter;
+  Completer<void>? cancelCompleter;
+  Stream<SessionEvent>? controlledSessionStream;
   int _sessionIndex = 0;
 
   @override
@@ -139,6 +142,10 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
     required GenerationOptions options,
   }) async {
     calls.add('respond');
+    final Completer<ModelResponse>? controlledResponse = respondCompleter;
+    if (controlledResponse != null) {
+      return controlledResponse.future;
+    }
     return ModelResponse.fromMap(<Object?, Object?>{'text': 'response'});
   }
 
@@ -149,6 +156,10 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
     required GenerationOptions options,
   }) {
     calls.add('stream');
+    final Stream<SessionEvent>? controlledStream = controlledSessionStream;
+    if (controlledStream != null) {
+      return controlledStream;
+    }
     return Stream<SessionEvent>.value(
       const TextSnapshotEvent(requestId: 'r', text: 'delta'),
     );
@@ -179,6 +190,7 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   @override
   Future<void> cancelActiveRequest({required String sessionId}) async {
     calls.add('cancelActiveRequest');
+    await cancelCompleter?.future;
   }
 
   @override

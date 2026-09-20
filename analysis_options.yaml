@@ -8,6 +8,8 @@ analyzer:
     - '**/generated/**'
     - '**/.dart_tool/**'
     - '**/build/**'
+    - build/**
+    - ios/**
   language:
     strict-casts: true
     strict-inference: true

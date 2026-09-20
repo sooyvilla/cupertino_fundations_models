@@ -93,9 +93,10 @@ final class GenerationOptions {
     this.samplingSeed,
     this.temperature,
     this.maximumResponseTokens,
+    this.maximumToolCalls = 16,
     this.toolCallingMode = ToolCallingMode.allowed,
     this.reasoningLevel = ReasoningLevel.automatic,
-    this.cloudPolicy = CloudPolicy.never,
+    this.cloudPolicy,
     this.includeSchemaInPrompt,
     this.timeout = const Duration(seconds: 60),
   }) : assert(samplingTopK > 0, 'samplingTopK must be greater than zero.'),
@@ -106,6 +107,18 @@ final class GenerationOptions {
        assert(
          samplingSeed == null || samplingSeed >= 0,
          'samplingSeed cannot be negative.',
+       ),
+       assert(
+         temperature == null || (temperature >= 0 && temperature <= 1),
+         'temperature must be between zero and one.',
+       ),
+       assert(
+         maximumResponseTokens == null || maximumResponseTokens > 0,
+         'maximumResponseTokens must be greater than zero.',
+       ),
+       assert(
+         maximumToolCalls >= 1 && maximumToolCalls <= 128,
+         'maximumToolCalls must be between 1 and 128.',
        );
 
   final SamplingMode samplingMode;
@@ -114,13 +127,55 @@ final class GenerationOptions {
   final int? samplingSeed;
   final double? temperature;
   final int? maximumResponseTokens;
+
+  /// Maximum number of native tool invocations allowed for one request.
+  ///
+  /// This provides the required exit condition when `toolCallingMode` is
+  /// `required` and also bounds accidental tool-call loops.
+  final int maximumToolCalls;
   final ToolCallingMode toolCallingMode;
   final ReasoningLevel reasoningLevel;
-  final CloudPolicy cloudPolicy;
+
+  /// Optional per-request restriction; null inherits the session policy.
+  ///
+  /// `never` rejects a request on an existing PCC session. This cannot switch
+  /// models or grant cloud access that the session did not authorize.
+  final CloudPolicy? cloudPolicy;
   final bool? includeSchemaInPrompt;
   final Duration timeout;
 
   Map<String, Object?> toMap() {
+    if (timeout <= Duration.zero) {
+      throw ArgumentError.value(
+        timeout,
+        'timeout',
+        'Must be greater than zero.',
+      );
+    }
+    if (samplingTopK <= 0 ||
+        !samplingProbabilityThreshold.isFinite ||
+        samplingProbabilityThreshold < 0 ||
+        samplingProbabilityThreshold > 1 ||
+        (samplingSeed != null && samplingSeed! < 0) ||
+        (maximumResponseTokens != null && maximumResponseTokens! <= 0) ||
+        maximumToolCalls < 1 ||
+        maximumToolCalls > 128) {
+      throw ArgumentError(
+        'Generation option values are outside their supported ranges.',
+      );
+    }
+    if (reasoningLevel.name == 'custom' &&
+        (reasoningLevel.customValue?.trim().isEmpty ?? true)) {
+      throw ArgumentError.value(reasoningLevel.customValue, 'reasoningLevel');
+    }
+    if (temperature case final value?
+        when !value.isFinite || value < 0 || value > 1) {
+      throw ArgumentError.value(
+        value,
+        'temperature',
+        'Must be a finite value between zero and one.',
+      );
+    }
     return <String, Object?>{
       'samplingMode': samplingMode.name,
       'samplingTopK': samplingTopK,
@@ -128,10 +183,11 @@ final class GenerationOptions {
       'samplingSeed': samplingSeed,
       'temperature': temperature,
       'maximumResponseTokens': maximumResponseTokens,
+      'maximumToolCalls': maximumToolCalls,
       'toolCallingMode': toolCallingMode.name,
       'reasoningLevel': reasoningLevel.name,
       'customReasoningLevel': reasoningLevel.customValue,
-      'cloudPolicy': cloudPolicy.name,
+      'cloudPolicy': cloudPolicy?.name,
       'includeSchemaInPrompt': includeSchemaInPrompt,
       'timeoutMilliseconds': timeout.inMilliseconds,
     };
