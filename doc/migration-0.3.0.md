@@ -3,7 +3,8 @@
 0.3.0 is a breaking, pre-1.0 update from 0.2.x. This guide covers the removed
 hybrid layer and the stricter native session contracts.
 
-These breaking changes also apply when upgrading from 0.2.x to 0.3.1.
+These breaking changes also apply when upgrading from 0.2.x to 0.4.0.
+Also apply the [0.4.0 migration](migration-0.4.0.md) for nullable usage and lifecycle changes.
 From 0.3.0, the public addition is [guided streaming](usage.md#guided-streaming):
 use `session.streamStructured(...)` or `session.stream(..., schema: ...)`.
 Existing text streams retain their event types. Custom transports importing the

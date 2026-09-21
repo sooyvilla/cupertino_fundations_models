@@ -3,8 +3,13 @@ import 'dart:async';
 import 'availability.dart';
 import 'errors.dart';
 import 'generation.dart';
+import 'generation_diagnostic_event.dart';
+import 'generation_stream.dart';
+import 'generation_termination.dart';
+import 'generation_trace.dart';
 import 'platform/cupertino_foundation_models_platform.dart';
 import 'schema.dart';
+import 'token_budget.dart';
 import 'tools.dart';
 
 /// Specialized on-device model variant requested for a session.
@@ -83,9 +88,11 @@ final class FoundationModelSession {
     required ModelMode mode,
     required CupertinoFoundationModelsPlatform platform,
     required List<ModelTool> tools,
+    Map<String, Object?> runtimeMetadata = const <String, Object?>{},
   }) : _id = id,
        _mode = mode,
        _platform = platform,
+       _runtimeMetadata = Map<String, Object?>.unmodifiable(runtimeMetadata),
        _tools = Map<String, ModelTool>.unmodifiable(<String, ModelTool>{
          for (final ModelTool tool in tools) tool.name: tool,
        });
@@ -94,6 +101,8 @@ final class FoundationModelSession {
   final ModelMode _mode;
   final CupertinoFoundationModelsPlatform _platform;
   final Map<String, ModelTool> _tools;
+  final Map<String, Object?> _runtimeMetadata;
+  int _requestSequence = 0;
   bool _requestActive = false;
   bool _disposed = false;
   Future<void>? _cancellation;
@@ -108,7 +117,7 @@ final class FoundationModelSession {
     Prompt prompt, {
     GenerationOptions options = const GenerationOptions(),
   }) async {
-    return _runRequest<ModelResponse>(options.timeout, () {
+    return _runRequest(options, () {
       return _platform.respond(
         sessionId: _id,
         prompt: prompt,
@@ -121,33 +130,21 @@ final class FoundationModelSession {
     Prompt prompt, {
     StructuredSchema? schema,
     GenerationOptions options = const GenerationOptions(),
-  }) async* {
-    _beginRequest();
-    Future<void>? cancellation;
-    try {
-      final Stream<SessionEvent> events = _platform
-          .stream(
-            sessionId: _id,
-            prompt: prompt,
-            schema: schema,
-            options: options,
-          )
-          .timeout(
-            options.timeout,
-            onTimeout: (EventSink<SessionEvent> sink) {
-              cancellation ??= _cancelNativeRequest();
-              sink.addError(_timeoutException(options.timeout));
-              sink.close();
-            },
-          );
-      yield* events;
-    } finally {
-      try {
-        await cancellation;
-      } finally {
-        _requestActive = false;
-      }
-    }
+  }) {
+    return GenerationStream(
+      options: options,
+      trace: _trace(options),
+      begin: _beginRequest,
+      end: () => _requestActive = false,
+      cancelNative: _cancelNativeRequest,
+      cancellationFailed: () => _cancellationFailed = true,
+      source: () => _platform.stream(
+        sessionId: _id,
+        prompt: prompt,
+        schema: schema,
+        options: options,
+      ),
+    ).stream;
   }
 
   Stream<SessionEvent> streamStructured({
@@ -163,7 +160,7 @@ final class FoundationModelSession {
     required StructuredSchema schema,
     GenerationOptions options = const GenerationOptions(),
   }) async {
-    return _runRequest<ModelResponse>(options.timeout, () {
+    return _runRequest(options, () {
       return _platform.generateStructured(
         sessionId: _id,
         prompt: prompt,
@@ -171,6 +168,25 @@ final class FoundationModelSession {
         options: options,
       );
     });
+  }
+
+  Future<TokenBudget> measureTokenBudget({
+    required Prompt prompt,
+    StructuredSchema? schema,
+    GenerationOptions options = const GenerationOptions(),
+  }) async {
+    options.toMap();
+    _beginRequest();
+    try {
+      return await _platform.measureTokenBudget(
+        sessionId: _id,
+        prompt: prompt,
+        schema: schema,
+        options: options,
+      );
+    } finally {
+      _requestActive = false;
+    }
   }
 
   Future<void> prewarm({Prompt? promptPrefix}) async {
@@ -233,19 +249,55 @@ final class FoundationModelSession {
     }
   }
 
-  Future<T> _runRequest<T>(
-    Duration timeout,
-    Future<T> Function() operation,
+  GenerationTrace _trace(GenerationOptions options) {
+    _requestSequence += 1;
+    return GenerationTrace(
+      requestId: '${_id}_$_requestSequence',
+      sessionId: _id,
+      mode: _mode,
+      configuration: options.diagnostics,
+      runtimeMetadata: <String, Object?>{
+        ..._runtimeMetadata,
+        'packageVersion': '0.4.0',
+      },
+    );
+  }
+
+  Future<ModelResponse> _runRequest(
+    GenerationOptions options,
+    Future<ModelResponse> Function() operation,
   ) async {
+    options.toMap();
     _beginRequest();
+    final trace = _trace(options);
+    trace.emit(GenerationDiagnosticStage.started);
+    final timeout = options.totalTimeout ?? options.timeout;
     try {
-      return await operation().timeout(
+      final response = await operation().timeout(
         timeout,
         onTimeout: () async {
           await _cancelNativeRequest();
           throw _timeoutException(timeout);
         },
       );
+      trace.emit(
+        GenerationDiagnosticStage.completed,
+        output: response.text,
+        usage: response.usage,
+        termination: response.termination,
+      );
+      return response;
+    } on Object catch (error) {
+      final failure = error is FoundationModelsException ? error : null;
+      trace.emit(
+        failure?.code == FoundationModelsErrorCode.cancelled
+            ? GenerationDiagnosticStage.cancelled
+            : GenerationDiagnosticStage.failed,
+        errorCode: failure?.code ?? FoundationModelsErrorCode.unknown,
+        termination: failure?.termination ??
+            const GenerationTermination(status: GenerationStatus.failed),
+      );
+      rethrow;
     } finally {
       _requestActive = false;
     }
@@ -301,7 +353,8 @@ final class FoundationModelSession {
       code: FoundationModelsErrorCode.generationTimeout,
       message: 'The model did not respond within ${timeout.inMilliseconds}ms.',
       recoverySuggestion:
-          'Retry once, shorten the prompt, or increase GenerationOptions.timeout.',
+          'Shorten the prompt or adjust the request deadline.',
+      details: const <String, Object?>{'timeoutPhase': 'total'},
     );
   }
 }

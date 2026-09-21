@@ -87,6 +87,12 @@ public final class CupertinoFoundationModelsPlugin: NSObject, @preconcurrency Fl
                     complete(result, ErrorMapper.flutterError(from: error))
                 }
             }
+        case "measureTokenBudget":
+            let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
+            runSessionRequest(arguments: arguments, result: result) { registry, arguments in
+                let response: FlutterChannelValue<[String: Any]> = try await registry.measureTokenBudget(arguments: arguments)
+                return FlutterChannelValue(response.value as Any?)
+            }
         case "pickFile":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
             fileSelectionService.pickFile(arguments: arguments, result: result)

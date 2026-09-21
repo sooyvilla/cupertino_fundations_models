@@ -75,6 +75,12 @@ is not user approval. A tool timeout or cancellation does not undo an already
 started Dart function. Replaying the same request through a second agent can
 repeat a side effect.
 
+Version 0.4.0 exposes component budgets, nullable actual usage, typed
+termination and deadline phases to inform that application policy. Unknown PCC
+counts and native stop reasons must remain unknown. Opt-in diagnostics do not
+persist or upload source material. See [usage](usage.md) and
+[migration](migration-0.4.0.md).
+
 ## Retry and fallback rules
 
 | Failure | Application action |

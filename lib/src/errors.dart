@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'generation_termination.dart';
+
 /// Stable error codes returned by the package.
 enum FoundationModelsErrorCode {
   unsupportedPlatform,
@@ -61,6 +63,31 @@ final class FoundationModelsException implements Exception {
   final String message;
   final String? recoverySuggestion;
   final Map<String, Object?> details;
+
+  GenerationTermination get termination {
+    final reason = switch (code) {
+      FoundationModelsErrorCode.contextSizeExceeded => GenerationStopReason.contextSizeExceeded,
+      FoundationModelsErrorCode.refusal => GenerationStopReason.refusal,
+      FoundationModelsErrorCode.guardrailViolation => GenerationStopReason.guardrailViolation,
+      FoundationModelsErrorCode.parsingFailure => GenerationStopReason.invalidStructure,
+      FoundationModelsErrorCode.cancelled => GenerationStopReason.cancelled,
+      FoundationModelsErrorCode.generationTimeout => GenerationStopReason.timeout,
+      _ => GenerationStopReason.error,
+    };
+    return GenerationTermination(
+      status: code == FoundationModelsErrorCode.cancelled
+          ? GenerationStatus.cancelled
+          : code == FoundationModelsErrorCode.generationTimeout
+          ? GenerationStatus.timedOut
+          : GenerationStatus.failed,
+      reason: reason,
+      nativeReason: details['nativeReason'] as String?,
+      structuredContentComplete: details['structuredContentComplete'] as bool?,
+      timeoutPhase: GenerationTimeoutPhase.values
+          .where((value) => value.name == details['timeoutPhase'])
+          .firstOrNull,
+    );
+  }
 
   @override
   String toString() => 'FoundationModelsException(${code.name}, $message)';

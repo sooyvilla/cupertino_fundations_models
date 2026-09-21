@@ -9,7 +9,9 @@ no third-party runtime dependencies.
 and downloaded model assets. The plugin can be included in an iOS 15+ app;
 that deployment target does not make generation available on older systems.
 
-**Version 0.3.0 removes hybrid routing.** Read the
+**Version 0.4.0 makes missing usage counters nullable.** Read the
+[0.4.0 migration guide](doc/migration-0.4.0.md) for usage, lifecycle and transport
+changes. Version 0.3.0 removed hybrid routing; read the
 [migration guide](doc/migration-0.3.0.md) before upgrading from 0.2.x.
 
 ## Quick start
@@ -18,14 +20,14 @@ Use Flutter 3.41+ and Dart 3.11+. Add:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.3.1
+  cupertino_fundations_models: ^0.4.0
 ```
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
 
-When upgrading, resolve the app's dependency lockfile to 0.3.1 or later and
-rebuild the iOS host: guided streaming changes the native plugin, so hot reload
+When upgrading, resolve the app's dependency lockfile to 0.4.0 or later and
+rebuild the iOS host: the budget and streaming contracts change the native plugin, so hot reload
 alone is insufficient. Existing text streams remain available; requesting JSON
 in a prompt does not enable schema guidance.
 
@@ -56,6 +58,22 @@ Availability can change after a preflight. Handle
 `FoundationModelsException` around the request and provide a manual path when
 the model is unavailable. Model output still needs application validation.
 
+## Reliable generation
+
+Use `session.streamStructured(prompt: ..., schema: ...)` for native schema-guided
+streaming on local or explicitly authorized PCC sessions. Partial JSON snapshots
+and decoded completion results remain separate.
+
+Version 0.4.0 adds `session.measureTokenBudget`, typed `termination`, separate
+first-result/idle/total deadlines and opt-in diagnostic callbacks. Unavailable
+PCC counts and missing usage stay unknown; no token estimate is evidence of
+truncation. Dynamic schema errors identify the failing path.
+
+See [complete contracts](doc/usage.md), [document extraction](doc/document-extraction.md)
+and [PCC eligibility and permission](doc/private-cloud-compute.md). This release
+has source review only; automated checks and physical iPhone/PCC validation
+remain pending.
+
 ## Choose a bounded task
 
 | Good starting point | Application responsibility |
@@ -78,7 +96,7 @@ need an application-level strategy. See [API/local integration](doc/app-owned-ro
 | --- | --- | --- |
 | Text, sessions, streaming, tools, structured output | iOS 26 | Native Foundation Models with runtime availability checks. |
 | Content tagging and prewarm | iOS 26 | Explicit session use case and `prewarm()`. |
-| Local prompt/transcript token counts | iOS 26.4 | Requires this package to be built with Xcode 27+. |
+| Local prompt/instructions/tools/schema/transcript token counts | iOS 26.4 | Requires this package to be built with Xcode 27+. |
 | Usage, reasoning options, explicit tool mode, transcript error policy | iOS 27 | SDK and selected-model support also required. |
 | Private Cloud Compute (PCC) | iOS 27 | Explicit policy, host opt-in, Apple's managed entitlement, availability, network and quota. |
 | Text/JSON/CSV/Markdown and text PDFs | iOS 26 | Extracted locally and inserted as text. |

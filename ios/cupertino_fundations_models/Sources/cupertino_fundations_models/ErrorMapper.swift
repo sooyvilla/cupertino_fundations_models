@@ -31,7 +31,7 @@ enum ErrorMapper {
 
     static func flutterError(from error: Error) -> FlutterError {
         if error is CancellationError {
-            return flutterError(code: "cancelled", message: "The request was cancelled.")
+            return flutterError(code: "cancelled", message: "The request was cancelled.", details: ["nativeReason": "CancellationError"])
         }
         if let nativeError: NativeSessionError = error as? NativeSessionError {
             switch nativeError {
@@ -41,6 +41,12 @@ enum ErrorMapper {
                 return flutterError(code: "modelUnavailable", message: "Foundation Models is not available in this runtime or SDK.")
             case .invalidRequest(let message):
                 return flutterError(code: "invalidRequest", message: message)
+            case .invalidSchema(let path, let reason):
+                return flutterError(
+                    code: "invalidRequest",
+                    message: "Invalid schema at \(path): \(reason)",
+                    details: ["schemaPath": path]
+                )
             case .modelUnavailable(let code, let message, let recoverySuggestion):
                 return flutterError(
                     code: code,
@@ -115,19 +121,44 @@ enum ErrorMapper {
     @available(iOS, introduced: 26.0, deprecated: 27.0)
     private static func legacyGenerationFlutterError(_ error: LanguageModelSession.GenerationError) -> FlutterError {
         let code: String
+        let nativeReason: String?
         switch error {
-        case .exceededContextWindowSize: code = "contextSizeExceeded"
-        case .assetsUnavailable: code = "assetsUnavailable"
-        case .guardrailViolation: code = "guardrailViolation"
-        case .unsupportedGuide: code = "unsupportedGenerationGuide"
-        case .unsupportedLanguageOrLocale: code = "unsupportedLanguage"
-        case .decodingFailure: code = "parsingFailure"
-        case .rateLimited: code = "rateLimited"
-        case .concurrentRequests: code = "concurrentRequests"
-        case .refusal: code = "refusal"
-        @unknown default: code = "nativeFailure"
+        case .exceededContextWindowSize:
+            code = "contextSizeExceeded"
+            nativeReason = "LanguageModelSession.GenerationError.exceededContextWindowSize"
+        case .assetsUnavailable:
+            code = "assetsUnavailable"
+            nativeReason = "LanguageModelSession.GenerationError.assetsUnavailable"
+        case .guardrailViolation:
+            code = "guardrailViolation"
+            nativeReason = "LanguageModelSession.GenerationError.guardrailViolation"
+        case .unsupportedGuide:
+            code = "unsupportedGenerationGuide"
+            nativeReason = "LanguageModelSession.GenerationError.unsupportedGuide"
+        case .unsupportedLanguageOrLocale:
+            code = "unsupportedLanguage"
+            nativeReason = "LanguageModelSession.GenerationError.unsupportedLanguageOrLocale"
+        case .decodingFailure:
+            code = "parsingFailure"
+            nativeReason = "LanguageModelSession.GenerationError.decodingFailure"
+        case .rateLimited:
+            code = "rateLimited"
+            nativeReason = "LanguageModelSession.GenerationError.rateLimited"
+        case .concurrentRequests:
+            code = "concurrentRequests"
+            nativeReason = "LanguageModelSession.GenerationError.concurrentRequests"
+        case .refusal:
+            code = "refusal"
+            nativeReason = "LanguageModelSession.GenerationError.refusal"
+        @unknown default:
+            code = "nativeFailure"
+            nativeReason = nil
         }
-        return flutterError(code: code, message: error.localizedDescription)
+        var details: [String: Any] = [:]
+        if let nativeReason {
+            details["nativeReason"] = nativeReason
+        }
+        return flutterError(code: code, message: error.localizedDescription, details: details)
     }
     #endif
 
@@ -180,6 +211,7 @@ enum ErrorMapper {
                 code: "contextSizeExceeded",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "LanguageModelError.contextSizeExceeded",
                     "contextSize": context.contextSize,
                     "tokenCount": context.tokenCount,
                     "recoverySuggestion": "Trim the session history or create a new session."
@@ -190,6 +222,7 @@ enum ErrorMapper {
                 code: "rateLimited",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "LanguageModelError.rateLimited",
                     "resetDate": millisecondsSinceEpoch(context.resetDate),
                     "recoverySuggestion": "Wait until the model rate limit resets before retrying."
                 ]
@@ -198,19 +231,20 @@ enum ErrorMapper {
             return flutterError(
                 code: "guardrailViolation",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Revise the prompt or generated content request."]
+                details: ["nativeReason": "LanguageModelError.guardrailViolation", "recoverySuggestion": "Revise the prompt or generated content request."]
             )
         case .refusal:
             return flutterError(
                 code: "refusal",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Offer another way to complete the request without retrying the same prompt unchanged."]
+                details: ["nativeReason": "LanguageModelError.refusal", "recoverySuggestion": "Offer another way to complete the request without retrying the same prompt unchanged."]
             )
         case .unsupportedCapability(let context):
             return flutterError(
                 code: "unsupportedCapability",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "LanguageModelError.unsupportedCapability",
                     "capability": String(describing: context.capability),
                     "recoverySuggestion": "Check the selected model capabilities before sending the request."
                 ]
@@ -219,13 +253,14 @@ enum ErrorMapper {
             return flutterError(
                 code: "unsupportedTranscriptContent",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Remove transcript entries the selected model cannot process."]
+                details: ["nativeReason": "LanguageModelError.unsupportedTranscriptContent", "recoverySuggestion": "Remove transcript entries the selected model cannot process."]
             )
         case .unsupportedGenerationGuide(let context):
             return flutterError(
                 code: "unsupportedGenerationGuide",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "LanguageModelError.unsupportedGenerationGuide",
                     "schemaName": context.schemaName as Any,
                     "recoverySuggestion": "Simplify the structured generation schema or guides."
                 ]
@@ -235,6 +270,7 @@ enum ErrorMapper {
                 code: "unsupportedLanguage",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "LanguageModelError.unsupportedLanguageOrLocale",
                     "languageCode": String(describing: context.languageCode),
                     "recoverySuggestion": "Use a language returned by the selected model's supportedLanguages property."
                 ]
@@ -243,7 +279,7 @@ enum ErrorMapper {
             return flutterError(
                 code: "generationTimeout",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Retry once or reduce the request complexity."]
+                details: ["nativeReason": "LanguageModelError.timeout", "recoverySuggestion": "Retry once or reduce the request complexity."]
             )
         @unknown default:
             return flutterError(code: "nativeFailure", message: error.localizedDescription)
@@ -257,7 +293,7 @@ enum ErrorMapper {
             return flutterError(
                 code: "assetsUnavailable",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Wait for Apple Intelligence model assets to finish downloading."]
+                details: ["nativeReason": "SystemLanguageModel.Error.assetsUnavailable", "recoverySuggestion": "Wait for Apple Intelligence model assets to finish downloading."]
             )
         @unknown default:
             return flutterError(code: "modelUnavailable", message: error.localizedDescription)
@@ -271,13 +307,13 @@ enum ErrorMapper {
             return flutterError(
                 code: "concurrentRequests",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Wait for the active response or cancel it before starting another request on the same session."]
+                details: ["nativeReason": "LanguageModelSession.Error.concurrentRequests", "recoverySuggestion": "Wait for the active response or cancel it before starting another request on the same session."]
             )
         case .transcriptMutationWhileResponding:
             return flutterError(
                 code: "transcriptMutationWhileResponding",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Do not mutate the transcript while the session is responding."]
+                details: ["nativeReason": "LanguageModelSession.Error.transcriptMutationWhileResponding", "recoverySuggestion": "Do not mutate the transcript while the session is responding."]
             )
         @unknown default:
             return flutterError(code: "nativeFailure", message: error.localizedDescription)
@@ -293,13 +329,14 @@ enum ErrorMapper {
             return flutterError(
                 code: "networkUnavailable",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Check the network connection or fall back to the on-device model."]
+                details: ["nativeReason": "PrivateCloudComputeLanguageModel.Error.networkFailure", "recoverySuggestion": "Check the network connection or fall back to the on-device model."]
             )
         case .quotaLimitReached(let context):
             return flutterError(
                 code: "quotaExceeded",
                 message: error.localizedDescription,
                 details: [
+                    "nativeReason": "PrivateCloudComputeLanguageModel.Error.quotaLimitReached",
                     "resetDate": millisecondsSinceEpoch(context.resetDate),
                     "canRequestLimitIncrease": context.limitIncreaseSuggestion != nil,
                     "recoverySuggestion": "Wait for the PCC quota to reset or fall back to the on-device model."
@@ -309,7 +346,7 @@ enum ErrorMapper {
             return flutterError(
                 code: "privateCloudServiceUnavailable",
                 message: error.localizedDescription,
-                details: ["recoverySuggestion": "Fall back to the on-device model and retry PCC later."]
+                details: ["nativeReason": "PrivateCloudComputeLanguageModel.Error.serviceUnavailable", "recoverySuggestion": "Fall back to the on-device model and retry PCC later."]
             )
         @unknown default:
             return flutterError(code: "privateCloudUnavailable", message: error.localizedDescription)

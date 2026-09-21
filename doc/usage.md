@@ -1,7 +1,8 @@
 # Usage reference
 
-This reference describes version 0.3.1. See the [README](../README.md) for
-installation and the [migration guide](migration-0.3.0.md) for breaking changes.
+This reference describes version 0.4.0. See the [README](../README.md) for
+installation and the [0.4.0 migration guide](migration-0.4.0.md) for breaking changes.
+Migration from the removed hybrid API is covered in [0.3.0](migration-0.3.0.md).
 For Apple cloud, complete [PCC eligibility, entitlement and host setup](private-cloud-compute.md)
 before enabling or selecting the cloud model.
 
@@ -35,6 +36,7 @@ One-shot facade calls create and dispose their own session. A reused
 | `streamStructured(prompt: ..., schema: ..., options: ...)` | Cumulative guided JSON snapshots and a decoded terminal result. |
 | `generateStructured(prompt: ..., schema: ..., options: ...)` | Guided generation with a supported object-root schema. |
 | `prewarm(promptPrefix: ...)` | Hint to preload resources; not an availability guarantee. |
+| `measureTokenBudget(prompt: ..., schema: ..., options: ...)` | Separate component measurements for the actual session model; unavailable fields remain unknown. |
 | `countTokens()` | Local transcript token count, iOS 26.4+ with an Xcode 27 build. |
 | `cancelActiveRequest()` | Cancel and await the matching native work. |
 | `dispose()` | Release the native session; concurrent callers await the same disposal. |
@@ -65,18 +67,124 @@ persistence or cross-provider replay occurs.
   and `ContextOptions` on iOS 27.
 - `cloudPolicy`: nullable request restriction. Null inherits session selection;
   `never` rejects PCC. Other values cannot change the selected model.
-- `timeout`: positive duration, default 60 seconds. One-shot requests use a
-  response deadline; streaming currently uses an **inactivity timeout** between
-  events. Native cleanup is awaited and can extend the time until reuse is safe.
+- `timeout`: positive duration, default 60 seconds. Existing fallback: a
+  deadline for one-shot calls, or inactivity between stream events.
+- `firstResponseTimeout`: optional stream deadline until the first text/JSON
+  snapshot or terminal response. Tool/unknown events do not extend it. Until
+  that result arrives, this replaces the initial inactivity deadline.
+- `idleTimeout`: optional inactivity limit after the first result, reset by
+  stream events. Without an explicit first-response deadline it applies from
+  the start. It falls back to `timeout`.
+- `totalTimeout`: optional absolute generation duration. For a stream it runs
+  independently of events; for one-shot calls it replaces `timeout`.
+- First-response and idle settings apply only to streaming. All supplied
+  durations must be positive. Timers start on subscription; pausing a consumer
+  does not suspend native generation or its deadlines. OS suspension can delay
+  Dart timers, so these options do not promise wall-clock enforcement while the
+  process is suspended.
 
-`models.countTokens(prompt)` counts the constructed prompt, including extracted
-attachment text. It is not a complete request-budget estimate: also account for
-instructions, prior transcript, schema, tool declarations/results and output.
-Use the runtime context size instead of assuming one limit for every model.
+Timeout errors carry `termination.status == GenerationStatus.timedOut` and
+`termination.timeoutPhase`. Native cancellation and subscription cleanup are
+awaited before the session can be reused; that cleanup may outlast the deadline.
+Cancellation failures require disposal and a fresh session. Wait for stream
+completion/cancellation cleanup before another request, even after an error event.
 
-On iOS 27, `ModelResponse.usage` may contain input, cached-input, output,
-reasoning and total token counts. Earlier systems return null. `usedMode`
-identifies the selected Apple backend.
+### Token measurements and actual usage
+
+`models.countTokens(prompt)` counts the constructed prompt with the default local
+model, including extracted attachment text. `session.countTokens()` counts its
+local transcript. Prefer the session budget API for model-specific components:
+
+```dart
+final budget = await session.measureTokenBudget(
+  prompt: prompt,
+  schema: schema,
+  options: const GenerationOptions(maximumResponseTokens: 1200),
+);
+final measurement = budget.components['prompt'];
+if (measurement?.precision == TokenPrecision.exact) {
+  print(measurement?.count);
+}
+```
+
+`TokenBudget.components` has `prompt`, `instructions`, `tools`, `schema` and
+`transcript`. On supported local iOS 26.4+ SDK/runtime paths, `exact` means the
+native tokenizer's count for that particular component and session model.
+`estimated` is reserved for explicitly labeled estimates; this implementation
+never substitutes an estimate. `unavailable` supplies no count and a reason.
+PCC has no exposed matching token-count API in the inspected SDK, so its
+measurements are unavailable. Older runtimes return unavailable rather than
+fabricating zero. An absent local component can have an exact zero count.
+
+These scopes may overlap: transcript entries can already contain instructions
+and tool context. Do not sum them as an exact serialized-request count. The
+framework does not expose an exact complete request count through this API.
+`maximumResponseTokens` echoes the requested reservation, not observed output.
+`modelIdentifier` identifies the selected mode/use case, not an immutable Apple
+model revision. Local `contextWindowTokens` uses the selected model's native
+context size; PCC remains null. Do not
+assume local and PCC have the same capacity. Measurements do not mutate the
+transcript or reserve capacity, and token counting itself has no generation
+timeout. It occupies the session until the native measurement finishes.
+
+On iOS 27, `ModelResponse.usage` may contain actual native input, cached-input,
+output, reasoning and total token counts. Earlier systems return null. Each
+counter is also nullable when absent, never synthesized as zero. Cached and
+reasoning counts are subcategories, not extra tokens to add to `totalTokenCount`.
+`usedMode` identifies the selected Apple backend. Neither a request estimate
+nor an observed token count alone establishes the cause of truncation.
+
+### Result and termination
+
+`ModelResponse.termination` describes operation completion; its `reason` remains
+`unknown` when Apple supplies no explicit stop reason. `nativeReason` stays null
+unless actually supplied; it is not inferred from text length or usage.
+`structuredContentComplete` reports the native completeness flag where provided;
+structured streaming additionally requires complete, decodable final JSON.
+This does not prove that every source row or correct amount was extracted.
+
+`FoundationModelsException.termination` and `FailureEvent.termination` identify
+failure, cancellation, timeout phase, context overflow, refusal or invalid
+structure through the package's typed error mapping. Error categories do not
+claim a native stop reason. A stream that closes without a terminal event now
+fails with `nativeFailure` and `details['streamClosedWithoutResult'] == true`.
+[Apple documents](https://developer.apple.com/documentation/foundationmodels/generationoptions/maximumresponsetokens)
+that hitting an output limit can end generation early without an error; a
+successful completion therefore does not establish a natural stopping point.
+
+### Request diagnostics
+
+```dart
+final options = GenerationOptions(
+  firstResponseTimeout: const Duration(seconds: 45),
+  idleTimeout: const Duration(seconds: 20),
+  totalTimeout: const Duration(minutes: 3),
+  diagnostics: GenerationDiagnostics(
+    captureOutput: false,
+    onEvent: (event) {
+      updateRequestStatus(event.requestId, event.stage, event.elapsed);
+    },
+  ),
+);
+```
+
+`updateRequestStatus` is a host callback. Events contain a package request ID,
+optional native stream ID, session ID, effective mode, OS/model metadata,
+host SDK identifier when available,
+package version, elapsed time, first-result latency, terminal usage and typed
+termination when available. An unknown native model revision/SDK version is not
+invented. Events describe accepted generation requests; preflight, token
+measurement and invalid options are not generation telemetry.
+
+Callbacks are synchronous, exceptions are isolated, and they must remain small.
+There is no automatic console logging, persistence or transmission. Prompts,
+schemas, tool arguments/results, error messages and hidden reasoning are not
+captured. `captureOutput: true` separately opts into the exact string delivered
+by the framework for each snapshot/final response, not remote network bytes.
+`maximumOutputCharacters` defaults to 65536 UTF-16 code units per event. Larger
+strings are omitted with `outputOmitted: true`; no prefix is passed off as exact.
+The callback recipient controls retention, redaction and export. Do not enable
+capture by default for sensitive documents. Events are not buffered for replay.
 
 ## Structured generation
 
@@ -105,7 +213,10 @@ with `SchemaProperty.object` currently require all declared child properties.
 The native tool schema also accepts the `required` and string `enum` aliases.
 Unsupported constraints (for example regex, ranges, references or unions) are
 rejected rather than silently ignored. Nesting is limited to 16 levels and
-objects to 128 properties.
+objects to 128 properties. Internal type names are derived uniquely from
+their full schema paths; repeated nested property names do not share types.
+Mapping failures expose `FoundationModelsException.details['schemaPath']`
+and a path-bearing message. Native framework errors may lack a property path.
 
 `structuredValue` is typed `Object?` to preserve decoded channel values, but
 this does not add scalar/array root constructors to the public schema API.
@@ -269,3 +380,6 @@ server when local recognition is unavailable; `server` permits that networking
 path and is not a PCC request. File transcription timeout cancels the native
 request and reports `transcriptionTimeout`. Asset acquisition or native cleanup
 may delay completion; the package cannot guarantee transcription latency.
+
+For a complete example with Spanish numeric text and physical integration
+scenarios, see [document extraction](document-extraction.md).

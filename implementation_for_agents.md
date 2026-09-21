@@ -1,6 +1,8 @@
 # Implementation guide for coding agents
 
-This guide describes **version 0.3.1**. Read the
+This guide describes **version 0.4.0**. Read the
+[0.4.0 migration](doc/migration-0.4.0.md) for nullable usage counters and
+stream lifecycle changes, and the
 [migration guide](doc/migration-0.3.0.md) before adapting an existing hybrid
 integration. Confirm the installed package version before using these contracts.
 
@@ -55,7 +57,9 @@ Complete examples and field semantics: [feature guide](doc/usage.md).
 | `session.prewarm` | Loads native resources; still occupies the session while running. |
 | `session.cancelActiveRequest` | Cancels and waits for native work; cannot undo a tool's side effects. |
 | `session.dispose` | Terminal operation, idempotent; wait for it before replacing the owner. |
-| `countTokens` / `session.countTokens` | Local tokenizer prompt/transcript estimates; no automatic truncation. |
+| `countTokens` / `session.countTokens` | Native local component counts, not complete request budgets; no automatic truncation. |
+| `session.measureTokenBudget` | Native counts of prompt, instructions, schema, tools and transcript for the session model; PCC unavailable, no additive exact total. |
+| `GenerationOptions.diagnostics` | Opt-in metadata callback; output capture separately disabled and bounded. |
 | `pickFile` | Native picker with app-local temporary copies; caller manages retention. |
 | `transcribeAudio` | Audio-file Speech transcription with locale, privacy mode and timeout. |
 | `liveTranscription` | One live microphone subscription per default transport; cancel and await cleanup before restarting. |
@@ -68,7 +72,22 @@ streamed model failure; stream/channel failures can also throw exceptions.
 Clear loading state in `finally`. Cancelling the subscription awaits native
 cleanup. `GenerationOptions.timeout` is an inactivity timer for streams and a
 response deadline for one-shot requests; cleanup can take additional time.
+Use `firstResponseTimeout`, `idleTimeout` and `totalTimeout` for explicit stream
+deadlines. Only `totalTimeout` overrides the one-shot deadline. Read the
+[timeout semantics](doc/usage.md#generation-options-and-budgets), including
+background suspension and consumer pause limits.
 A session with failed native cancellation must be disposed and recreated.
+A close without a terminal result is an error. Successful termination has
+`reason: unknown` when Apple supplies no cause; do not infer a natural stop,
+truncation or full row coverage. `structuredContentComplete` concerns structure.
+Missing `ModelUsage` fields are nullable; never turn unknown counts into a
+zero-cost or complete-output assumption. Component scopes overlap, so do not sum
+budget measurements as an exact request size. Keep PCC counts unavailable.
+
+For reproducible failures, explicitly opt into `GenerationDiagnostics` output
+capture only under the app's data policy. Exact strings above the configured
+limit are omitted, not truncated; no automatic retention, logging or upload is
+performed. Callback code owns anything it retains.
 
 `streamStructured(prompt: ..., schema: ...)` and `stream(prompt, schema: ...)`
 use the same lifecycle and event types. Their snapshots are cumulative JSON
@@ -89,7 +108,9 @@ The public `StructuredSchema.object` has an object root. Use supported string,
 string-enum, integer, number, boolean, array and object properties only. Arrays
 need an item schema. Required fields must exist. Unknown JSON Schema constraints
 are rejected; this is not a general JSON Schema validator. Depth is limited to
-16 and each object to 128 properties. Validate returned business facts yourself.
+16 and each object to 128 properties. Internal names are unique by schema path;
+read `details['schemaPath']` for mapper failures. Validate returned business facts
+yourself. See the [complete document example](doc/document-extraction.md).
 
 Implement `ModelTool` with a unique non-empty name, clear description, supported
 object parameter schema, bounded timeout and codec-safe return value. Register

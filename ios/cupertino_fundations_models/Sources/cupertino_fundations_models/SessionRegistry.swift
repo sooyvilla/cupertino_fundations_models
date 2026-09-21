@@ -35,9 +35,19 @@ actor SessionRegistry {
             metadata: arguments["metadata"] as? [String: Any] ?? [:]
         )
         sessions[id] = session
+        var runtimeMetadata: [String: Any] = [
+            "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
+            "effectiveModel": session.mode,
+            "useCase": session.useCase
+        ]
+        if let sdkVersion: String = Bundle.main.object(forInfoDictionaryKey: "DTSDKName") as? String,
+           !sdkVersion.isEmpty {
+            runtimeMetadata["sdkVersion"] = sdkVersion
+        }
         return FlutterChannelValue([
             "sessionId": id,
-            "mode": session.mode
+            "mode": session.mode,
+            "runtimeMetadata": runtimeMetadata
         ])
     }
 
@@ -47,7 +57,6 @@ actor SessionRegistry {
               let session: NativeSession = sessions[id] else {
             throw NativeSessionError.sessionNotFound
         }
-
         #if canImport(FoundationModels)
         if #available(iOS 26.0, *),
            let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession {
@@ -65,17 +74,17 @@ actor SessionRegistry {
         let arguments: [String: Any] = message.value
         #if canImport(FoundationModels) && compiler(>=6.4)
         if #available(iOS 26.4, *) {
-            let model: SystemLanguageModel = SystemLanguageModel.default
             switch arguments["target"] as? String {
             case "prompt":
                 let promptMap: [String: Any] = arguments["prompt"] as? [String: Any] ?? [:]
-                return try await model.tokenCount(for: makePrompt(promptMap: promptMap))
+                return try await SystemLanguageModel.default.tokenCount(for: makePrompt(promptMap: promptMap))
             case "transcript":
                 guard let id: String = arguments["sessionId"] as? String,
                       let session: NativeSession = sessions[id] else {
                     throw NativeSessionError.sessionNotFound
                 }
                 guard session.mode == "local",
+                      let model: SystemLanguageModel = session.localModel as? SystemLanguageModel,
                       let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession else {
                     throw NativeSessionError.modelUnavailable(
                         code: "unsupportedCapability",
@@ -95,6 +104,85 @@ actor SessionRegistry {
             message: "Token counting requires iOS 26.4 or later and a build made with Xcode 27.",
             recoverySuggestion: "Build with Xcode 27 and run on iOS 26.4 or later."
         )
+    }
+
+    func measureTokenBudget(
+        arguments message: FlutterChannelValue<[String: Any]>
+    ) async throws -> FlutterChannelValue<[String: Any]> {
+        let arguments: [String: Any] = message.value
+        guard let id: String = arguments["sessionId"] as? String,
+              let session: NativeSession = sessions[id] else {
+            throw NativeSessionError.sessionNotFound
+        }
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, *), arguments["schema"] != nil {
+            guard let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] else {
+                throw NativeSessionError.invalidSchema(path: "#", reason: "A schema must be a map.")
+            }
+            _ = try SchemaMapper.generationSchema(from: schemaMap)
+        }
+        #endif
+        let unavailableReason: String = session.mode == "privateCloudCompute"
+            ? "Token measurement is unavailable for Private Cloud Compute sessions."
+            : "Token measurement requires iOS 26.4 or later and a build made with Xcode 27."
+        #if canImport(FoundationModels) && compiler(>=6.4)
+        if #available(iOS 26.4, *), session.mode == "local",
+           let model: SystemLanguageModel = session.localModel as? SystemLanguageModel,
+           let languageSession: LanguageModelSession = session.languageSession as? LanguageModelSession,
+           let tools: [any Tool] = session.tools as? [any Tool] {
+            let promptMap: [String: Any] = arguments["prompt"] as? [String: Any] ?? [:]
+            let schema: GenerationSchema?
+            if arguments["schema"] != nil {
+                let schemaMap: [String: Any] = arguments["schema"] as! [String: Any]
+                schema = try SchemaMapper.generationSchema(from: schemaMap)
+            } else {
+                schema = nil
+            }
+            let promptCount: Int = try await model.tokenCount(for: makePrompt(promptMap: promptMap))
+            let instructionCount: Int
+            if let instructions: String = session.instructions, !instructions.isEmpty {
+                instructionCount = try await model.tokenCount(for: Instructions(instructions))
+            } else {
+                instructionCount = 0
+            }
+            let toolCount: Int
+            if tools.isEmpty {
+                toolCount = 0
+            } else {
+                toolCount = try await model.tokenCount(for: tools)
+            }
+            let schemaCount: Int
+            if let schema {
+                schemaCount = try await model.tokenCount(for: schema)
+            } else {
+                schemaCount = 0
+            }
+            let transcriptCount: Int = try await model.tokenCount(for: languageSession.transcript)
+            return FlutterChannelValue(tokenBudget(
+                mode: session.mode,
+                prompt: exactTokenComponent(promptCount),
+                instructions: exactTokenComponent(instructionCount),
+                tools: exactTokenComponent(toolCount),
+                schema: exactTokenComponent(schemaCount),
+                transcript: exactTokenComponent(transcriptCount),
+                maximumResponseTokens: intValue(from: (arguments["options"] as? [String: Any])?["maximumResponseTokens"]),
+                contextWindowTokens: model.contextSize,
+                modelIdentifier: "\(session.mode):\(session.useCase)"
+            ))
+        }
+        #endif
+        let unavailable: [String: Any] = unavailableTokenComponent(reason: unavailableReason)
+        return FlutterChannelValue(tokenBudget(
+            mode: session.mode,
+            prompt: unavailable,
+            instructions: unavailable,
+            tools: unavailable,
+            schema: unavailable,
+            transcript: unavailable,
+            maximumResponseTokens: intValue(from: (arguments["options"] as? [String: Any])?["maximumResponseTokens"]),
+            contextWindowTokens: nil,
+            modelIdentifier: "\(session.mode):\(session.useCase)"
+        ))
     }
 
     func respondStructured(
@@ -133,7 +221,8 @@ actor SessionRegistry {
                     "metadata": [
                         "rawContent": String(describing: response.rawContent)
                     ],
-                    "usage": responseUsage(response.usage)
+                    "usage": responseUsage(response.usage),
+                    "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": response.rawContent.isComplete]
                 ])
             }
             #endif
@@ -151,7 +240,8 @@ actor SessionRegistry {
                 "usedMode": session.mode,
                 "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
                 "metadata": [:],
-                "usage": NSNull()
+                "usage": NSNull(),
+                "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": response.rawContent.isComplete]
             ])
         }
         #endif
@@ -192,7 +282,8 @@ actor SessionRegistry {
                     "metadata": [
                         "rawContent": String(describing: response.rawContent)
                     ],
-                    "usage": responseUsage(response.usage)
+                    "usage": responseUsage(response.usage),
+                    "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": NSNull()]
                 ])
             }
             #endif
@@ -205,7 +296,8 @@ actor SessionRegistry {
                 "metadata": [
                     "rawContent": String(describing: response.rawContent)
                 ],
-                "usage": NSNull()
+                "usage": NSNull(),
+                "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": NSNull()]
             ])
         }
         #endif
@@ -308,7 +400,8 @@ actor SessionRegistry {
                             "usedMode": session.mode,
                             "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
                             "metadata": [:],
-                            "usage": latestUsage
+                            "usage": latestUsage,
+                            "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": true]
                         ]
                     ]))
                     return
@@ -343,6 +436,7 @@ actor SessionRegistry {
                         "text": response.content
                     ]))
                 }
+                try Task.checkCancellation()
                 onEvent(FlutterChannelValue([
                     "type": "completed",
                     "requestId": requestId,
@@ -351,7 +445,8 @@ actor SessionRegistry {
                         "usedMode": session.mode,
                         "structuredValue": NSNull(),
                         "metadata": [:],
-                        "usage": latestUsage
+                        "usage": latestUsage,
+                        "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": NSNull()]
                     ]
                 ]))
                 return
@@ -433,6 +528,8 @@ actor SessionRegistry {
                                 instructions: instructions,
                                 metadata: metadata,
                                 languageSession: languageSession,
+                                tools: tools,
+                                useCase: "general",
                                 toolCallBudget: toolCallBudget
                             )
                         }
@@ -509,6 +606,9 @@ actor SessionRegistry {
                     instructions: instructions,
                     metadata: metadata,
                     languageSession: languageSession,
+                    localModel: model,
+                    tools: tools,
+                    useCase: useCase == "contentTagging" ? "contentTagging" : "general",
                     toolCallBudget: toolCallBudget
                 )
             case .unavailable(let reason):
@@ -1134,6 +1234,40 @@ actor SessionRegistry {
         return nil
     }
 
+    private nonisolated func exactTokenComponent(_ count: Int) -> [String: Any] {
+        ["count": count, "precision": "exact", "reason": NSNull()]
+    }
+
+    private nonisolated func unavailableTokenComponent(reason: String) -> [String: Any] {
+        ["count": NSNull(), "precision": "unavailable", "reason": reason]
+    }
+
+    private nonisolated func tokenBudget(
+        mode: String,
+        prompt: [String: Any],
+        instructions: [String: Any],
+        tools: [String: Any],
+        schema: [String: Any],
+        transcript: [String: Any],
+        maximumResponseTokens: Int?,
+        contextWindowTokens: Int?,
+        modelIdentifier: String?
+    ) -> [String: Any] {
+        [
+            "mode": mode,
+            "components": [
+                "prompt": prompt,
+                "instructions": instructions,
+                "tools": tools,
+                "schema": schema,
+                "transcript": transcript
+            ],
+            "maximumResponseTokens": maximumResponseTokens ?? NSNull(),
+            "contextWindowTokens": contextWindowTokens ?? NSNull(),
+            "modelIdentifier": modelIdentifier ?? NSNull()
+        ]
+    }
+
     private nonisolated func doubleValue(from value: Any?) -> Double? {
         if let double: Double = value as? Double {
             return double
@@ -1206,6 +1340,9 @@ struct NativeSession {
     let instructions: String?
     let metadata: [String: Any]
     let languageSession: Any?
+    let localModel: Any?
+    let tools: Any?
+    let useCase: String
     let toolCallBudget: ToolCallBudget?
 
     init(
@@ -1214,6 +1351,9 @@ struct NativeSession {
         instructions: String?,
         metadata: [String: Any],
         languageSession: Any? = nil,
+        localModel: Any? = nil,
+        tools: Any? = nil,
+        useCase: String = "general",
         toolCallBudget: ToolCallBudget? = nil
     ) {
         self.id = id
@@ -1221,6 +1361,9 @@ struct NativeSession {
         self.instructions = instructions
         self.metadata = metadata
         self.languageSession = languageSession
+        self.localModel = localModel
+        self.tools = tools
+        self.useCase = useCase
         self.toolCallBudget = toolCallBudget
     }
 }
@@ -1229,5 +1372,6 @@ enum NativeSessionError: Error {
     case sessionNotFound
     case foundationModelsUnavailable
     case invalidRequest(String)
+    case invalidSchema(path: String, reason: String)
     case modelUnavailable(code: String, message: String, recoverySuggestion: String)
 }

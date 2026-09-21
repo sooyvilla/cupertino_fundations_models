@@ -7,3 +7,8 @@ export 'src/schema.dart';
 export 'src/session.dart';
 export 'src/tools.dart';
 export 'src/transcription.dart';
+export 'src/generation_termination.dart';
+export 'src/generation_diagnostics.dart';
+export 'src/generation_diagnostic_event.dart';
+export 'src/token_budget.dart';
+export 'src/token_measurement.dart';

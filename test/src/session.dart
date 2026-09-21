@@ -26,7 +26,7 @@ void main() {
       );
       expect(
         await session.stream(const Prompt.text('hi')).toList(),
-        hasLength(1),
+        hasLength(2),
       );
       expect(
         await session.generateStructured(

@@ -1,6 +1,6 @@
 # iOS 27.2 source and documentation audit
 
-> Historical 0.3.0 audit. For the 0.3.1 contract see [usage](usage.md),
+> Historical 0.3.0 audit. For the 0.4.0 contract see [usage](usage.md),
 > [PCC setup](private-cloud-compute.md) and the [changelog](../CHANGELOG.md).
 > The results below do not validate subsequent streaming changes.
 

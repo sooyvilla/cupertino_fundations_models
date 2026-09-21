@@ -1,4 +1,7 @@
 import 'availability.dart';
+import 'errors.dart';
+import 'generation_diagnostics.dart';
+import 'generation_termination.dart';
 import 'schema.dart';
 
 /// Sampling behavior requested from the native model.
@@ -99,6 +102,10 @@ final class GenerationOptions {
     this.cloudPolicy,
     this.includeSchemaInPrompt,
     this.timeout = const Duration(seconds: 60),
+    this.firstResponseTimeout,
+    this.idleTimeout,
+    this.totalTimeout,
+    this.diagnostics,
   }) : assert(samplingTopK > 0, 'samplingTopK must be greater than zero.'),
        assert(
          samplingProbabilityThreshold >= 0 && samplingProbabilityThreshold <= 1,
@@ -143,8 +150,28 @@ final class GenerationOptions {
   final CloudPolicy? cloudPolicy;
   final bool? includeSchemaInPrompt;
   final Duration timeout;
+  final Duration? firstResponseTimeout;
+  final Duration? idleTimeout;
+  final Duration? totalTimeout;
+  final GenerationDiagnostics? diagnostics;
 
   Map<String, Object?> toMap() {
+    for (final entry in <String, Duration?>{
+      'firstResponseTimeout': firstResponseTimeout,
+      'idleTimeout': idleTimeout,
+      'totalTimeout': totalTimeout,
+    }.entries) {
+      if (entry.value != null && entry.value! <= Duration.zero) {
+        throw ArgumentError.value(entry.value, entry.key, 'Must be positive.');
+      }
+    }
+    if (diagnostics != null && diagnostics!.maximumOutputCharacters < 1) {
+      throw ArgumentError.value(
+        diagnostics!.maximumOutputCharacters,
+        'maximumOutputCharacters',
+        'Must be positive.',
+      );
+    }
     if (timeout <= Duration.zero) {
       throw ArgumentError.value(
         timeout,
@@ -202,6 +229,9 @@ final class ModelResponse {
     required this.metadata,
     this.structuredValue,
     this.usage,
+    this.termination = const GenerationTermination(
+      status: GenerationStatus.completed,
+    ),
   });
 
   factory ModelResponse.fromMap(Map<Object?, Object?> map) {
@@ -218,6 +248,10 @@ final class ModelResponse {
       metadata: rawMetadata.cast<String, Object?>(),
       structuredValue: _normalizeChannelValue(map['structuredValue']),
       usage: rawUsage == null ? null : ModelUsage.fromMap(rawUsage),
+      termination: GenerationTermination.fromMap(
+        map['termination'] as Map<Object?, Object?>? ??
+            const <Object?, Object?>{},
+      ),
     );
   }
 
@@ -226,6 +260,7 @@ final class ModelResponse {
   final Map<String, Object?> metadata;
   final Object? structuredValue;
   final ModelUsage? usage;
+  final GenerationTermination termination;
 }
 
 /// Token usage returned by Foundation Models on iOS 27 or later.
@@ -240,19 +275,19 @@ final class ModelUsage {
 
   factory ModelUsage.fromMap(Map<Object?, Object?> map) {
     return ModelUsage(
-      inputTokenCount: (map['inputTokenCount'] as int?) ?? 0,
-      cachedInputTokenCount: (map['cachedInputTokenCount'] as int?) ?? 0,
-      outputTokenCount: (map['outputTokenCount'] as int?) ?? 0,
-      reasoningTokenCount: (map['reasoningTokenCount'] as int?) ?? 0,
-      totalTokenCount: (map['totalTokenCount'] as int?) ?? 0,
+      inputTokenCount: map['inputTokenCount'] as int?,
+      cachedInputTokenCount: map['cachedInputTokenCount'] as int?,
+      outputTokenCount: map['outputTokenCount'] as int?,
+      reasoningTokenCount: map['reasoningTokenCount'] as int?,
+      totalTokenCount: map['totalTokenCount'] as int?,
     );
   }
 
-  final int inputTokenCount;
-  final int cachedInputTokenCount;
-  final int outputTokenCount;
-  final int reasoningTokenCount;
-  final int totalTokenCount;
+  final int? inputTokenCount;
+  final int? cachedInputTokenCount;
+  final int? outputTokenCount;
+  final int? reasoningTokenCount;
+  final int? totalTokenCount;
 }
 
 /// Options used when requesting structured output.
@@ -311,6 +346,8 @@ sealed class SessionEvent {
           requestId: (map['requestId'] as String?) ?? '',
           code: (map['code'] as String?) ?? 'unknown',
           message: (map['message'] as String?) ?? 'Request failed.',
+          details: (map['details'] as Map<Object?, Object?>?)
+                  ?.cast<String, Object?>() ?? const <String, Object?>{},
         );
       default:
         return UnknownSessionEvent(payload: map.cast<String, Object?>());
@@ -371,6 +408,7 @@ final class FailureEvent extends SessionEvent {
     required this.requestId,
     required this.code,
     required this.message,
+    this.details = const <String, Object?>{},
   });
 
   /// Identifier of the request that failed.
@@ -381,6 +419,16 @@ final class FailureEvent extends SessionEvent {
 
   /// Human-readable error message.
   final String message;
+  final Map<String, Object?> details;
+
+  GenerationTermination get termination => FoundationModelsException(
+    code: FoundationModelsErrorCode.values.firstWhere(
+      (value) => value.name == code,
+      orElse: () => FoundationModelsErrorCode.unknown,
+    ),
+    message: message,
+    details: details,
+  ).termination;
 }
 
 /// Event used when the native side sends an unknown event payload.
