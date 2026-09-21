@@ -4,6 +4,7 @@ import '../generation.dart';
 import '../schema.dart';
 import '../session.dart';
 import '../transcription.dart';
+import '../token_budget.dart';
 
 /// Internal platform contract used by the public facade.
 abstract interface class CupertinoFoundationModelsPlatform {
@@ -28,6 +29,13 @@ abstract interface class CupertinoFoundationModelsPlatform {
   Future<int> countTokens({required Prompt prompt});
 
   Future<int> countSessionTokens({required String sessionId});
+
+  Future<TokenBudget> measureTokenBudget({
+    required String sessionId,
+    required Prompt prompt,
+    StructuredSchema? schema,
+    required GenerationOptions options,
+  });
 
   Future<PickedFoundationModelsFile?> pickFile({
     required FoundationModelsFileKind kind,

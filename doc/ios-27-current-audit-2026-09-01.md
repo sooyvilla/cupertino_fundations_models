@@ -1,4 +1,4 @@
-> Historical September 1 snapshot. For current contracts see [usage](usage.md) and [PCC setup](private-cloud-compute.md). The [September 19 audit](ios-27.2-audit-2026-09-19.md) records later checks, not validation of 0.3.1.
+> Historical September 1 snapshot. For current contracts see [usage](usage.md) and [PCC setup](private-cloud-compute.md). The [September 19 audit](ios-27.2-audit-2026-09-19.md) records later checks, not validation of 0.4.0.
 
 # iOS 27 current API and crash-safety audit
 

@@ -1,3 +1,40 @@
+## 0.4.0
+
+### Breaking
+
+- `ModelUsage` counters are nullable. Missing native values no longer decode as
+  zero. See [migration](doc/migration-0.4.0.md).
+- The internal platform interface adds `measureTokenBudget`; custom transports
+  must implement it. Stream closure without a terminal result now fails, and
+  subscription cancellation errors are propagated instead of swallowed.
+
+### Added
+
+- Session token budgets with per-component counts and precision for prompt,
+  instructions, tools, schema and transcript using the actual local model.
+  PCC/unsupported counts remain explicitly unavailable; no exact total is
+  fabricated from overlapping components.
+- Typed response/error termination, structure completeness and timeout phase.
+  Successful completion retains an unknown stop reason when Apple supplies none.
+- First-response, idle and total stream deadlines with awaited native cleanup.
+- Opt-in diagnostic callbacks with request/model/runtime metadata, timing,
+  usage, typed outcome and separately enabled bounded exact-output capture.
+- A complete structured-document extraction example with Spanish numeric text,
+  updated developer/agent references, migration and physical integration guide.
+
+### Fixed
+
+- Dynamic schema type names are unique by path; mapper errors identify the
+  failing property through `schemaPath`.
+- Terminal stream delivery removes its native transport registration before
+  invoking consumers, and incomplete closes do not look like success.
+
+### Validation scope
+
+- Source/SDK review only. No tests, analysis, formatting, builds or physical
+  device/PCC validation were executed for this release. Existing fake transport
+  and expectation adapted to the internal interface and terminal event contract.
+
 ## 0.3.1
 
 ### Added

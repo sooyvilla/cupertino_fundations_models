@@ -11,6 +11,10 @@ route user data to PCC or an external provider. Preserve the disabled native
 image/PCC getter paths until a separately authorized runtime investigation
 supports changing them. Document unsupported features honestly.
 
+Preserve unknown usage and stop causes; do not infer exact PCC budgets from
+local tokenization or sum overlapping request components. Diagnostics must
+remain opt-in with no automatic content retention or upload.
+
 Update README, usage, agent instructions, the example and relevant migration
 notes for public changes. Keep the [PCC guide](doc/private-cloud-compute.md)
 aligned with official eligibility/signing requirements; date source checks and

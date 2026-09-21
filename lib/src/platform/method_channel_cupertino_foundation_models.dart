@@ -11,6 +11,7 @@ import '../schema.dart';
 import '../session.dart';
 import '../tools.dart';
 import '../transcription.dart';
+import '../token_budget.dart';
 import 'cupertino_foundation_models_platform.dart';
 
 /// MethodChannel implementation for Apple platforms.
@@ -96,6 +97,7 @@ final class MethodChannelCupertinoFoundationModels
       mode: _modeFromName(modeName),
       platform: this,
       tools: options.tools,
+      runtimeMetadata: _asMap(map['runtimeMetadata']).cast<String, Object?>(),
     );
     if (options.tools.isNotEmpty) {
       _liveSessions[sessionId] = session;
@@ -119,6 +121,22 @@ final class MethodChannelCupertinoFoundationModels
       'sessionId': sessionId,
     });
     return response ?? 0;
+  }
+
+  @override
+  Future<TokenBudget> measureTokenBudget({
+    required String sessionId,
+    required Prompt prompt,
+    StructuredSchema? schema,
+    required GenerationOptions options,
+  }) async {
+    final response = await _invoke('measureTokenBudget', <String, Object?>{
+      'sessionId': sessionId,
+      'prompt': prompt.toMap(),
+      if (schema != null) 'schema': schema.toMap(),
+      'options': options.toMap(),
+    });
+    return TokenBudget.fromMap(_asMap(response));
   }
 
   @override
@@ -367,14 +385,10 @@ final class MethodChannelCupertinoFoundationModels
     required String sessionId,
     required String requestId,
   }) async {
-    try {
-      await _invoke<void>('cancelStream', <String, Object?>{
-        'sessionId': sessionId,
-        'requestId': requestId,
-      });
-    } on FoundationModelsException {
-      return;
-    }
+    await _invoke<void>('cancelStream', <String, Object?>{
+      'sessionId': sessionId,
+      'requestId': requestId,
+    });
   }
 
   Future<void> _handleStreamEvent(Map<Object?, Object?> arguments) async {
@@ -401,9 +415,12 @@ final class MethodChannelCupertinoFoundationModels
     }
 
     final SessionEvent event = SessionEvent.fromMap(_asMap(arguments['event']));
-    active.controller.add(event);
-    if (event is CompletionEvent || event is FailureEvent) {
+    final terminal = event is CompletionEvent || event is FailureEvent;
+    if (terminal) {
       _activeStreams.remove(requestId);
+    }
+    active.controller.add(event);
+    if (terminal) {
       await active.controller.close();
     }
   }

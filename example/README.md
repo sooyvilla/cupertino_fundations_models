@@ -1,6 +1,6 @@
 # Apple native example
 
-A Flutter chat demonstrating the native Apple API in version 0.3.1. For apps
+A Flutter chat demonstrating the native Apple API in version 0.4.0. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
 - Persistent Apple on-device session, cumulative streaming snapshots and a
@@ -13,6 +13,13 @@ using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.m
 - Text/PDF extraction and Vision-backed image context through the document picker.
 - Request cancellation, draft recovery and serialized session disposal.
 
+Sources: [chat](lib/main.dart) and [document extraction](lib/document_extraction.dart).
+The document stream demonstrates schema guidance, per-component token budgets,
+separate deadlines and optional diagnostics using fictitious Spanish amounts.
+See its [integration guide](../doc/document-extraction.md) and the
+[0.4.0 migration](../doc/migration-0.4.0.md). Usage counters are nullable and
+successful stream completion has no inferred native stop reason.
+
 Source: [lib/main.dart](lib/main.dart). External API routing belongs to the host
 application; there is no Gemini client or provider key in this example.
 
@@ -20,8 +27,9 @@ application; there is no Gemini client or provider key in this example.
 
 Use Flutter 3.41+/Dart 3.11+, an Apple Intelligence-capable device with its model
 ready, and a suitable Xcode SDK. Generation needs iOS 26+, token counts need
-26.4+, and PCC/new tool modes need iOS 27+. Development was compiled with Xcode
-27.2 beta; this does not establish runtime compatibility with every OS version.
+26.4+, and PCC/new tool modes need iOS 27+. Earlier releases were compiled with Xcode
+27.2 beta. Version 0.4.0 has source review only, without a new build or runtime
+validation; prior results do not validate the changed source.
 
 The example includes the Speech and microphone usage descriptions. Grant those
 permissions only when using dictation. On-device Speech assets may need an initial

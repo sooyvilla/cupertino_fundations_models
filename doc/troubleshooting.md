@@ -55,6 +55,24 @@ The new route rejects malformed schemas and incomplete/undecodable final
 content. This release was reviewed in source; no new build or device result is
 claimed. See [guided streaming](usage.md#guided-streaming).
 
+## Reliability contracts in 0.4.0
+
+Read [migration](migration-0.4.0.md) before upgrading. Missing usage counters are
+nullable. Use `measureTokenBudget` to identify which local components were
+counted; PCC counts are unavailable, and overlapping components must not be
+added as an exact request total. A normal completion has an unknown stop reason
+unless Apple reports one. Neither estimates nor token usage prove truncation.
+
+For timeouts inspect `exception.termination.timeoutPhase` (first response, idle
+or total), then await cleanup before reuse. A close without a terminal result
+is an error. Recreate sessions whose cancellation could not be confirmed.
+Schema mapper failures include `details['schemaPath']`.
+
+For reproducible partial-output failures use the explicit, bounded
+[diagnostic callback](usage.md#request-diagnostics). It saves/uploads nothing;
+the host owns any captured data. OS suspension, entitled PCC generation and
+long-document completeness still require physical integration evidence.
+
 ## Recover by error code
 
 - `appleIntelligenceDisabled`, `assetsUnavailable`: check Apple Intelligence,

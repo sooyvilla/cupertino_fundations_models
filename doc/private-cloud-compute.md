@@ -1,6 +1,6 @@
 # Private Cloud Compute setup
 
-For package **0.3.1**. Apple requirements checked September 21, 2026;
+For package **0.4.0**. Apple requirements checked September 21, 2026;
 recheck the linked pages before applying because eligibility and beta APIs can
 change. This guide does not establish that your account or app is approved.
 
@@ -118,7 +118,10 @@ more access. See [recovery by error code](troubleshooting.md#recover-by-error-co
 
 Treat schema, instructions, history, tools and output as part of the context
 budget. Validate facts and business rules even when JSON follows the schema.
-Only the completed structured response is final data. Reconcile tool side
+Only the completed structured response is final data. PCC budget measurements
+are unavailable in this SDK; the plugin never counts cloud requests with the
+local tokenizer. Nullable actual usage, unknown native stop reasons, stream
+deadlines and opt-in output capture are described in [usage](usage.md). Reconcile tool side
 effects before retries; cancellation does not undo application writes.
 
 Apple approval, a successful build, and a successful on-device model request do

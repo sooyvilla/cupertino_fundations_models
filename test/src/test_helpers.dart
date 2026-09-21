@@ -101,6 +101,21 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   }
 
   @override
+  Future<TokenBudget> measureTokenBudget({
+    required String sessionId,
+    required Prompt prompt,
+    StructuredSchema? schema,
+    required GenerationOptions options,
+  }) async {
+    calls.add('measureTokenBudget');
+    return TokenBudget(
+      mode: ModelMode.local,
+      components: const <String, TokenMeasurement>{},
+      maximumResponseTokens: options.maximumResponseTokens,
+    );
+  }
+
+  @override
   Future<PickedFoundationModelsFile?> pickFile({
     required FoundationModelsFileKind kind,
   }) async {
@@ -161,9 +176,17 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
     if (controlledStream != null) {
       return controlledStream;
     }
-    return Stream<SessionEvent>.value(
-      const TextSnapshotEvent(requestId: 'r', text: 'delta'),
-    );
+    return Stream<SessionEvent>.fromIterable(const <SessionEvent>[
+      TextSnapshotEvent(requestId: 'r', text: 'delta'),
+      CompletionEvent(
+        requestId: 'r',
+        response: ModelResponse(
+          text: 'delta',
+          usedMode: ModelMode.local,
+          metadata: <String, Object?>{},
+        ),
+      ),
+    ]);
   }
 
   @override
