@@ -1,8 +1,10 @@
 # Migrating to 0.4.0
 
+Version 0.4.1 retains this contract and corrects publication diagnostics.
+
 This release keeps the existing text/structured streaming event hierarchy and
 adds request reliability APIs. Resolve the consuming app's dependency to
-`^0.4.0` and rebuild its iOS host. Hot reload cannot update the native bridge.
+`^0.4.1` and rebuild its iOS host. Hot reload cannot update the native bridge.
 
 ## Breaking changes
 

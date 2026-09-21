@@ -104,8 +104,8 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   Future<TokenBudget> measureTokenBudget({
     required String sessionId,
     required Prompt prompt,
-    StructuredSchema? schema,
     required GenerationOptions options,
+    StructuredSchema? schema,
   }) async {
     calls.add('measureTokenBudget');
     return TokenBudget(
@@ -168,8 +168,8 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   Stream<SessionEvent> stream({
     required String sessionId,
     required Prompt prompt,
-    StructuredSchema? schema,
     required GenerationOptions options,
+    StructuredSchema? schema,
   }) {
     calls.add('stream');
     final Stream<SessionEvent>? controlledStream = controlledSessionStream;

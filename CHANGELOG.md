@@ -1,3 +1,11 @@
+## 0.4.1
+
+- Specify the new token-budget channel result type explicitly to satisfy strict
+  inference; order Dart directives and required parameters consistently.
+- No runtime/API contract change from 0.4.0. The same migration guide applies.
+- Publication includes Pub's integrated package checks; no separate analysis,
+  tests, builds or device execution was requested or performed.
+
 ## 0.4.0
 
 ### Breaking
