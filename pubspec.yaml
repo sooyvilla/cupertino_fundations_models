@@ -1,10 +1,10 @@
 name: cupertino_fundations_models
 description: "Apple Foundation Models for Flutter: on-device text, structured output, tools, streaming, Speech, and opt-in Private Cloud Compute."
-version: 0.4.1
+version: 0.4.2
 homepage: https://github.com/sooyvilla/cupertino_fundations_models
 repository: https://github.com/sooyvilla/cupertino_fundations_models
 issue_tracker: https://github.com/sooyvilla/cupertino_fundations_models/issues
-documentation: https://github.com/sooyvilla/cupertino_fundations_models#readme
+documentation: https://pub.dev/documentation/cupertino_fundations_models/latest/
 license: MIT
 topics:
   - apple-intelligence

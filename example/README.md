@@ -1,6 +1,6 @@
 # Apple native example
 
-A Flutter chat demonstrating the native Apple API in version 0.4.1. For apps
+A Flutter chat demonstrating the native Apple API in version 0.4.2. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
 - Persistent Apple on-device session, cumulative streaming snapshots and a

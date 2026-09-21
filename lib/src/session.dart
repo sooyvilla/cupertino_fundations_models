@@ -258,7 +258,7 @@ final class FoundationModelSession {
       configuration: options.diagnostics,
       runtimeMetadata: <String, Object?>{
         ..._runtimeMetadata,
-        'packageVersion': '0.4.1',
+        'packageVersion': '0.4.2',
       },
     );
   }
