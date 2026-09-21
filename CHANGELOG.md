@@ -1,3 +1,10 @@
+## 0.4.2
+
+- Replace the stream error forwarding closure with its method tear-off, fixing
+  the lint reported by pub.dev's scoring analysis. No API or behavior change.
+- Point the documentation metadata to the generated pub.dev API reference,
+  verified reachable with an HTTP HEAD request.
+
 ## 0.4.1
 
 - Specify the new token-budget channel result type explicitly to satisfy strict

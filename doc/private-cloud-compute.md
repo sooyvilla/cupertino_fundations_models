@@ -1,6 +1,6 @@
 # Private Cloud Compute setup
 
-For package **0.4.1**. Apple requirements checked September 21, 2026;
+For package **0.4.2**. Apple requirements checked September 21, 2026;
 recheck the linked pages before applying because eligibility and beta APIs can
 change. This guide does not establish that your account or app is approved.
 
