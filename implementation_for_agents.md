@@ -1,6 +1,6 @@
 # Implementation guide for coding agents
 
-This guide describes **version 0.4.0**. Read the
+This guide describes **version 0.4.1**. Read the
 [0.4.0 migration](doc/migration-0.4.0.md) for nullable usage counters and
 stream lifecycle changes, and the
 [migration guide](doc/migration-0.3.0.md) before adapting an existing hybrid

@@ -9,9 +9,9 @@ import '../file_selection.dart';
 import '../generation.dart';
 import '../schema.dart';
 import '../session.dart';
+import '../token_budget.dart';
 import '../tools.dart';
 import '../transcription.dart';
-import '../token_budget.dart';
 import 'cupertino_foundation_models_platform.dart';
 
 /// MethodChannel implementation for Apple platforms.
@@ -127,10 +127,10 @@ final class MethodChannelCupertinoFoundationModels
   Future<TokenBudget> measureTokenBudget({
     required String sessionId,
     required Prompt prompt,
-    StructuredSchema? schema,
     required GenerationOptions options,
+    StructuredSchema? schema,
   }) async {
-    final response = await _invoke('measureTokenBudget', <String, Object?>{
+    final Object? response = await _invoke<Object?>('measureTokenBudget', <String, Object?>{
       'sessionId': sessionId,
       'prompt': prompt.toMap(),
       if (schema != null) 'schema': schema.toMap(),
@@ -238,8 +238,8 @@ final class MethodChannelCupertinoFoundationModels
   Stream<SessionEvent> stream({
     required String sessionId,
     required Prompt prompt,
-    StructuredSchema? schema,
     required GenerationOptions options,
+    StructuredSchema? schema,
   }) {
     final String requestId = _createRequestId();
     final Map<String, Object?> arguments = <String, Object?>{

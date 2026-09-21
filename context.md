@@ -1,6 +1,6 @@
 # Cupertino Foundation Models - Contexto vigente
 
-## Iteración 0.4.0 — 2026-09-21
+## Iteración 0.4.0 / 0.4.1 — 2026-09-21
 
 - Alcance autorizado: implementar las recomendaciones del consumo real: presupuestos de tokens por modelo, terminación, deadlines separados, nombres/rutas de schema, diagnóstico optativo y ejemplo completo. El streaming guiado local/PCC de 0.3.1 se conserva.
 - Versión 0.4.0 por cambio incompatible: ModelUsage admite contadores null donde Apple no informa; transporte interno amplía interfaz. Cierres sin resultado terminal fallan y los errores de cancelación se propagan.
@@ -10,7 +10,7 @@
 - Documentación pública, agentes, migración y ejemplo actualizados; se conserva guía PCC con elegibilidad, solicitud y firma. Validación financiera, cobertura de filas, consentimientos, cuotas y routing local/PCC/proveedores siguen en app.
 - Validación de esta iteración: solo lectura de SDK/fuentes y revisión de diff. No tests, analyzer, formatter, builds, apps, simuladores ni dispositivos. Fake y expectativa existentes adaptados al resultado terminal; no pruebas nuevas. Validación física local/PCC pendiente.
 - Equipo Astra: Terra implementó Swift; Sol revisó contratos/SDK/lifecycle de solo lectura. Astra corrigió keys/rutas de schema, omisión de causa desconocida y fixture terminal señalados en revisión, sin ejecutar QA.
-- Revisión de código cerrada; entrega Git/pub.dev y cierre de sesiones en curso. Usuario autorizó apagar la Mac después del trabajo y cuando no queden otras sesiones activas; no interrumpir sesiones ajenas. Estado inicial: main dbf51a0 limpio, único checkout.
+- Entrega 0.4.0: commit d6dc796 enviado a origin/main; pub.dev aceptó el upload. Su validación integrada ejecutó análisis y reportó 1 warning de inferencia y 12 infos de estilo, sin errores. Se corrigen en 0.4.1 antes del cierre; sin contrato adicional incompatible. No se lanzó análisis independiente. Usuario autorizó apagar la Mac después del trabajo y cuando no queden otras sesiones activas; no interrumpir sesiones ajenas. Estado inicial: main dbf51a0 limpio, único checkout.
 
 ## Iteración 2026-09-21
 

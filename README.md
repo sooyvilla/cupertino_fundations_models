@@ -20,13 +20,13 @@ Use Flutter 3.41+ and Dart 3.11+. Add:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.0
+  cupertino_fundations_models: ^0.4.1
 ```
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
 
-When upgrading, resolve the app's dependency lockfile to 0.4.0 or later and
+When upgrading, resolve the app's dependency lockfile to 0.4.1 or later and
 rebuild the iOS host: the budget and streaming contracts change the native plugin, so hot reload
 alone is insufficient. Existing text streams remain available; requesting JSON
 in a prompt does not enable schema guidance.
