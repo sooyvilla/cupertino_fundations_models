@@ -4,7 +4,10 @@
 
 - Usuario reportó 150/160 puntos en pub.dev. Su API de métricas confirma versión 0.4.1 y pérdida de 10 puntos exclusivamente por unnecessary_lambdas en generation_stream.dart:55. El aviso de URL no restó puntos (convenciones 30/30).
 - Se sustituye el forwarding closure por onError: _fail y se apunta documentation al dartdoc generado en pub.dev. HEAD a ambas URLs respondió 200; la advertencia de GitHub fue observada por el evaluador remoto, no reproducida desde esta Mac.
-- Parche 0.4.2 sin cambio de API/runtime, metadata y referencias vigentes alineadas. Lectura del reporte remoto y diff; no pruebas ni ejecución de app/dispositivos. 0.4.2 fue publicada, pero Pub detectó que la firma de _fail con parámetro opcional no cumple la firma especial del manejador de errores. 0.4.3 usa _onSourceError con dos parámetros posicionales exactos; publicación y puntuación final pendientes.
+- Parche 0.4.2 sin cambio de API/runtime, metadata y referencias vigentes alineadas. Lectura del reporte remoto y diff; no pruebas ni ejecución de app/dispositivos. 0.4.2 fue publicada, pero Pub detectó que la firma de _fail con parámetro opcional no cumple la firma especial del manejador de errores. 0.4.3 usa _onSourceError con dos parámetros posicionales exactos; Pub confirmó 0 warnings antes de aceptar el upload.
+- Entrega 0.4.3: commit 437d1a256170e0026c034e2aabaeb8d014005d5d en origin/main confirmado. API latest 0.4.3, publicado 2026-09-21T14:55:25.903560Z, archive SHA256 220392248b3cf1f9b5f62917923d11d1a69bd99124fd06164abf81d87d8a1725.
+- Informe remoto Pana para 0.4.3 completado 2026-09-21T14:58:49.508990: result.grantedPoints 160/160, analysis 50/50, todas las secciones passed y URL documentation válida. El agregado score.grantedPoints todavía mostraba 150 al consultar; no confundir caché de resumen con resultado versionado. No tests/builds/dispositivos locales.
+- La sesión Investiga IA local en extractos seguía activa al cierre de esta corrección; la espera para apagar continúa sin interrumpirla.
 - No se había programado ni ejecutado ningún apagado. Se mantiene pendiente la orden hasta completar este parche y confirmar que no haya otras sesiones activas.
 
 ## Iteración 0.4.0 / 0.4.1 — 2026-09-21
