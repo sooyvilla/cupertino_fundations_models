@@ -1,6 +1,6 @@
 # Usage reference
 
-This reference describes version 0.4.2. See the [README](../README.md) for
+This reference describes version 0.4.3. See the [README](../README.md) for
 installation and the [0.4.0 migration guide](migration-0.4.0.md) for breaking changes.
 Migration from the removed hybrid API is covered in [0.3.0](migration-0.3.0.md).
 For Apple cloud, complete [PCC eligibility, entitlement and host setup](private-cloud-compute.md)

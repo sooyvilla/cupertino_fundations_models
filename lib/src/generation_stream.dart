@@ -52,7 +52,7 @@ final class GenerationStream {
       }
       _subscription = source().listen(
         _event,
-        onError: _fail,
+        onError: _onSourceError,
         onDone: () {
           if (!_settled) {
             _fail(const FoundationModelsException(
@@ -148,6 +148,10 @@ final class GenerationStream {
       StackTrace.current,
       cancel: true,
     );
+  }
+
+  void _onSourceError(Object error, StackTrace stack) {
+    _fail(error, stack);
   }
 
   void _fail(Object error, StackTrace stack, {bool cancel = false}) {
