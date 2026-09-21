@@ -1,3 +1,9 @@
+## 0.4.3
+
+- Give the stream error-handler tear-off an exact two-positional-argument
+  signature, fixing the handler warning introduced in 0.4.2 while retaining
+  the removal of the forwarding closure. No public API change.
+
 ## 0.4.2
 
 - Replace the stream error forwarding closure with its method tear-off, fixing

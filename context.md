@@ -1,10 +1,10 @@
 # Cupertino Foundation Models - Contexto vigente
 
-## Corrección de puntuación 0.4.2 — 2026-09-21
+## Corrección de puntuación 0.4.2 / 0.4.3 — 2026-09-21
 
 - Usuario reportó 150/160 puntos en pub.dev. Su API de métricas confirma versión 0.4.1 y pérdida de 10 puntos exclusivamente por unnecessary_lambdas en generation_stream.dart:55. El aviso de URL no restó puntos (convenciones 30/30).
 - Se sustituye el forwarding closure por onError: _fail y se apunta documentation al dartdoc generado en pub.dev. HEAD a ambas URLs respondió 200; la advertencia de GitHub fue observada por el evaluador remoto, no reproducida desde esta Mac.
-- Parche 0.4.2 sin cambio de API/runtime, metadata y referencias vigentes alineadas. Lectura del reporte remoto y diff; no pruebas ni ejecución de app/dispositivos. Publicación y nueva puntuación pendientes.
+- Parche 0.4.2 sin cambio de API/runtime, metadata y referencias vigentes alineadas. Lectura del reporte remoto y diff; no pruebas ni ejecución de app/dispositivos. 0.4.2 fue publicada, pero Pub detectó que la firma de _fail con parámetro opcional no cumple la firma especial del manejador de errores. 0.4.3 usa _onSourceError con dos parámetros posicionales exactos; publicación y puntuación final pendientes.
 - No se había programado ni ejecutado ningún apagado. Se mantiene pendiente la orden hasta completar este parche y confirmar que no haya otras sesiones activas.
 
 ## Iteración 0.4.0 / 0.4.1 — 2026-09-21
