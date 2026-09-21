@@ -18,11 +18,16 @@ Use Flutter 3.41+ and Dart 3.11+. Add:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.3.0
+  cupertino_fundations_models: ^0.3.1
 ```
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
+
+When upgrading, resolve the app's dependency lockfile to 0.3.1 or later and
+rebuild the iOS host: guided streaming changes the native plugin, so hot reload
+alone is insufficient. Existing text streams remain available; requesting JSON
+in a prompt does not enable schema guidance.
 
 ```dart
 import 'package:cupertino_fundations_models/cupertino_fundations_models.dart';
@@ -137,13 +142,50 @@ reusing it. Separate sessions can stream concurrently, including sessions from
 different `CupertinoFoundationModels` facades. Await stream subscription
 cancellation and `dispose()`; neither undoes side effects in your Dart tools.
 
+For guided streaming, use `streamStructured`, or pass `schema` to `stream`.
+Each `TextSnapshotEvent.text` is the latest cumulative JSON snapshot, so replace
+displayed text instead of appending or treating it as final data. The terminal
+`CompletionEvent.response` contains the complete JSON string and decoded
+`structuredValue`; an incomplete or undecodable final snapshot fails with
+`parsingFailure`.
+
+```dart
+final structuredSession = await models.createSession(
+  options: const SessionOptions(mode: ModelMode.local),
+);
+try {
+  await for (final event in structuredSession.streamStructured(
+    prompt: const Prompt.text('The appointment is with Morgan on Friday.'),
+    schema: const StructuredSchema.object(
+      name: 'Appointment',
+      properties: <String, SchemaProperty>{
+        'person': SchemaProperty.string(),
+        'day': SchemaProperty.string(),
+      },
+      requiredProperties: <String>['person', 'day'],
+    ),
+  )) {
+    if (event case CompletionEvent(:final response)) {
+      final appointment = response.structuredValue;
+      print(appointment);
+    }
+  }
+} finally {
+  await structuredSession.dispose();
+}
+```
+
+Guided streaming requires iOS 26+ and the same Apple Intelligence availability
+as other generation. PCC additionally requires iOS 27, the host opt-in and
+Apple's managed entitlement.
+
 See the [usage reference](doc/usage.md) for structured generation, tools,
 attachments, token usage, Speech and the complete option behavior.
 
 ## Privacy and setup
 
 The default model policy is local. There is no API client, API key storage,
-hybrid router or automatic external-provider fallback in 0.3.0.
+hybrid router or automatic external-provider fallback in 0.3.x.
 
 | Selection | Result |
 | --- | --- |
@@ -172,8 +214,9 @@ server fallback, and `server` permits Apple Speech networking. **Speech server
 recognition is separate from PCC.** Model and Speech asset downloads can require
 network even when inference is on-device.
 
-For PCC, obtain Apple's `com.apple.developer.private-cloud-compute` entitlement
-and sign the host app accordingly. Only then enable:
+For PCC, first follow the [eligibility, entitlement request and signing guide](doc/private-cloud-compute.md).
+Apple approval and correctly signed host provisioning are required before
+enabling this separate package flag:
 
 ```xml
 <key>CupertinoFoundationModelsPrivateCloudComputeEnabled</key>
@@ -188,6 +231,7 @@ language/capability getters and native image attachment path disabled.
 ## Documentation
 
 - [Usage and feature contracts](doc/usage.md)
+- [PCC eligibility, requesting access and host setup](doc/private-cloud-compute.md)
 - [Known failures, fixes and recovery](doc/troubleshooting.md)
 - [API agent plus local model: app-owned routing](doc/app-owned-routing.md)
 - [Migration from 0.2.x](doc/migration-0.3.0.md)

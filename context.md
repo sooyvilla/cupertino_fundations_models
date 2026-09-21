@@ -1,5 +1,14 @@
 # Cupertino Foundation Models - Contexto vigente
 
+## Iteración 2026-09-21
+
+- Alcance: se añadió `FoundationModelSession.streamStructured` y el schema opcional al transporte interno de streaming; la ruta textual conserva sus snapshots y respuesta terminal.
+- Decisiones: Swift valida cualquier schema presente, usa `ResponseStream<GeneratedContent>`, emite `rawContent.jsonString` acumulativo y sólo decodifica el último contenido completo. iOS 26 usa `includeSchemaInPrompt`; iOS 27 usa `ContextOptions`.
+- Entrega: versión preparada como 0.3.1 en pubspec, podspec y lock local del ejemplo; documentación pública explica snapshots JSON parciales, `parsingFailure`, iOS 26 y los requisitos PCC existentes.
+- Documentación ampliada por petición del usuario: guía PCC con elegibilidad, solicitud oficial, Account Holder, entitlement, perfiles/firma, opt-in y límites; enlazada desde todas las guías públicas pertinentes, con históricos preservados y marcados.
+- Validaciones: lectura de fuentes, SDK instalado y diff; Terra y Sol ejecutaron cada uno una vez `git diff --check` sin salida fuera del alcance pedido. No tests, analyze, format, builds, app, simulador ni dispositivo. Publicación pendiente; runtime iOS 26/27 y PCC sin validar.
+- Equipo Astra: Luna medium recuperó firmas del SDK; Terra medium implementó; Sol high revisó de forma independiente el código sin defectos confirmados. Astra decidió el contrato y amplió documentación/entrega. Roles/modelos según configuración; el cliente no expone metadatos suficientes para verificar el modelo/esfuerzo del principal.
+
 ## Iteración 2026-09-19
 
 - Objetivo: auditar fuentes, documentación, ejemplo, fallos históricos y SDK oficial 27.2; preparar la próxima entrega sin publicar ni aumentar todavía la versión.

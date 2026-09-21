@@ -4,6 +4,10 @@ The application owns the agent, credentials, consent, conversation, tools,
 idempotency and routing policy. This package is a bounded Apple capability
 inside that architecture.
 
+Before offering the Apple cloud route, complete the
+[PCC eligibility, entitlement and signing setup](private-cloud-compute.md).
+An external API subscription or Speech server permission does not authorize PCC.
+
 A useful split is:
 
 ```text
@@ -59,6 +63,11 @@ Expose narrowly named operations such as `rewriteDraft`, `classifyNote` or
 `extractContact`, with bounded inputs and a schema where appropriate. Return a
 validated result or a typed failure to the application's orchestrator. Limit
 concurrent work and account for tool definitions/output in the context budget.
+
+For structured progress, use `session.streamStructured` (0.3.1+) and treat JSON
+snapshots as provisional. Consume `CompletionEvent.response.structuredValue`
+after success and business validation. A JSON-only prompt on a text stream does
+not activate native schema guidance; see [guided streaming](usage.md#guided-streaming).
 
 Keep tools that perform payments, writes, sends or deletes behind the app's
 normal authorization and idempotency controls. A local model asking for a tool

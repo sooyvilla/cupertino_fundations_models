@@ -1,10 +1,12 @@
 # Apple native example
 
-A Flutter chat demonstrating the native Apple API in version 0.3.0. For apps
+A Flutter chat demonstrating the native Apple API in version 0.3.1. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
 - Persistent Apple on-device session, cumulative streaming snapshots and a
-  bounded `DeviceTimeTool`.
+  bounded `DeviceTimeTool`. Apps can also call `session.streamStructured(...)`
+  with `StructuredSchema.object(...)`; snapshots are cumulative partial JSON
+  and only the completion response is decoded final data.
 - Explicit Private Cloud Compute selection; local generation is the default.
 - Live Speech transcription with separate on-device/automatic/server choices.
 - Shared language selection, availability diagnostics and typed error display.
@@ -25,10 +27,13 @@ The example includes the Speech and microphone usage descriptions. Grant those
 permissions only when using dictation. On-device Speech assets may need an initial
 download. Choosing an Apple Speech server mode is independent of PCC selection.
 
-For PCC, obtain Apple's managed entitlement, configure signing and explicitly
+For PCC, follow the [eligibility and entitlement request guide](../doc/private-cloud-compute.md),
+obtain Apple's managed entitlement, configure signing and explicitly
 set `CupertinoFoundationModelsPrivateCloudComputeEnabled` in the host Info.plist.
 The example leaves this flag off; changing it does not grant the entitlement.
 Consult the [package setup](../README.md) before enabling it.
+Apple's published PCC testing routes are TestFlight and ad hoc distribution;
+the local `flutter run` instructions below do not establish PCC eligibility.
 
 From the example directory, on your own device when you choose to run it:
 
@@ -46,6 +51,8 @@ A route/language change resets the native conversation. One session accepts one
 request at a time. Images are preprocessed with Vision into text; native image
 Attachment calls are disabled. Large documents need application-side chunking.
 This sample is not an autonomous agent or a tool authorization framework.
+Guided streaming needs iOS 26+; PCC keeps its existing iOS 27 host opt-in and
+managed-entitlement requirements.
 
 The existing `CFM_SMOKE_TEST` entry point is an **opt-in device harness**, not
 normal app startup and not evidence that current tests passed. It runs only when

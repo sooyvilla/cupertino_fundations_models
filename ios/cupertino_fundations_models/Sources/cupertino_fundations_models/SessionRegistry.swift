@@ -241,6 +241,79 @@ actor SessionRegistry {
                 let optionsMap: [String: Any] = arguments["options"] as? [String: Any] ?? [:]
                 let options: GenerationOptions = try makeGenerationOptions(arguments: optionsMap)
                 try await prepareToolBudget(session: session, arguments: optionsMap)
+                if arguments["schema"] != nil {
+                    guard let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] else {
+                        throw NativeSessionError.invalidRequest("A structured stream requires a schema map.")
+                    }
+                    let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
+                    let stream: LanguageModelSession.ResponseStream<GeneratedContent>
+                    #if compiler(>=6.4)
+                    if #available(iOS 27.0, *) {
+                        var schemaOptionsMap: [String: Any] = optionsMap
+                        schemaOptionsMap["includeSchemaInPrompt"] = optionsMap["includeSchemaInPrompt"] as? Bool ?? true
+                        stream = languageSession.streamResponse(
+                            to: prompt,
+                            schema: schema,
+                            options: options,
+                            contextOptions: makeContextOptions(arguments: schemaOptionsMap)
+                        )
+                    } else {
+                        let includeSchemaInPrompt: Bool = optionsMap["includeSchemaInPrompt"] as? Bool ?? true
+                        stream = languageSession.streamResponse(
+                            to: prompt,
+                            schema: schema,
+                            includeSchemaInPrompt: includeSchemaInPrompt,
+                            options: options
+                        )
+                    }
+                    #else
+                    let includeSchemaInPrompt: Bool = optionsMap["includeSchemaInPrompt"] as? Bool ?? true
+                    stream = languageSession.streamResponse(
+                        to: prompt,
+                        schema: schema,
+                        includeSchemaInPrompt: includeSchemaInPrompt,
+                        options: options
+                    )
+                    #endif
+                    var latestRawContent: GeneratedContent?
+                    var latestUsage: Any = NSNull()
+                    for try await snapshot in stream {
+                        latestRawContent = snapshot.rawContent
+                        #if compiler(>=6.4)
+                        if #available(iOS 27.0, *) {
+                            latestUsage = responseUsage(snapshot.usage)
+                        }
+                        #endif
+                        onEvent(FlutterChannelValue([
+                            "type": "textSnapshot",
+                            "requestId": requestId,
+                            "text": snapshot.rawContent.jsonString
+                        ]))
+                    }
+                    try Task.checkCancellation()
+                    guard let rawContent: GeneratedContent = latestRawContent,
+                          rawContent.isComplete else {
+                        throw NativeSessionError.modelUnavailable(
+                            code: "parsingFailure",
+                            message: "The structured stream ended without complete JSON content.",
+                            recoverySuggestion: "Retry the request or simplify the schema."
+                        )
+                    }
+                    let jsonString: String = rawContent.jsonString
+                    onEvent(FlutterChannelValue([
+                        "type": "completed",
+                        "requestId": requestId,
+                        "response": [
+                            "text": jsonString,
+                            "usedMode": session.mode,
+                            "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
+                            "metadata": [:],
+                            "usage": latestUsage
+                        ]
+                    ]))
+                    return
+                }
+
                 let stream: LanguageModelSession.ResponseStream<String>
                 #if compiler(>=6.4)
                 if #available(iOS 27.0, *) {
