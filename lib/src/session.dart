@@ -119,13 +119,19 @@ final class FoundationModelSession {
 
   Stream<SessionEvent> stream(
     Prompt prompt, {
+    StructuredSchema? schema,
     GenerationOptions options = const GenerationOptions(),
   }) async* {
     _beginRequest();
     Future<void>? cancellation;
     try {
       final Stream<SessionEvent> events = _platform
-          .stream(sessionId: _id, prompt: prompt, options: options)
+          .stream(
+            sessionId: _id,
+            prompt: prompt,
+            schema: schema,
+            options: options,
+          )
           .timeout(
             options.timeout,
             onTimeout: (EventSink<SessionEvent> sink) {
@@ -142,6 +148,14 @@ final class FoundationModelSession {
         _requestActive = false;
       }
     }
+  }
+
+  Stream<SessionEvent> streamStructured({
+    required Prompt prompt,
+    required StructuredSchema schema,
+    GenerationOptions options = const GenerationOptions(),
+  }) {
+    return stream(prompt, schema: schema, options: options);
   }
 
   Future<ModelResponse> generateStructured({

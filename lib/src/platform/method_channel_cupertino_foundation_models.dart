@@ -220,6 +220,7 @@ final class MethodChannelCupertinoFoundationModels
   Stream<SessionEvent> stream({
     required String sessionId,
     required Prompt prompt,
+    StructuredSchema? schema,
     required GenerationOptions options,
   }) {
     final String requestId = _createRequestId();
@@ -228,6 +229,7 @@ final class MethodChannelCupertinoFoundationModels
       'requestId': requestId,
       'prompt': prompt.toMap(),
       'options': options.toMap(),
+      if (schema != null) 'schema': schema.toMap(),
     };
     late final StreamController<SessionEvent> controller;
     controller = StreamController<SessionEvent>(

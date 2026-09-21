@@ -42,8 +42,18 @@ proof for the changed code or iOS 27.2.
 | iOS 26 failures depended on localized message matching | Known legacy generation errors now map through typed cases. |
 | Empty text and failed image preprocessing could look like usable content | Empty text is rejected and Vision errors propagate. |
 
-These are source corrections. See the [current validation record](ios-27.2-audit-2026-09-19.md)
+These are source corrections. See the [September 19 validation record](ios-27.2-audit-2026-09-19.md)
 for checks actually executed. No new runtime coverage is implied by this table.
+
+## Guided streaming in 0.3.1
+
+If a text stream fails JSON parsing at the first character, asking for JSON in
+the prompt did not constrain native generation. Use `streamStructured` or pass
+`schema` to `stream`. Replace cumulative snapshots; do not concatenate them or
+save them as completed data. Read `CompletionEvent.response.structuredValue`.
+The new route rejects malformed schemas and incomplete/undecodable final
+content. This release was reviewed in source; no new build or device result is
+claimed. See [guided streaming](usage.md#guided-streaming).
 
 ## Recover by error code
 
@@ -55,9 +65,14 @@ for checks actually executed. No new runtime coverage is implied by this table.
 - `unsupportedLanguage`: select a supported locale; changing instructions alone
   cannot add language support.
 - `missingEntitlement`: obtain and sign with Apple's managed PCC entitlement,
-  then enable the host plist flag. The flag alone does not grant access.
+  then enable the host plist flag. The flag alone does not grant access; this
+  status can also mean the package opt-in is off. Follow the
+  [request and signing steps](private-cloud-compute.md).
 - `invalidRequest`: fix conflicting policy, schema, options, file format or
   missing host usage descriptions. Retry only after changing the cause.
+- `parsingFailure`: discard the partial structured result. Preserve the input,
+  simplify or bound the request and inspect whether generation was incomplete.
+  Do not repair arbitrary text into a successful financial/business result.
 - `contextSizeExceeded`: split input or create a new session; account for
   instructions, schema, tools, history and output, not only the user prompt.
 - `concurrentRequests`: wait for request/cancellation cleanup; do not force reuse.

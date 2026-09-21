@@ -153,6 +153,7 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   Stream<SessionEvent> stream({
     required String sessionId,
     required Prompt prompt,
+    StructuredSchema? schema,
     required GenerationOptions options,
   }) {
     calls.add('stream');

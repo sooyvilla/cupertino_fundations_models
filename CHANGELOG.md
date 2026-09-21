@@ -1,3 +1,25 @@
+## 0.3.1
+
+### Added
+
+- `FoundationModelSession.streamStructured()` for schema-guided JSON streaming.
+  Snapshots carry cumulative JSON text; the completed response carries the
+  complete JSON string and strictly decoded `structuredValue`.
+- Optional `schema` on `session.stream()` for the same guided generation path.
+- [PCC setup guide](doc/private-cloud-compute.md) covering current eligibility,
+  Apple's entitlement request, signing, provisioning, host opt-in and runtime
+  limits, linked from developer and agent documentation.
+
+### Changed
+
+- Structured streams reject malformed schemas, incomplete final snapshots and
+  final JSON decoding failures instead of falling back to free-form text.
+
+### Validation scope
+
+- API signatures checked against the installed Xcode 27.2 SDK; source reviewed.
+- No new tests, Dart analysis, builds or device/PCC runtime validation.
+
 ## 0.3.0
 
 Native Apple sessions, stricter privacy and input validation, and lifecycle hardening.

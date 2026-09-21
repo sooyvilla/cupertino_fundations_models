@@ -3,6 +3,14 @@
 0.3.0 is a breaking, pre-1.0 update from 0.2.x. This guide covers the removed
 hybrid layer and the stricter native session contracts.
 
+These breaking changes also apply when upgrading from 0.2.x to 0.3.1.
+From 0.3.0, the public addition is [guided streaming](usage.md#guided-streaming):
+use `session.streamStructured(...)` or `session.stream(..., schema: ...)`.
+Existing text streams retain their event types. Custom transports importing the
+internal platform interface must accept the optional `StructuredSchema? schema`
+named parameter. Before selecting Apple cloud, follow the
+[PCC setup guide](private-cloud-compute.md).
+
 ## Move routing to the host application
 
 The package no longer exports or contains `FoundationModelsOrchestrator`,

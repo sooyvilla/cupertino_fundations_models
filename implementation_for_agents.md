@@ -1,6 +1,6 @@
 # Implementation guide for coding agents
 
-This guide describes **version 0.3.0**. Read the
+This guide describes **version 0.3.1**. Read the
 [migration guide](doc/migration-0.3.0.md) before adapting an existing hybrid
 integration. Confirm the installed package version before using these contracts.
 
@@ -51,6 +51,7 @@ Complete examples and field semantics: [feature guide](doc/usage.md).
 | `generateStructured` | Guided generation with the package's supported schema subset. |
 | `createSession` | Creates persistent Apple transcript state and registered tools. |
 | `session.stream` | Cumulative text snapshots followed by completion/failure. |
+| `session.streamStructured` | Cumulative guided JSON snapshots followed by a strictly decoded completion response. |
 | `session.prewarm` | Loads native resources; still occupies the session while running. |
 | `session.cancelActiveRequest` | Cancels and waits for native work; cannot undo a tool's side effects. |
 | `session.dispose` | Terminal operation, idempotent; wait for it before replacing the owner. |
@@ -68,6 +69,14 @@ Clear loading state in `finally`. Cancelling the subscription awaits native
 cleanup. `GenerationOptions.timeout` is an inactivity timer for streams and a
 response deadline for one-shot requests; cleanup can take additional time.
 A session with failed native cancellation must be disposed and recreated.
+
+`streamStructured(prompt: ..., schema: ...)` and `stream(prompt, schema: ...)`
+use the same lifecycle and event types. Their snapshots are cumulative JSON
+strings, so they are display-only partial state. Consume
+`CompletionEvent.response.structuredValue` only after completion. Malformed
+schemas fail with `invalidRequest`; missing/incomplete final snapshots and
+invalid final JSON fail with `parsingFailure`. Guided streaming requires iOS
+26+; existing PCC iOS 27 opt-in and entitlement requirements still apply.
 
 Keep tools and sessions scoped to the owning feature. Do not reuse a disposed
 session, send another request while cancellation is pending, or implement
@@ -97,8 +106,17 @@ application confirmation for side effects where the product requires them.
 local route. Automatic PCC selection needs `automaticWithUserConsent`; the app
 must obtain that consent before passing it. Explicit PCC uses
 `ModelMode.privateCloudCompute` plus `whenExplicit`, the Apple entitlement and
-host opt-in described in the README. Request-level cloud policy may restrict an
+host opt-in described in the [PCC setup guide](doc/private-cloud-compute.md). Request-level cloud policy may restrict an
 existing session but never switches its backend.
+
+For PCC integration, direct the team's Account Holder to the linked Apple
+eligibility and entitlement request pages. Do not claim approval from a plist
+flag, a capabilities enum or a successful local-model response. Keep Apple's
+signed entitlement separate from the package's Info.plist opt-in; preserve both
+local defaults and the host's existing signing configuration. The app needs
+appropriate provisioning, runtime availability, network/quota handling and an
+authorized cloud task. Do not invent an API key, a PCC permission dialog or an
+entitlement-approval API. The plugin does not provide them.
 
 Do not import removed `FoundationModelsOrchestrator`, `FoundationModelsChatSession`
 or external-provider interfaces. An application dispatcher chooses either a

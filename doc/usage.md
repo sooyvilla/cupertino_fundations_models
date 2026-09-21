@@ -1,7 +1,9 @@
 # Usage reference
 
-This reference describes version 0.3.0. See the [README](../README.md) for
+This reference describes version 0.3.1. See the [README](../README.md) for
 installation and the [migration guide](migration-0.3.0.md) for breaking changes.
+For Apple cloud, complete [PCC eligibility, entitlement and host setup](private-cloud-compute.md)
+before enabling or selecting the cloud model.
 
 ## Availability, locales and session ownership
 
@@ -29,7 +31,8 @@ One-shot facade calls create and dispose their own session. A reused
 | Method | Contract |
 | --- | --- |
 | `respond(prompt, options: ...)` | One complete text response. |
-| `stream(prompt, options: ...)` | Cumulative text snapshots and a terminal result; failures may arrive as stream errors. |
+| `stream(prompt, schema: ..., options: ...)` | Cumulative text snapshots and a terminal result; an optional schema enables guided JSON. Failures may arrive as stream errors. |
+| `streamStructured(prompt: ..., schema: ..., options: ...)` | Cumulative guided JSON snapshots and a decoded terminal result. |
 | `generateStructured(prompt: ..., schema: ..., options: ...)` | Guided generation with a supported object-root schema. |
 | `prewarm(promptPrefix: ...)` | Hint to preload resources; not an availability guarantee. |
 | `countTokens()` | Local transcript token count, iOS 26.4+ with an Xcode 27 build. |
@@ -108,6 +111,41 @@ objects to 128 properties.
 this does not add scalar/array root constructors to the public schema API.
 Guided structure is not semantic correctness: validate extracted facts and
 business constraints in the application.
+
+### Guided streaming
+
+```dart
+await for (final event in session.streamStructured(
+  prompt: const Prompt.text('The appointment is with Morgan on Friday.'),
+  schema: const StructuredSchema.object(
+    name: 'Appointment',
+    properties: <String, SchemaProperty>{
+      'person': SchemaProperty.string(),
+      'day': SchemaProperty.string(),
+    },
+    requiredProperties: <String>['person', 'day'],
+  ),
+)) {
+  switch (event) {
+    case TextSnapshotEvent(:final text):
+      print(text);
+    case CompletionEvent(:final response):
+      print(response.structuredValue);
+    default:
+      break;
+  }
+}
+```
+
+`stream(prompt, schema: schema, options: ...)` is equivalent to
+`streamStructured(prompt: prompt, schema: schema, options: ...)`.
+`TextSnapshotEvent.text` is a complete replacement snapshot, not a JSON chunk
+to append or consume as a final result. `CompletionEvent.response.text` is the
+complete JSON string and `structuredValue` is decoded only after native content
+reports completion. A missing final snapshot, incomplete JSON, or a decoding
+failure returns `parsingFailure`; preserve the user's input and retry or
+simplify the schema. This needs iOS 26+ and normal model availability; PCC adds
+the existing iOS 27 host opt-in and entitlement requirements.
 
 ## Tools
 
