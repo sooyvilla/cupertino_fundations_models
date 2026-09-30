@@ -1,7 +1,7 @@
 # Discovery and adoption delivery — September 30, 2026
 
-This document records the current evidence, prepared changes and the external
-steps required to make them public. It does not report an achieved ranking or
+This document records the research, published changes and remaining adoption
+work. It does not report an achieved ranking or
 download increase. Research included official documentation, a current Google
 blog announcement and Flutter community discussions.
 
@@ -53,9 +53,10 @@ See [OpenAI crawlers](https://developers.openai.com/api/docs/bots) and
 [Perplexity crawlers](https://docs.perplexity.ai/docs/resources/perplexity-crawlers).
 
 The current [Google Search Console blog announcement](https://developers.google.com/search/blog/2026/06/gen-ai-performance-reports)
-describes reports for visibility within generative search features. Use
-account-observed reports after ownership is verified; this task did not access
-Search Console or establish current account metrics.
+describes reports for visibility within generative search features. Ownership
+is now verified, but the newly registered property does not yet establish
+impressions, clicks or AI visibility. Record the reports actually available
+in the account when data has accumulated.
 
 The [Flutter discussion of another Foundation Models plugin](https://www.reddit.com/r/FlutterDev/comments/1w5g83f/apples_ondevice_llm_from_flutter_streaming_tool/)
 shows a developer asking why another bridge is needed among existing packages.
@@ -129,11 +130,11 @@ Do not modify a separate root-site repository or purchase a domain without the
 corresponding authorization. A custom domain is optional, not a prerequisite
 for the prepared GitHub Pages site.
 
-Search Console ownership and Bing Webmaster ownership require the owner's
-account. The layout accepts the public verification tokens through optional
-`search_console_verification` and `bing_verification` config values, but none
-is invented. After verification, submit the actual live `/sitemap.xml` and
-request indexing of the key tutorials. See
+The owner authorized Search Console and Bing Webmaster setup and signed in
+to both services. Each verified the exact project URL prefix using public HTML
+meta tags configured through `search_console_verification` and
+`bing_verification`. Both received the live `/sitemap.xml`; Google also accepted
+priority indexing requests for the homepage and English/Spanish tutorials. See
 [Google ownership verification](https://support.google.com/webmasters/answer/9008080)
 and [sitemap submission](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
 An [IndexNow](https://www.indexnow.org/documentation) key is an optional additional
@@ -188,8 +189,12 @@ The served archive SHA256 is
 Its README and all new public guides are present; internal research, promotion
 and site sources are excluded.
 
-IndexNow received **16 URLs with HTTP 202** at `2026-09-30T18:51:05Z`.
-That means receipt with key verification pending, not indexing or ranking.
+IndexNow initially received **16 URLs with HTTP 202** at `2026-09-30T18:51:05Z`,
+with key verification pending. The subsequent
+[ownership-tag deployment](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36763130752)
+completed successfully from commit `8bf69362fb41115ea85187975d91a2eaae3ca2bb`.
+Its IndexNow request received **HTTP 200 for all 16 URLs** at
+`2026-09-30T19:06:05.6826150Z`. Receipt is still separate from indexing or ranking.
 The version-specific pub.dev metric query `?version=0.4.4` completed with
 Pana success at `2026-09-30T18:56:31.831763`: **160/160 points**, verified
 repository and no URL problems. This is evidence for the new release,
@@ -198,11 +203,27 @@ separate from the previously cached 0.4.3 aggregate.
 Documentation generation/deployment and Pub's integrated checks were part of
 the authorized publication. No independent tests, analysis, formatters,
 validators, visual checks, Flutter builds, apps, simulators or devices were run.
-No messages were posted to communities. The owner authorized Search Console
-and Bing setup. Their Codex browser tabs currently require sign-in, so property
-registration awaits that authentication. The owner also asked to review each
-promotional text before it is sent or published.
+No messages were posted to communities. Both search-engine properties are
+verified. Bing's sitemap report reached **Success, 16 URLs discovered**, with
+no reported errors. Google accepted the sitemap, but its first report showed
+**Couldn't fetch, zero discovered pages**. Google's live inspection subsequently
+fetched the XML successfully and reported that crawling and indexing are allowed.
+The sitemap was resubmitted once after that diagnostic; final processing remains
+pending. This follows Google's
+[sitemap troubleshooting guidance](https://support.google.com/webmasters/answer/7451001?hl=en),
+without changing a reachable XML file on speculation or repeatedly submitting it.
 
-No observed download uplift, indexing, search-engine ownership, paid campaign
-or assistant recommendation is claimed. The original growth objective remains
-open until there is measurable adoption evidence.
+Google confirmed priority crawl-queue requests for `/`, `/local-ai-ios/` and
+`/es/ia-local-ios/`. The index inspection still showed those pages as unknown;
+accepted requests do not prove indexed pages.
+
+A repeat of the four public pub.dev queries at `2026-09-30T19:05:51Z` retained
+the baseline positions: eighth for `apple foundation models`, absent from the
+first ten for the other three queries. No measured improvement is claimed.
+The owner asked to review each promotional text before it is sent or published;
+the complete drafts are ready, while their actual profile/blog destinations
+remain to be identified.
+
+No observed download uplift, indexed pages, paid campaign or assistant
+recommendation is claimed. The original growth objective remains open until
+there is measurable adoption evidence.
