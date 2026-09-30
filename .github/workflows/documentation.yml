@@ -1,0 +1,58 @@
+name: Publish documentation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: documentation-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Prepare shared documentation sources
+        run: |
+          mkdir -p doc/site/_includes/source doc/site/markdown/doc doc/site/markdown/example/lib
+          for name in local-ai-ios README.es recipes faq choosing-local-ai usage document-extraction private-cloud-compute troubleshooting app-owned-routing migration-0.3.0 migration-0.4.0; do
+            cp "doc/$name.md" "doc/site/_includes/source/$name.md"
+            cp "doc/$name.md" "doc/site/markdown/doc/$name.md"
+          done
+          cp README.md CHANGELOG.md implementation_for_agents.md doc/site/_includes/source/
+          cp README.md CHANGELOG.md implementation_for_agents.md doc/site/markdown/
+          cp example/README.md example/pubspec.yaml doc/site/markdown/example/
+          cp example/lib/main.dart example/lib/document_extraction.dart doc/site/markdown/example/lib/
+          cp doc/ios-27-current-audit-2026-09-01.md doc/ios-27.2-audit-2026-09-19.md doc/site/markdown/doc/
+      - name: Build documentation with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./doc/site
+          destination: ./_site
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ./_site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy documentation
+        id: deployment
+        uses: actions/deploy-pages@v4

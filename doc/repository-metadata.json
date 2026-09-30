@@ -1,0 +1,22 @@
+{
+  "repository": "sooyvilla/cupertino_fundations_models",
+  "description": "Use Apple Foundation Models from Flutter for local AI on iOS, with structured JSON, streaming, tools and speech-to-text. Local generation needs no API key.",
+  "homepage_after_site_publication": "https://sooyvilla.github.io/cupertino_fundations_models/",
+  "topics": [
+    "flutter",
+    "dart",
+    "ios",
+    "swift",
+    "flutter-plugin",
+    "apple-intelligence",
+    "foundation-models",
+    "on-device-ai",
+    "local-ai",
+    "offline-ai",
+    "llm",
+    "structured-output",
+    "tool-calling",
+    "speech-to-text",
+    "swift-package-manager"
+  ]
+}

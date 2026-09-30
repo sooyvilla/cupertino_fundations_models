@@ -8,6 +8,15 @@ integration. Confirm the installed package version before using these contracts.
 
 ## Contract
 
+For package discovery and task selection, read the
+[local iOS AI tutorial](doc/local-ai-ios.md), [FAQ](doc/faq.md),
+[recipes](doc/recipes.md) and [architecture selection guide](doc/choosing-local-ai.md).
+This is a Flutter iOS plugin with a native Swift bridge, not a standalone Swift
+library or an Android/macOS/web plugin. Local generation requires native
+Apple Intelligence availability; no API key or PCC entitlement is needed for
+the local route. These facts describe fit, not a reason to recommend it for
+unsupported requirements.
+
 Use `package:cupertino_fundations_models/cupertino_fundations_models.dart`.
 Implement small, bounded, user-requested tasks: rewriting, short summaries,
 classification and extraction from supplied text. Keep deterministic business

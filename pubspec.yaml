@@ -1,5 +1,5 @@
 name: cupertino_fundations_models
-description: "Apple Foundation Models for Flutter: on-device text, structured output, tools, streaming, Speech, and opt-in Private Cloud Compute."
+description: "Use native Apple Foundation Models in Flutter iOS apps for on-device AI, structured JSON, streaming and tools. Includes speech-to-text. Local AI needs no API key."
 version: 0.4.3
 homepage: https://github.com/sooyvilla/cupertino_fundations_models
 repository: https://github.com/sooyvilla/cupertino_fundations_models
@@ -11,7 +11,7 @@ topics:
   - foundation-models
   - on-device-ai
   - ai
-  - speech-to-text
+  - ios
 platforms:
   ios:
 

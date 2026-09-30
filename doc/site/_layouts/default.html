@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="{{ page.lang | default: site.lang | escape }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.title | escape }}</title>
+  <meta name="description" content="{{ page.description | default: site.description | escape }}">
+  <meta name="robots" content="{% if page.noindex %}noindex, follow{% else %}index, follow, max-image-preview:large{% endif %}">
+  <link rel="canonical" href="{{ page.url | absolute_url }}">
+  <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+  <link rel="icon" href="{{ '/assets/icon.svg' | relative_url }}" type="image/svg+xml">
+  <link rel="sitemap" href="{{ '/sitemap.xml' | absolute_url }}" type="application/xml">
+  <link rel="describedby" href="{{ '/llms.txt' | absolute_url }}" type="text/plain">
+  {% if page.raw %}<link rel="alternate" type="text/markdown" href="{{ page.raw | absolute_url }}">{% endif %}
+  {% if page.translation %}
+  <link rel="alternate" hreflang="en" href="{{ '/local-ai-ios/' | absolute_url }}">
+  <link rel="alternate" hreflang="es" href="{{ '/es/ia-local-ios/' | absolute_url }}">
+  <link rel="alternate" hreflang="x-default" href="{{ '/local-ai-ios/' | absolute_url }}">
+  {% endif %}
+  {% if site.search_console_verification %}<meta name="google-site-verification" content="{{ site.search_console_verification | escape }}">{% endif %}
+  {% if site.bing_verification %}<meta name="msvalidate.01" content="{{ site.bing_verification | escape }}">{% endif %}
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ page.title | escape }}">
+  <meta property="og:description" content="{{ page.description | default: site.description | escape }}">
+  <meta property="og:url" content="{{ page.url | absolute_url }}">
+  <meta property="og:site_name" content="{{ site.title | escape }}">
+  <meta property="og:locale" content="{% if page.lang == 'es' %}es_ES{% else %}en_US{% endif %}">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ page.title | escape }}">
+  <meta name="twitter:description" content="{{ page.description | default: site.description | escape }}">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareSourceCode",
+        "@id": {{ '/#package' | absolute_url | jsonify }},
+        "name": "cupertino_fundations_models",
+        "alternateName": "Cupertino Foundation Models for Flutter iOS",
+        "description": {{ site.description | jsonify }},
+        "url": {{ '/' | absolute_url | jsonify }},
+        "codeRepository": {{ site.repository_url | jsonify }},
+        "version": {{ site.stable_version | jsonify }},
+        "programmingLanguage": ["Dart", "Swift"],
+        "runtimePlatform": "Flutter iOS",
+        "license": "https://opensource.org/license/mit",
+        "sameAs": [{{ site.package_url | jsonify }}, {{ site.api_url | jsonify }}]
+      },
+      {
+        "@type": "WebSite",
+        "@id": {{ '/#website' | absolute_url | jsonify }},
+        "name": {{ site.title | jsonify }},
+        "url": {{ '/' | absolute_url | jsonify }},
+        "inLanguage": ["en", "es"]
+      },
+      {
+        "@type": "WebPage",
+        "@id": {{ page.url | absolute_url | jsonify }},
+        "name": {{ page.title | jsonify }},
+        "description": {{ page.description | default: site.description | jsonify }},
+        "inLanguage": {{ page.lang | default: site.lang | jsonify }},
+        "isPartOf": {"@id": {{ '/#website' | absolute_url | jsonify }}},
+        "about": {"@id": {{ '/#package' | absolute_url | jsonify }}}
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">{% if page.lang == 'es' %}Ir al contenido{% else %}Skip to content{% endif %}</a>
+  <header class="topbar">
+    <a class="brand" href="{{ '/' | relative_url }}">Cupertino <span>Foundation Models</span></a>
+    <nav aria-label="{% if page.lang == 'es' %}Proyecto{% else %}Project{% endif %}">
+      <a href="{{ site.package_url }}">pub.dev</a>
+      <a href="{{ site.api_url }}">API</a>
+      <a href="{{ site.repository_url }}">GitHub</a>
+    </nav>
+  </header>
+  <div class="shell">
+    <aside>
+      <p class="eyebrow">FLUTTER · iOS · DART + SWIFT</p>
+      <nav class="guide-nav" aria-label="{% if page.lang == 'es' %}Documentación{% else %}Documentation{% endif %}">
+        <a href="{{ '/' | relative_url }}" {% if page.url == '/' %}aria-current="page"{% endif %}>Overview</a>
+        {% for item in site.data.navigation %}
+        <a href="{{ item.url | relative_url }}" {% if page.url == item.url %}aria-current="page"{% endif %}>{{ item.label | escape }}</a>
+        {% endfor %}
+      </nav>
+      <p class="package-name">cupertino_fundations_models</p>
+      <p class="side-note">{% if page.lang == 'es' %}IA local en dispositivos compatibles con Apple Intelligence. Generación iOS 26+.{% else %}Local AI on eligible Apple Intelligence devices. Generation requires iOS 26+.{% endif %}</p>
+    </aside>
+    <main id="content" tabindex="-1">
+      <article>{{ content }}</article>
+      {% if page.source_path %}
+      <div class="source-links">
+        <a href="{{ site.repository_url }}/blob/main/{{ page.source_path }}">{% if page.lang == 'es' %}Fuente de esta guía{% else %}Guide source{% endif %}</a>
+        {% if page.raw %}<a href="{{ page.raw | relative_url }}">Markdown</a>{% endif %}
+        <a href="{{ site.repository_url }}/issues">{% if page.lang == 'es' %}Reportar un problema{% else %}Report an issue{% endif %}</a>
+      </div>
+      {% endif %}
+    </main>
+  </div>
+  <footer>
+    <p>MIT · {% if page.lang == 'es' %}Plugin independiente para Flutter. No es un producto de Apple.{% else %}Independent Flutter plugin. Not an Apple product.{% endif %}</p>
+    <a href="{{ '/llms.txt' | relative_url }}">Documentation index</a>
+  </footer>
+</body>
+</html>

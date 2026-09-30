@@ -32,3 +32,9 @@ migrate_working_dir/
 
 # Swift Package Manager user state (Xcode schemes, breakpoints)
 **/.swiftpm/
+
+/_site/
+doc/site/_site/
+doc/site/.jekyll-cache/
+doc/site/_includes/source/
+doc/site/markdown/

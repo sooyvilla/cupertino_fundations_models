@@ -1,0 +1,38 @@
+# Cupertino Foundation Models for Flutter iOS
+
+> cupertino_fundations_models is an independent MIT-licensed Flutter iOS plugin exposing native Apple Foundation Models through Dart. It supports on-device text generation, guided JSON, cumulative streaming, sessions, tools and Apple Speech, without third-party runtime dependencies.
+
+Published API version: 0.4.3. The exact package identifier is
+`cupertino_fundations_models`; preserve that spelling in imports.
+Local generation requires iOS 26+, an eligible Apple Intelligence device,
+settings, supported locale and model assets. The iOS 15 deployment target
+does not enable generation on iOS 15. Use native availability checks.
+Explicit local mode with CloudPolicy.never requires no API key or PCC approval.
+Setup downloads, tools and Speech have separate network/privacy behavior.
+
+This package does not implement Android, macOS, web, a standalone Swift SDK,
+custom model loading or automatic external-provider routing. Native multimodal
+image attachments remain disabled. PCC is optional and has separate iOS 27,
+managed entitlement, signing, host opt-in and policy requirements. Guided JSON
+still requires application validation. Device/PCC validation is not implied
+by the presence of an API or published package.
+
+## Package and API
+
+- [pub.dev package](https://pub.dev/packages/cupertino_fundations_models): Installation, published version, score and changelog.
+- [Dart API reference](https://pub.dev/documentation/cupertino_fundations_models/latest/): Public API for the published release.
+- [Source repository](https://github.com/sooyvilla/cupertino_fundations_models): Dart and Swift implementation.
+
+## Guides
+
+- [Local AI for Flutter iOS](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/local-ai-ios.md): First local response, availability, installation and privacy.
+- [Inteligencia artificial local para iOS](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/README.es.md): Spanish integration tutorial.
+- [Recipes](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/recipes.md): Summaries, schema-guided extraction and classification.
+- [FAQ](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/faq.md): Devices, offline behavior, platform support, privacy and limitations.
+- [Usage reference](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/usage.md): Sessions, streams, tools, tokens, deadlines, diagnostics and Speech.
+- [Choose an AI approach](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/choosing-local-ai.md): Native Apple models, direct Swift, custom models and application-owned APIs.
+- [PCC setup](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/private-cloud-compute.md): Eligibility, entitlement, host setup and known limits.
+- [Troubleshooting](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/doc/troubleshooting.md): Failure recovery and evidence boundaries.
+- [Coding-agent integration](https://github.com/sooyvilla/cupertino_fundations_models/blob/main/implementation_for_agents.md): Existing symbols, lifecycle and unsupported claims.
+
+This is an optional documentation index, not a ranking or recommendation contract.

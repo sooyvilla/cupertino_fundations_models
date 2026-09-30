@@ -4,3 +4,8 @@ AGENTS.md
 build/
 coverage/
 test/
+.github/
+doc/site/
+doc/discovery.md
+doc/promotion.md
+doc/repository-metadata.json

@@ -1,3 +1,15 @@
+## Unreleased
+
+- Clarify Flutter iOS, local/offline AI, native Apple Foundation Models and
+  speech-to-text in package discovery metadata and the README.
+- Add English and Spanish local-AI tutorials, task recipes, an FAQ and a guide
+  for choosing a native model, a custom model or an application-owned cloud API.
+- Prepare a static documentation site with canonical URLs, localized tutorial
+  links, social metadata, source-code structured data, a sitemap and Markdown
+  references for coding assistants. Publication requires a manual workflow.
+- Record the discovery baseline, current official guidance and reviewable
+  promotion drafts. No public Dart or Swift runtime API changes.
+
 ## 0.4.3
 
 - Give the stream error-handler tear-off an exact two-positional-argument

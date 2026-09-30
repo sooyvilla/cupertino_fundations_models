@@ -2,7 +2,8 @@
 
 Read [README](README.md), [the implementation guide](implementation_for_agents.md)
 and local repository instructions before changing code. Public documentation is
-English. Keep Dart contracts typed, native integration in Swift, iOS deployment
+primarily English; keep the Spanish getting-started guide aligned with its
+English counterpart. Keep Dart contracts typed, native integration in Swift, iOS deployment
 target 15, CocoaPods and Swift Package Manager support, and zero third-party
 runtime dependencies unless explicitly approved.
 
@@ -31,3 +32,11 @@ record the exact checks, SDK, results and unverified runtime paths. A publicatio
 dry run does not publish. Version bumps, commits, pushes and
 publication require the corresponding authorization. Authorized deliveries use
 `main`; ordinary editing tasks do not automatically authorize commits or uploads.
+
+Documentation source lives in the README and `doc/`. The site in `doc/site/`
+reuses these sources through the manual documentation workflow. Update its
+navigation entries when adding a public guide so the sitemap and optional
+assistant index include the same routes. Keep canonical URLs and tutorial
+language alternatives aligned with the actual publication host. Site files
+and internal promotion/research material are excluded from the package archive.
+Do not make runtime, ranking or adoption claims without corresponding evidence.

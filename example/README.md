@@ -1,7 +1,13 @@
-# Apple native example
+# Flutter iOS local AI example — Apple Foundation Models
 
 A Flutter chat demonstrating the native Apple API in version 0.4.3. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
+
+For an availability-checked first integration, start with
+[local AI on iOS](../doc/local-ai-ios.md), the
+[guía en español](../doc/README.es.md) or the
+[structured extraction and classification recipes](../doc/recipes.md).
+The package identifier is `cupertino_fundations_models`.
 
 - Persistent Apple on-device session, cumulative streaming snapshots and a
   bounded `DeviceTimeTool`. Apps can also call `session.streamStructured(...)`

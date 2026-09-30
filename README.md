@@ -1,13 +1,44 @@
-# Cupertino Foundation Models for Flutter
+# Cupertino Foundation Models — local AI for Flutter iOS
 
-Run small AI tasks on an Apple device: summarize short text, rewrite a message,
-extract structured fields, classify content, or call a few app-defined tools.
-The plugin bridges Apple's **Foundation Models** and **Speech** frameworks with
-no third-party runtime dependencies.
+[![pub.dev](https://img.shields.io/pub/v/cupertino_fundations_models.svg)](https://pub.dev/packages/cupertino_fundations_models)
+[![pub points](https://img.shields.io/pub/points/cupertino_fundations_models)](https://pub.dev/packages/cupertino_fundations_models/score)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+Use Apple's **Foundation Models** from Dart to summarize text, rewrite a
+message, extract structured fields or classify content in your Flutter iOS app.
+The plugin connects directly to the native framework through Swift, with
+sessions, streaming, guided JSON and tools you define in your app.
+
+Local generation runs on the device without an API key. Apple supplies the
+model, so you do not need to bundle your own weights. The package also includes
+file and live speech-to-text through Apple **Speech**, supports CocoaPods and
+Swift Package Manager, and adds no third-party runtime dependencies.
+
+[Start with local AI on iOS](doc/local-ai-ios.md) ·
+[Español: inteligencia artificial local para iOS](doc/README.es.md) ·
+[Recipes](doc/recipes.md) · [FAQ](doc/faq.md) ·
+[API reference](https://pub.dev/documentation/cupertino_fundations_models/latest/)
 
 **iOS only.** Generation needs iOS 26+, an eligible device, Apple Intelligence
 and downloaded model assets. The plugin can be included in an iOS 15+ app;
 that deployment target does not make generation available on older systems.
+On-device inference can work offline after Apple's required model assets are
+available; initial downloads and optional cloud/Speech modes can need network.
+
+## What you can build
+
+| Need | What this package provides |
+| --- | --- |
+| Local text features | Dart APIs backed directly by native Foundation Models sessions. |
+| Extract fields into JSON | `StructuredSchema`, guided generation and decoded final output. |
+| Streaming with a defined lifecycle | Cumulative snapshots, terminal results, cancellation and session disposal. |
+| App-defined tool calling | Typed tool registration; your app owns argument validation and authorization. |
+| A clear local/cloud boundary | Explicit local mode and `CloudPolicy.never`; PCC requires a separate opt-in. |
+| Integration without a custom Swift bridge | Public Dart API, an example app, compatibility tables and recovery guides. |
+
+Start with short, well-defined tasks on eligible iOS devices. If your app needs
+other platforms, custom models or a cloud API, read
+[choosing a local AI approach](doc/choosing-local-ai.md).
 
 **Version 0.4.0 makes missing usage counters nullable.** Read the
 [0.4.0 migration guide](doc/migration-0.4.0.md) for usage, lifecycle and transport
@@ -18,6 +49,12 @@ changes. Version 0.3.0 removed hybrid routing; read the
 
 Use Flutter 3.41+ and Dart 3.11+. Add:
 
+```sh
+flutter pub add cupertino_fundations_models
+```
+
+Or declare the dependency directly:
+
 ```yaml
 dependencies:
   cupertino_fundations_models: ^0.4.3
@@ -26,53 +63,57 @@ dependencies:
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
 
-When upgrading, resolve the app's dependency lockfile to 0.4.3 or later and
-rebuild the iOS host: the budget and streaming contracts change the native plugin, so hot reload
-alone is insufficient. Existing text streams remain available; requesting JSON
-in a prompt does not enable schema guidance.
+Rebuild the iOS host after adding or upgrading the plugin; hot reload cannot
+install a changed Swift bridge. When upgrading from an older release, follow
+the migration guides above as well.
 
 ```dart
 import 'package:cupertino_fundations_models/cupertino_fundations_models.dart';
 
 Future<String?> summarize(String shortText) async {
   final models = CupertinoFoundationModels();
-  final availability = await models.checkAvailability(
-    mode: ModelMode.local,
-    cloudPolicy: CloudPolicy.never,
-    localeIdentifier: 'en_US',
-  );
-  if (!availability.isAvailable) return null;
+  try {
+    final availability = await models.checkAvailability(
+      mode: ModelMode.local,
+      cloudPolicy: CloudPolicy.never,
+      localeIdentifier: 'en_US',
+    );
+    if (!availability.isAvailable) return null;
 
-  final response = await models.respond(
-    Prompt.text(shortText),
-    mode: ModelMode.local,
-    cloudPolicy: CloudPolicy.never,
-    instructions: 'Summarize the supplied text in up to three short bullets.',
-    options: const GenerationOptions(maximumResponseTokens: 180),
-  );
-  return response.text;
+    final response = await models.respond(
+      Prompt.text(shortText),
+      mode: ModelMode.local,
+      cloudPolicy: CloudPolicy.never,
+      instructions: 'Summarize the supplied text in up to three short bullets.',
+      options: const GenerationOptions(maximumResponseTokens: 180),
+    );
+    return response.text;
+  } on FoundationModelsException {
+    return null;
+  }
 }
 ```
 
-Availability can change after a preflight. Handle
-`FoundationModelsException` around the request and provide a manual path when
-the model is unavailable. Model output still needs application validation.
+Availability can change between the check and the request. Catch
+`FoundationModelsException` and keep a manual path available. Let the user
+review generated text, and validate extracted data before using it.
 
-## Reliable generation
+## Structured output and request handling
 
 Use `session.streamStructured(prompt: ..., schema: ...)` for native schema-guided
 streaming on local or explicitly authorized PCC sessions. Partial JSON snapshots
 and decoded completion results remain separate.
 
-Version 0.4.0 adds `session.measureTokenBudget`, typed `termination`, separate
-first-result/idle/total deadlines and opt-in diagnostic callbacks. Unavailable
-PCC counts and missing usage stay unknown; no token estimate is evidence of
-truncation. Dynamic schema errors identify the failing path.
+Use `session.measureTokenBudget` when the selected model supports token counts.
+Requests expose typed `termination`, separate first-result, idle and total
+deadlines, and optional diagnostic callbacks. Missing usage counters remain
+unknown, including unavailable PCC counts. Token estimates alone cannot tell
+you whether an answer was truncated. Schema errors identify the failing path.
 
 See [complete contracts](doc/usage.md), [document extraction](doc/document-extraction.md)
-and [PCC eligibility and permission](doc/private-cloud-compute.md). This release
-has source review only; automated checks and physical iPhone/PCC validation
-remain pending.
+and [PCC eligibility and permission](doc/private-cloud-compute.md). The examples
+in this documentation update were reviewed against the source but were not
+run on a device. Physical iPhone and PCC verification remain pending.
 
 ## Choose a bounded task
 
@@ -110,11 +151,11 @@ reports local language support. `getSupportedLanguages()` returns the
 intersection of model and modern Speech locales, which is useful for a shared
 language selector but is not the complete list of text-only model languages.
 
-The installed **Xcode 27.2 beta / Swift 6.4** SDK was inspected for this update.
-New iOS 27.2 data attachments and transcript data entries are documented in the
-[SDK audit](doc/ios-27.2-audit-2026-09-19.md); this package does not expose them,
-Dynamic Profiles, arbitrary model executors, or a Photos picker. A newer SDK
-does not prove that previously crashing native APIs are safe on a device.
+The [September 19 SDK review](doc/ios-27.2-audit-2026-09-19.md) covers
+**Xcode 27.2 beta / Swift 6.4**, including new data attachments and transcript
+entries. This package does not expose those additions, Dynamic Profiles,
+arbitrary model executors or a Photos picker. The previously crashing native
+paths remain disabled pending device evidence.
 
 ## Sessions and streaming
 
@@ -203,7 +244,7 @@ attachments, token usage, Speech and the complete option behavior.
 ## Privacy and setup
 
 The default model policy is local. There is no API client, API key storage,
-hybrid router or automatic external-provider fallback in 0.3.x.
+hybrid router or automatic external-provider fallback in 0.3.0 and later.
 
 | Selection | Result |
 | --- | --- |
@@ -248,6 +289,11 @@ language/capability getters and native image attachment path disabled.
 
 ## Documentation
 
+- [Local AI for Flutter iOS: installation and first response](doc/local-ai-ios.md)
+- [Guía en español: IA local nativa para iOS con Flutter](doc/README.es.md)
+- [Summarization, structured extraction and classification recipes](doc/recipes.md)
+- [FAQ: offline AI, devices, privacy and platform support](doc/faq.md)
+- [Choosing Apple Foundation Models, a custom model or a cloud API](doc/choosing-local-ai.md)
 - [Usage and feature contracts](doc/usage.md)
 - [PCC eligibility, requesting access and host setup](doc/private-cloud-compute.md)
 - [Known failures, fixes and recovery](doc/troubleshooting.md)
@@ -258,5 +304,47 @@ language/capability getters and native image attachment path disabled.
 - [Example app](example/README.md) · [Changelog](CHANGELOG.md)
 - [Report an issue](https://github.com/sooyvilla/cupertino_fundations_models/issues)
 
-The published package identifier intentionally remains
-`cupertino_fundations_models` for compatibility with existing imports.
+The published identifier keeps the spelling `cupertino_fundations_models`
+so existing imports continue to work. Cupertino Foundation Models is an
+independent, MIT-licensed project maintained by Sebastián Villa.
+
+## Common questions
+
+### Is this a local AI or offline LLM library for iOS?
+
+Yes: `ModelMode.local` with `CloudPolicy.never` selects Apple's on-device
+Foundation Models. Generation can run offline when Apple Intelligence and the
+required assets are available. The package does not ship an LLM model file.
+
+### Can I use Apple Intelligence from Flutter without writing Swift?
+
+Yes. Import `package:cupertino_fundations_models/cupertino_fundations_models.dart`
+and use the typed Dart facade. The plugin supplies the native Swift bridge.
+You still need an iOS host built with an appropriate Apple SDK.
+
+### Does this support every iPhone or an app written only in Swift?
+
+No. This is a Flutter plugin for iOS; it is not a standalone Swift SDK and does
+not support Android, macOS or web. Generation requires iOS 26+, an eligible
+Apple Intelligence device, language/region support, enabled settings and assets.
+Use `checkAvailability()` rather than a hard-coded list of iPhone models.
+
+### Are local AI and Private Cloud Compute the same?
+
+No. PCC is an optional Apple cloud route with iOS 27, entitlement, signing,
+policy, consent and availability requirements. Local generation does not need
+PCC approval. Speech server recognition has its own privacy policy.
+
+### ¿Cómo integrar IA local en una app Flutter para iOS?
+
+La [guía en español](doc/README.es.md) explica cómo integrar esta librería Flutter
+con IA local nativa de Apple, comprobar disponibilidad y obtener una respuesta.
+
+## Project and upstream references
+
+- [Apple Foundation Models framework](https://developer.apple.com/documentation/foundationmodels)
+- [Package versions and release notes](https://pub.dev/packages/cupertino_fundations_models/versions)
+- [Contributing](CONTRIBUTING.md) and [issue tracker](https://github.com/sooyvilla/cupertino_fundations_models/issues)
+
+If the package helps your app, a pub.dev like, GitHub star or issue with a
+reproducible integration problem helps other developers assess and improve it.

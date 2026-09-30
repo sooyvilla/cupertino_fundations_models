@@ -1,0 +1,16 @@
+{% assign text = include.text %}
+{% for item in site.data.navigation %}
+  {% assign filename = item.source | remove: 'source/' %}
+  {% capture short_link %}]({{ filename }}{% endcapture %}
+  {% capture doc_link %}](doc/{{ filename }}{% endcapture %}
+  {% capture parent_doc_link %}](../doc/{{ filename }}{% endcapture %}
+  {% capture target %}]({{ item.url | relative_url }}{% endcapture %}
+  {% assign text = text | replace: short_link, target | replace: doc_link, target | replace: parent_doc_link, target %}
+{% endfor %}
+{% capture overview %}]({{ '/overview/' | relative_url }}{% endcapture %}
+{% capture examples %}]({{ site.repository_url }}/blob/main/example/{% endcapture %}
+{% capture history %}]({{ site.repository_url }}/blob/main/doc/ios-{% endcapture %}
+{% capture contributing %}]({{ site.repository_url }}/blob/main/CONTRIBUTING.md{% endcapture %}
+{% capture license %}]({{ site.repository_url }}/blob/main/LICENSE{% endcapture %}
+{% assign text = text | replace: '](../README.md', overview | replace: '](../example/', examples | replace: '](example/', examples | replace: '](ios-', history | replace: '](doc/ios-', history | replace: '](CONTRIBUTING.md', contributing | replace: '](LICENSE', license %}
+{{ text | markdownify }}
