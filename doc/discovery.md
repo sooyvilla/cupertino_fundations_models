@@ -231,7 +231,12 @@ The complete article is prepared for review; no blog article was published.
 The owner also requested images. Spanish and English conceptual covers were
 generated for LinkedIn and Hashnode. The documentation site now defines an
 image for each language in its Open Graph/Twitter metadata and an illustration
-on its homepage; deployment remains pending. The
+on its homepage. Commit `00f791dcbcc6b88153f95d22e28684203329b4d0` is confirmed
+on `origin/main`; the
+[image deployment](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36769328495)
+completed successfully. Both PNG URLs returned HTTP 200 with `image/png`;
+the public HTML contains the language-specific image URL, alt text and large
+summary card metadata. The
 [Open Graph specification](https://ogp.me/)
 describes image URL, type, dimensions and alternative text. These are sharing
 metadata, not a guarantee of indexing or AI recommendation.

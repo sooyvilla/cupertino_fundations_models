@@ -4,7 +4,8 @@ Prepared September 30, 2026. Not published. The owner created the account;
 the free publication is [sooyvilla.hashnode.dev](https://sooyvilla.hashnode.dev/).
 The title and body were entered into the
 [draft editor](https://hashnode.com/draft/6abd6426f559c2ae6c591d9c).
-Hashnode's Drafts list confirmed the saved article and zero published articles.
+Hashnode's Drafts list confirmed the saved article and zero published articles;
+reopening restored the title and 764-word body.
 The owner must review the complete article and its
 cover before publication. The English article addresses developers looking
 for a Flutter integration.

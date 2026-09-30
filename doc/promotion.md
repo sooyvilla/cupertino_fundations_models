@@ -160,7 +160,10 @@ the iPhone sentence describes Foundation Models generation.
 Two conceptual illustrations were generated with the built-in `image_gen`
 tool. They are promotional artwork, not screenshots or measured device results.
 They use the project's navy/blue colors and preserve the package identifier.
-They are prepared in the documentation site; deployment is pending. Uploads
+They are published in the documentation site after the successful
+[image deployment](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36769328495).
+Both image URLs returned HTTP 200; the public HTML uses the appropriate cover
+for its language, with alt text and large-card metadata. Uploads
 to LinkedIn and Hashnode have not completed.
 
 - LinkedIn: [Spanish cover](promotion/assets/local-ai-flutter-linkedin-es.png).
