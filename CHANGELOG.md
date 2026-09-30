@@ -1,14 +1,13 @@
-## Unreleased
+## 0.4.4
 
-- Clarify Flutter iOS, local/offline AI, native Apple Foundation Models and
-  speech-to-text in package discovery metadata and the README.
-- Add English and Spanish local-AI tutorials, task recipes, an FAQ and a guide
-  for choosing a native model, a custom model or an application-owned cloud API.
-- Prepare a static documentation site with canonical URLs, localized tutorial
-  links, social metadata, source-code structured data, a sitemap and Markdown
-  references for coding assistants. Publication requires a manual workflow.
-- Record the discovery baseline, current official guidance and reviewable
-  promotion drafts. No public Dart or Swift runtime API changes.
+- Rewrite the getting-started guide around practical local AI tasks, with
+  availability checks, error handling and clear iOS requirements.
+- Add English and Spanish tutorials, structured extraction and classification
+  recipes, an FAQ and a guide to choosing a local or cloud approach.
+- Publish a documentation site with individual guide URLs, language links,
+  search and sharing metadata, a sitemap and Markdown versions of the guides.
+- Update package discovery metadata and link to the new documentation.
+  The package name, public API, privacy defaults and runtime behavior are unchanged.
 
 ## 0.4.3
 

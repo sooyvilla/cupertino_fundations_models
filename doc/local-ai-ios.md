@@ -33,7 +33,7 @@ To choose the version explicitly, add:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.3
+  cupertino_fundations_models: ^0.4.4
 ```
 
 Import the exact package name, including the existing spelling `fundations`:

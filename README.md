@@ -14,6 +14,7 @@ model, so you do not need to bundle your own weights. The package also includes
 file and live speech-to-text through Apple **Speech**, supports CocoaPods and
 Swift Package Manager, and adds no third-party runtime dependencies.
 
+[Documentation](https://sooyvilla.github.io/cupertino_fundations_models/) ·
 [Start with local AI on iOS](doc/local-ai-ios.md) ·
 [Español: inteligencia artificial local para iOS](doc/README.es.md) ·
 [Recipes](doc/recipes.md) · [FAQ](doc/faq.md) ·
@@ -57,7 +58,7 @@ Or declare the dependency directly:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.3
+  cupertino_fundations_models: ^0.4.4
 ```
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run

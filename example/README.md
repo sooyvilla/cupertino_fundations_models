@@ -1,6 +1,6 @@
 # Flutter iOS local AI example — Apple Foundation Models
 
-A Flutter chat demonstrating the native Apple API in version 0.4.3. For apps
+A Flutter chat demonstrating the native Apple API in version 0.4.4. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
 For an availability-checked first integration, start with

@@ -5,7 +5,7 @@ baseurl: /cupertino_fundations_models
 repository_url: https://github.com/sooyvilla/cupertino_fundations_models
 package_url: https://pub.dev/packages/cupertino_fundations_models
 api_url: https://pub.dev/documentation/cupertino_fundations_models/latest/
-stable_version: 0.4.3
+stable_version: 0.4.4
 lang: en
 markdown: kramdown
 highlighter: rouge

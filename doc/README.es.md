@@ -34,7 +34,7 @@ Si prefieres indicar la versión en el archivo, añade:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.3
+  cupertino_fundations_models: ^0.4.4
 ```
 
 Usa el identificador exacto, conservando la escritura existente `fundations`:

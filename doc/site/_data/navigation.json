@@ -102,6 +102,6 @@
     "url": "/changelog/",
     "source": "source/CHANGELOG.md",
     "raw": "/markdown/CHANGELOG.md",
-    "description": "Published release history and unreleased documentation changes for cupertino_fundations_models."
+    "description": "Release history and changes for cupertino_fundations_models."
   }
 ]

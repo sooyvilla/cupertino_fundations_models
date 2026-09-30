@@ -47,6 +47,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -56,3 +57,46 @@ jobs:
       - name: Deploy documentation
         id: deployment
         uses: actions/deploy-pages@v4
+      - name: Checkout notification configuration
+        uses: actions/checkout@v6
+      - name: Notify IndexNow of published guides
+        continue-on-error: true
+        env:
+          DOCUMENTATION_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import urllib.parse
+          import urllib.request
+          import xml.etree.ElementTree as ET
+
+          base = os.environ['DOCUMENTATION_URL'].rstrip('/') + '/'
+          key = Path('doc/site/indexnow-key.txt').read_text().strip()
+          key_url = base + 'indexnow-key.txt'
+          with urllib.request.urlopen(key_url, timeout=20) as response:
+              published_key = response.read().decode().strip()
+          if published_key != key:
+              raise RuntimeError('Published IndexNow verification file differs from this release.')
+          with urllib.request.urlopen(base + 'sitemap.xml', timeout=20) as response:
+              sitemap = ET.fromstring(response.read())
+          urls = [element.text for element in sitemap.findall('{*}url/{*}loc')]
+          if not urls or len(urls) > 10000 or any(not url.startswith(base) for url in urls):
+              raise RuntimeError('Sitemap URLs must stay within this documentation site.')
+          payload = {
+              'host': urllib.parse.urlparse(base).hostname,
+              'key': key,
+              'keyLocation': key_url,
+              'urlList': urls,
+          }
+          request = urllib.request.Request(
+              'https://api.indexnow.org/indexnow',
+              data=json.dumps(payload).encode(),
+              headers={'Content-Type': 'application/json; charset=utf-8'},
+              method='POST',
+          )
+          with urllib.request.urlopen(request, timeout=30) as response:
+              print(f'IndexNow received {len(urls)} URLs: HTTP {response.status}.')
+              print('Receipt does not confirm indexing or search position.')
+          PY

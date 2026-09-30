@@ -155,7 +155,9 @@ request indexing of the key tutorials. See
 and [sitemap submission](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap).
 An [IndexNow](https://www.indexnow.org/documentation) key is an optional additional
 submission mechanism for participating engines; it is not Google indexing and
-is not configured here without the host/key setup.
+is configured for this project subpath using a publicly hosted verification file.
+The manual Pages workflow submits its sitemap URLs after deployment. Its HTTP
+receipt must be recorded separately from actual indexing.
 
 Pub.dev publisher verification requires a domain and control of its Google
 Search Console property. No publisher domain was supplied, so a badge cannot
@@ -185,11 +187,22 @@ grow but installs do not, improve the integration guide using real issue reports
 When installs grow, investigate repeated adoption blockers before expanding
 promotion. No recurring automation or telemetry was installed by this task.
 
-## Evidence limits
+## Delivery evidence and limits
 
-Repository/source/diff review and public-source research only. No tests,
-formatters, analyze, validators, documentation builds, preview, screenshots,
-Flutter app execution, simulator or device checks were requested or run.
-The generated site has not been built or deployed. Prepared metadata does not
-change the published 0.4.3 archive. No observed download uplift, indexing,
-search-engine ownership, paid campaign or assistant recommendation is claimed.
+The owner authorized publication after the editorial review. Commit
+`464828c4cb25d2bbe5a451edf399b3380a6d847c` is on `origin/main`.
+[The initial documentation run](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36760905623)
+completed successfully. The homepage, all 15 guide routes, sitemap, llms.txt
+and both tutorial Markdown files returned HTTP 200. The live HTML contains
+canonical URLs, reciprocal English/Spanish links and source-code structured data.
+Repository description, 15 topics and the live homepage have been applied.
+
+The 0.4.4 patch and post-deployment IndexNow notification are prepared for the
+next delivery. Package upload and notification receipt are still pending.
+Generation/deployment of the documentation was necessary for the authorized
+publication. No independent tests, analysis, formatters, validators, visual
+checks, Flutter builds, app execution, simulators or devices were run.
+
+No observed download uplift, indexing, Search Console ownership, paid campaign
+or assistant recommendation is claimed. The original growth objective remains
+open until there is measurable adoption evidence.

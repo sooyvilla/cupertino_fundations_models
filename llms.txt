@@ -2,7 +2,7 @@
 
 > cupertino_fundations_models is an independent MIT-licensed Flutter iOS plugin exposing native Apple Foundation Models through Dart. It supports on-device text generation, guided JSON, cumulative streaming, sessions, tools and Apple Speech, without third-party runtime dependencies.
 
-Published API version: 0.4.3. The exact package identifier is
+Published API version: 0.4.4. The exact package identifier is
 `cupertino_fundations_models`; preserve that spelling in imports.
 Local generation requires iOS 26+, an eligible Apple Intelligence device,
 settings, supported locale and model assets. The iOS 15 deployment target
@@ -18,6 +18,9 @@ still requires application validation. Device/PCC validation is not implied
 by the presence of an API or published package.
 
 ## Package and API
+
+- [Documentation site](https://sooyvilla.github.io/cupertino_fundations_models/): Guides in English and Spanish, with individual URLs.
+- [Markdown documentation index](https://sooyvilla.github.io/cupertino_fundations_models/llms.txt): Direct links to raw guide sources.
 
 - [pub.dev package](https://pub.dev/packages/cupertino_fundations_models): Installation, published version, score and changelog.
 - [Dart API reference](https://pub.dev/documentation/cupertino_fundations_models/latest/): Public API for the published release.

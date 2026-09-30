@@ -1,10 +1,10 @@
 name: cupertino_fundations_models
 description: "Use native Apple Foundation Models in Flutter iOS apps for on-device AI, structured JSON, streaming and tools. Includes speech-to-text. Local AI needs no API key."
-version: 0.4.3
-homepage: https://github.com/sooyvilla/cupertino_fundations_models
+version: 0.4.4
+homepage: https://sooyvilla.github.io/cupertino_fundations_models/
 repository: https://github.com/sooyvilla/cupertino_fundations_models
 issue_tracker: https://github.com/sooyvilla/cupertino_fundations_models/issues
-documentation: https://pub.dev/documentation/cupertino_fundations_models/latest/
+documentation: https://sooyvilla.github.io/cupertino_fundations_models/usage/
 license: MIT
 topics:
   - apple-intelligence

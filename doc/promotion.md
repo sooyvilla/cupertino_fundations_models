@@ -1,8 +1,8 @@
 # Promotion kit — reviewable drafts, not published messages
 
-Prepared September 30, 2026. The existing package is published as 0.4.3; the
-documentation/discovery changes are not yet public. Use these drafts only after
-the approved Git/package/site delivery is confirmed. The maintainer should
+Prepared September 30, 2026. These drafts accompany the 0.4.4 documentation
+release. The documentation site is live; confirm the package upload before
+using the version in a post. The maintainer should
 review the voice and channel rules before any message is sent.
 
 ## Core message
