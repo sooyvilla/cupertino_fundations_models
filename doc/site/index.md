@@ -5,6 +5,8 @@ permalink: /
 ---
 # Native local AI for Flutter iOS
 
+![Local AI from Flutter: conceptual iPhone illustration with summary, JSON and streaming.]({{ '/assets/local-ai-flutter-en.png' | relative_url }})
+
 Add a summary, rewrite a message or extract a few fields without sending the
 text to an external AI service. `cupertino_fundations_models` connects your
 Flutter app to **Apple Foundation Models** through a native Swift bridge.

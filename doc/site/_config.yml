@@ -9,6 +9,12 @@ stable_version: 0.4.4
 search_console_verification: lK46B48wPa7y2TPv4dsiqu-Yg_og6LjdYpdBbE9o76M
 bing_verification: 27EED85DCF89B23D52DFEFBE38086212
 lang: en
+social_images:
+  en: /assets/local-ai-flutter-en.png
+  es: /assets/local-ai-flutter-es.png
+social_image_alts:
+  en: "Local AI from Flutter: an illustrative iPhone turns a passage into a summary, with JSON and streaming labels."
+  es: "IA local desde Flutter: ilustración de un iPhone que transforma un texto en un resumen, con referencias a JSON y streaming."
 markdown: kramdown
 highlighter: rouge
 kramdown:

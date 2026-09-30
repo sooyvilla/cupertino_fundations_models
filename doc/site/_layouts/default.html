@@ -19,15 +19,24 @@
   {% endif %}
   {% if site.search_console_verification %}<meta name="google-site-verification" content="{{ site.search_console_verification | escape }}">{% endif %}
   {% if site.bing_verification %}<meta name="msvalidate.01" content="{{ site.bing_verification | escape }}">{% endif %}
+  {% assign social_image = site.social_images[page.lang] | default: site.social_images.en %}
+  {% assign social_image_alt = site.social_image_alts[page.lang] | default: site.social_image_alts.en %}
   <meta property="og:type" content="website">
   <meta property="og:title" content="{{ page.title | escape }}">
   <meta property="og:description" content="{{ page.description | default: site.description | escape }}">
   <meta property="og:url" content="{{ page.url | absolute_url }}">
   <meta property="og:site_name" content="{{ site.title | escape }}">
   <meta property="og:locale" content="{% if page.lang == 'es' %}es_ES{% else %}en_US{% endif %}">
-  <meta name="twitter:card" content="summary">
+  <meta property="og:image" content="{{ social_image | absolute_url }}">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1672">
+  <meta property="og:image:height" content="941">
+  <meta property="og:image:alt" content="{{ social_image_alt | escape }}">
+  <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="{{ page.title | escape }}">
   <meta name="twitter:description" content="{{ page.description | default: site.description | escape }}">
+  <meta name="twitter:image" content="{{ social_image | absolute_url }}">
+  <meta name="twitter:image:alt" content="{{ social_image_alt | escape }}">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -59,6 +68,11 @@
         "name": {{ page.title | jsonify }},
         "description": {{ page.description | default: site.description | jsonify }},
         "inLanguage": {{ page.lang | default: site.lang | jsonify }},
+        "primaryImageOfPage": {
+          "@type": "ImageObject",
+          "contentUrl": {{ social_image | absolute_url | jsonify }},
+          "caption": {{ social_image_alt | jsonify }}
+        },
         "isPartOf": {"@id": {{ '/#website' | absolute_url | jsonify }}},
         "about": {"@id": {{ '/#package' | absolute_url | jsonify }}}
       }

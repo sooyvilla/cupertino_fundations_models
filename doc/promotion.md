@@ -1,9 +1,9 @@
-# Promotion kit — reviewable drafts, not published messages
+# Promotion materials and publication record
 
-Prepared September 30, 2026. These drafts accompany the 0.4.4 documentation
-release. The package and documentation site are public. The maintainer should
-review the voice and channel rules before any message is sent. These texts
-have not been posted to a community or social account.
+Prepared September 30, 2026. The package and documentation site are public.
+One owner-reviewed LinkedIn post has been published. Its replacement with the
+Spanish cover is approved and pending attachment. The remaining messages,
+article and English cover require the owner's review before publication.
 
 The owner requested a review of the exact text before every send or publication.
 Before asking for that approval, identify the destination and account, check its
@@ -12,11 +12,34 @@ does not approve these messages.
 
 ## Recommended first distribution
 
-Start with the maintainer's existing professional profile and an owned blog,
-if available. The short post introduces the package; the article gives a
-developer enough detail to decide whether to try it. The channel choice depends
-on the owner's actual accounts and audience, which have not been inspected.
-This is a proposed order, not a forecast of traffic or downloads.
+The owner authorized using their signed-in Chrome session. LinkedIn identifies
+the posting profile as [Sebastían Villa, @sooyvilla](https://www.linkedin.com/in/sooyvilla/).
+The owner edited the Spanish text, then authorized spelling corrections and
+publication with the iPhone compatibility detail. LinkedIn displayed its
+publication-success confirmation and the
+[published post](https://www.linkedin.com/feed/update/urn:li:activity:7511147189264371712/).
+Its audience is public. The final text is recorded below.
+
+For a new technical blog, the proposed platform is **Hashnode**. It offers a
+free publication on its own subdomain and a developer audience. Its current
+[Code of Conduct](https://hashnode.com/code-of-conduct) permits reviewed AI-assisted
+content and relevant source links, while rejecting spam and promotion that
+does not contribute useful technical material. The
+[complete tutorial draft](promotion/hashnode-local-ai-ios.md) includes a summary
+function, availability, privacy and session contracts, plus the limits of its
+source-only preparation. The owner created the account and the free publication
+is [Sebastían Villa — Flutter & Local AI](https://sooyvilla.hashnode.dev/).
+The article was entered into the
+[Hashnode draft editor](https://hashnode.com/draft/6abd6426f559c2ae6c591d9c).
+Its title and 764-word body were visible; Hashnode's Drafts list subsequently
+confirmed the saved article and zero published articles. Article and cover
+approval remain pending.
+
+The current [plans](https://hashnode.com/pro) put custom domains, GraphQL access,
+GitHub backup and scheduled publishing in Pro; these are not free setup promises.
+Start with the free publication. No paid plan, integration or custom domain
+was purchased or connected. This recommendation is a fit for this material,
+not a forecast of traffic, rankings or downloads.
 
 Current rules change the community options:
 
@@ -53,10 +76,9 @@ for Apple's Foundation Models framework. You can use it from Dart to summarize
 short text, rewrite a message, classify a note or extract fields into JSON.
 Local generation runs on the device and needs no API key.
 
-I updated the documentation with a first summary example, English and Spanish
-setup guides, and two small recipes: extracting an appointment and classifying
-a note. The guides also explain sessions, streaming, cancellation and tools.
-Your app still checks the output before using it.
+Start with a summary, then try the extraction and classification recipes.
+The guides explain sessions, streaming, cancellation and tools. Your app
+still checks the output before using it.
 
 Generation needs iOS 26+, a device that supports Apple Intelligence, the right
 settings and downloaded model assets. It can work offline once those assets
@@ -78,10 +100,9 @@ con Foundation Models de Apple. Puedes usarla desde Dart para resumir un texto,
 reescribir un mensaje, clasificar una nota o extraer campos en JSON.
 La generación se ejecuta dentro del dispositivo y no necesita una clave de API.
 
-Actualicé la documentación con una guía en español para obtener el primer
-resumen y ejemplos pequeños de extracción y clasificación. También explica
-las sesiones, el streaming y los errores que conviene manejar. Tu app sigue
-validando los datos antes de usarlos.
+Empieza con un resumen y adapta los ejemplos de extracción y clasificación
+a tu app. La guía explica las sesiones, el streaming y los errores que
+conviene manejar. Tu app sigue validando los datos antes de usarlos.
 
 La generación exige iOS 26+, un dispositivo apto para Apple Intelligence y los
 recursos del modelo disponibles. No admite Android, macOS o web. La inferencia
@@ -95,28 +116,73 @@ y Private Cloud Compute tienen políticas y requisitos separados.
 
 Use Apple Foundation Models from Flutter with `cupertino_fundations_models`:
 local summaries, guided JSON and streaming. No API key for local generation.
-Requires iOS 26+ and Apple Intelligence. Setup guides are available in English
-and Spanish.
+Requires iOS 26+ and an eligible Apple Intelligence device.
 
 [Start with the package](https://pub.dev/packages/cupertino_fundations_models)
 
-## LinkedIn draft in Spanish
+## Published LinkedIn text
 
-Si estás añadiendo una función de IA a una app Flutter para iOS, Apple
-Foundation Models permite resolver tareas cortas dentro del dispositivo.
+```text
+El iPhone también puede ser el motor de IA de tu app Flutter.
 
-Mantengo `cupertino_fundations_models`, una librería que conecta ese framework
-nativo con Dart. Puedes usarla para resumir texto, reescribir mensajes,
-clasificar notas o extraer campos en JSON, sin una clave de API para generar
-localmente.
+Creé cupertino_fundations_models para conectar Dart con Foundation Models de
+Apple y usar esa IA nativa desde Flutter.
 
-Publiqué la versión 0.4.4 con una guía en español, ejemplos pequeños y una
-documentación que explica la disponibilidad, el streaming y la privacidad.
-La generación requiere iOS 26+ y un iPhone compatible con Apple Intelligence.
-Tu app sigue validando los resultados antes de usarlos.
+Puedes añadir a tu app:
 
-[Guía en español](https://sooyvilla.github.io/cupertino_fundations_models/es/ia-local-ios/)
-· [Paquete](https://pub.dev/packages/cupertino_fundations_models)
+• Resúmenes de textos.
+• Clasificación de notas.
+• Transcripción de audio a texto de forma natural.
+• Extracción de datos en JSON.
+
+La generación local corre en el dispositivo y no necesita una API key. También
+puedes usar streaming y herramientas definidas por tu app.
+
+Para la generación local necesitas un iPhone 15 Pro, 15 Pro Max o un modelo
+de iPhone 16 en adelante, con Foundation Models disponible y los recursos
+del modelo descargados.
+
+El paquete, la documentación y los ejemplos están aquí:
+https://pub.dev/packages/cupertino_fundations_models
+
+#Flutter #iOS #AppleIntelligence
+```
+
+The URL was plain text in the LinkedIn composer. The message uses the owner's
+audio addition and removes release-version and documentation-language
+announcements. Device eligibility was checked against
+[Apple's iPhone guide](https://support.apple.com/guide/iphone/get-started-with-apple-intelligence-iphc28624b81/27/ios/27).
+Apple's Speech integration has its own availability and privacy requirements;
+the iPhone sentence describes Foundation Models generation.
+
+## Covers prepared for review
+
+Two conceptual illustrations were generated with the built-in `image_gen`
+tool. They are promotional artwork, not screenshots or measured device results.
+They use the project's navy/blue colors and preserve the package identifier.
+They are prepared in the documentation site; deployment is pending. Uploads
+to LinkedIn and Hashnode have not completed.
+
+- LinkedIn: [Spanish cover](promotion/assets/local-ai-flutter-linkedin-es.png).
+  Alt text: «IA local desde Flutter: ilustración de un iPhone que transforma
+  un texto en un resumen, con referencias a JSON y streaming. Paquete
+  cupertino_fundations_models.»
+- Hashnode: [English cover](promotion/assets/local-ai-flutter-hashnode-en.png).
+  Alt text: “Local AI from Flutter: an illustrative iPhone turns a passage
+  into a summary, with JSON and streaming labels. Package
+  cupertino_fundations_models.”
+
+[LinkedIn's editing guidance](https://www.linkedin.com/help/linkedin/answer/a522811?lang=es)
+allows text edits, but changing shared media requires deleting and recreating
+the post. The owner approved replacing the published post with
+the same text plus the Spanish cover.
+Deletion would remove its reactions and comments. No deletion or repost has
+been performed. Browser access recovered, and a replacement composer contains
+the exact approved text. PNG attachment is blocked by Chrome's file-URL access
+setting. The owner approved temporarily enabling it for these images and
+disabling it afterward. Browser policy rejects opening `chrome://extensions`,
+so the owner was asked to change the setting manually. The original post
+remains public until the replacement is ready.
 
 ## X draft
 
@@ -126,6 +192,9 @@ Requires iOS 26+ and Apple Intelligence.
 https://pub.dev/packages/cupertino_fundations_models
 
 ## Developer article draft
+
+The earlier outline below is preserved as reference. Use the
+[complete Hashnode draft](promotion/hashnode-local-ai-ios.md) for article review.
 
 **Title:** Add local AI to Flutter iOS without maintaining your own Foundation Models bridge
 
@@ -193,17 +262,54 @@ or a claim that every supported path has been physically validated.
 | pub.dev | README, topic, description, included public guides | Version 0.4.4 published and confirmed September 30. |
 | r/FlutterDev | Outline for a firsthand maintainer post | Current rules reject AI-generated articles; the prepared draft is not eligible for direct submission. |
 | DEV | Possible future firsthand educational article | Current AI guidelines restrict promotional AI content; do not submit this package-marketing draft there. |
-| Owned blog / Hashnode | Technical article draft plus source links | Existing account, applicable rules, complete owner review and approval before publication. |
-| LinkedIn / X | Short drafts above | Confirm owner's account and show the exact message before approval and publication. |
+| Owned blog / Hashnode | Complete article and English cover | Free publication created; article/cover review and approval pending. |
+| LinkedIn | Owner-edited Spanish message and proposed cover | Text published; replacement with the cover approved, pending attachment. |
+| X | Short draft above | Confirm owner's account and show the exact message before approval and publication. |
 | Flutter Gems | Accurate package submission | Use the current submission link from [Flutter Gems](https://fluttergems.dev/); directory acceptance is independent. |
 | Awesome Flutter | Future candidate for a relevant category | [Contribution rules](https://github.com/Solido/awesome-flutter/blob/master/contributing.md) require at least 35 stars; current baseline is 1, so it is not eligible now. External PR needs authorization. |
 | Existing local-AI questions | A specific helpful answer when this package fits | Answer the actual question, disclose authorship, obey rules and obtain messaging authorization. |
 
 Do not post the same pitch repeatedly in unrelated threads. Do not buy stars,
 likes, backlinks or fabricated testimonials, and do not create scripts to inflate
-downloads. No outreach, submission, external PR, campaign or message was performed.
+downloads. Only the approved LinkedIn post above was sent. No other outreach,
+directory submission, external PR or paid campaign was performed.
 
 A real-device demo could help adoption, but requires an expressly authorized
 run/capture. Show the actual device, iOS/runtime, local availability and outcome;
 do not turn sample UI or an unexecuted code block into a performance claim.
 Use live canonical guide URLs in promotion after the site is confirmed public.
+
+## Image generation prompts
+
+Built-in tool, opaque background. The English image edits the generated
+Spanish cover; no CLI/API-key path was used.
+
+### Spanish LinkedIn cover
+
+```text
+Use case: ads-marketing.
+Asset type: landscape cover for a LinkedIn post introducing an open-source Flutter iOS package. Output a single polished Spanish cover, wide 16:9 composition with comfortable 7% safe margins.
+Primary request: Make the practical benefit clear instantly: developers can build local AI features in a Flutter app using Apple's native Foundation Models, with the language model on the iPhone. This is an editorial illustration, not an app screenshot.
+Scene and style: precise, confident contemporary developer editorial design. Warm white background, deep navy typography and restrained Flutter-blue accents (existing project colors #173d65 and #174f86). Subtle real paper texture and controlled soft shadows; no busy futuristic background.
+Composition: large clear typographic headline on the left, generous negative space; on the right an elegant illustrative modern iPhone silhouette with a dark pill at the top and minimal neutral interface cards. A short text card becomes three concise summary lines within the same phone, suggesting on-device summarization. A small tidy native chip motif sits entirely inside the phone, not in a cloud. Make this feel like a crafted professional software cover, not a stock AI advertisement.
+Exact text, render verbatim with accents and proper spacing:
+Headline: "IA local." then "Desde Flutter."
+Supporting line: "Foundation Models de Apple, desde Dart."
+Three small labels: "Resúmenes" / "JSON" / "Streaming"
+Footer in clean small monospace: "cupertino_fundations_models"
+Constraints: the package spelling is intentionally fundations, NOT foundations; spell it exactly. All text readable at feed thumbnail scale except the small package footer. No versions, no language announcements, no performance or privacy absolutes, no download figures, no claims of official Apple endorsement, no Apple logo, no invented product badges, no cloud icon, no robots, no brain, no watermark. Do not include any additional text. This is a conceptual promotional illustration.
+```
+
+### English Hashnode cover
+
+```text
+Use case: text-localization.
+Edit target: the supplied Spanish LinkedIn cover.
+Asset type: matching English cover for a technical Hashnode article about local AI in Flutter iOS.
+Change ONLY the text language. Keep the exact canvas, composition, illustrative iPhone, summary cards, chip, blue shapes, colors, textures, icon labels, type hierarchy and footer position unchanged. Preserve the opaque white background.
+Replace the headline "IA local." with "Local AI." and "Desde Flutter." with "From Flutter."
+Replace supporting line "Foundation Models de Apple, desde Dart." with "Apple Foundation Models, from Dart."
+Replace "Resúmenes" with "Summaries".
+Keep "JSON", "Streaming" and footer "cupertino_fundations_models" verbatim, including its intentionally existing fundations spelling.
+Do not add anything else. Keep all text crisp and well spaced in the existing layout. This is a conceptual editorial illustration, not a screenshot or real device benchmark.
+```

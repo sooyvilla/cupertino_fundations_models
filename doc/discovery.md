@@ -81,7 +81,7 @@ of approaches and honest unsupported-feature boundaries.
   URLs and version. No fabricated reviews, ratings, testimonials or rich-result promise.
 - Markdown alternatives, agent guide and optional documentation indexes.
 - [Reviewable GitHub metadata](repository-metadata.json) and
-  [promotion drafts](promotion.md); nothing sent to a community or another person.
+  [promotion materials and publication record](promotion.md).
 
 The site, workflow and internal promotion/research files are excluded from the
 pub archive. The public tutorials, FAQ, recipes and selection guide are included.
@@ -203,7 +203,7 @@ separate from the previously cached 0.4.3 aggregate.
 Documentation generation/deployment and Pub's integrated checks were part of
 the authorized publication. No independent tests, analysis, formatters,
 validators, visual checks, Flutter builds, apps, simulators or devices were run.
-No messages were posted to communities. Both search-engine properties are
+Both search-engine properties are
 verified. Bing's sitemap report reached **Success, 16 URLs discovered**, with
 no reported errors. Google accepted the sitemap, but its first report showed
 **Couldn't fetch, zero discovered pages**. Google's live inspection subsequently
@@ -221,8 +221,30 @@ A repeat of the four public pub.dev queries at `2026-09-30T19:05:51Z` retained
 the baseline positions: eighth for `apple foundation models`, absent from the
 first ten for the other three queries. No measured improvement is claimed.
 The owner asked to review each promotional text before it is sent or published;
-the complete drafts are ready, while their actual profile/blog destinations
-remain to be identified.
+the final owner-edited LinkedIn text was published after spelling corrections
+and device eligibility clarification. LinkedIn confirmed success and returned
+the [public post](https://www.linkedin.com/feed/update/urn:li:activity:7511147189264371712/).
+The owner's free Hashnode publication is
+[Sebastían Villa — Flutter & Local AI](https://sooyvilla.hashnode.dev/).
+The complete article is prepared for review; no blog article was published.
+
+The owner also requested images. Spanish and English conceptual covers were
+generated for LinkedIn and Hashnode. The documentation site now defines an
+image for each language in its Open Graph/Twitter metadata and an illustration
+on its homepage; deployment remains pending. The
+[Open Graph specification](https://ogp.me/)
+describes image URL, type, dimensions and alternative text. These are sharing
+metadata, not a guarantee of indexing or AI recommendation.
+
+[LinkedIn's editing documentation](https://www.linkedin.com/help/linkedin/answer/a522811?lang=es)
+requires deleting and recreating a post to change shared media. The owner
+approved replacing the published message with the same text plus its Spanish
+cover. A replacement composer contains the approved text. Attachment requires
+Chrome's file-URL permission; the owner approved enabling it temporarily and
+restoring it afterward. Browser policy blocks opening the internal extensions
+page, so its setting requires the owner's manual action. No deletion or second
+post was performed. Hashnode's Drafts list confirmed the saved article and zero
+published articles; its article and cover review remain pending.
 
 No observed download uplift, indexed pages, paid campaign or assistant
 recommendation is claimed. The original growth objective remains open until
