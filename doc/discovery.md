@@ -86,41 +86,24 @@ The site, workflow and internal promotion/research files are excluded from the
 pub archive. The public tutorials, FAQ, recipes and selection guide are included.
 No screenshot is advertised: no app capture or runtime demonstration was requested.
 
-## Authorized publication sequence
+## Publication completed
 
 On September 30 the owner approved the Git delivery, repository metadata,
 documentation site and 0.4.4 publication, provided the writing is natural,
-current and easy to understand. The README, tutorials and landing page have
+current and easy to understand. The README, tutorials, FAQ and landing page
 received that editorial pass. Community posts remain drafts.
 
-1. Publish the documentation site using the currently published **0.4.3**
-   reference first, keeping existing package URLs reachable throughout.
-   Prepare the next patch as **0.4.4** after confirming the site: finalize the changelog,
-   synchronize pubspec, podspec and the diagnostic version string in
-   `lib/src/session.dart`, the example's path lock entry and current-version
-   references. Preserve historical release notes and migration titles.
-   Also align `llms.txt`, the new guides and `doc/site/_config.yml` with the
-   release that is actually published; do not label an unuploaded patch as live.
-2. Commit the coherent delivery to `main` and push `origin/main`. Confirm the
-   remote commit so pub.dev's relative documentation links can resolve.
-3. Enable GitHub Pages with the GitHub Actions publishing source, then run
-   `.github/workflows/documentation.yml` manually on `main`. It publishes only
-   documentation; it has no push trigger and does not build/run the Flutter app.
-4. Confirm the site's public routes, generated metadata and deployment result
-   under the specifically authorized publication checks. Until this succeeds,
-   keep package homepage/repository on the existing reachable GitHub URL.
-5. Apply the repository description and topics in `repository-metadata.json`.
-   Set the repository homepage only after the documentation URL is live.
-6. After site success, set package `homepage` to the site and `documentation`
-   to its `/usage/` URL if publication checks confirm reachability. Keep
-   `repository` and `issue_tracker` on GitHub. Link the site from the README.
-7. Publish the authorized package patch. Pub's
-   integrated publication checks are part of that operation; no unrelated
-   tests, builds, validators or device execution are implied. Confirm latest
-   version, archive and remote score separately from runtime behavior.
+The documentation went live before the package links changed, keeping all
+public URLs reachable during the delivery. The final patch synchronizes
+pubspec, podspec, the diagnostic version string, the example's path lock entry
+and current documentation references. Historical notes and migration titles
+remain intact.
 
-If the Pages deployment fails, preserve the sources and existing reachable
-package URLs. Do not claim a published site or change metadata to a dead URL.
+The manual Pages workflow publishes shared Markdown and then notifies
+IndexNow about the sitemap URLs. It does not build or run the Flutter app.
+The package homepage links to the live site, documentation links to `/usage/`,
+and repository/issues continue to point to GitHub. Pub.dev accepted 0.4.4
+with its integrated publication checks.
 
 GitHub's reference workflow is documented in
 [custom Pages workflows](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
@@ -189,20 +172,37 @@ promotion. No recurring automation or telemetry was installed by this task.
 
 ## Delivery evidence and limits
 
-The owner authorized publication after the editorial review. Commit
-`464828c4cb25d2bbe5a451edf399b3380a6d847c` is on `origin/main`.
-[The initial documentation run](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36760905623)
-completed successfully. The homepage, all 15 guide routes, sitemap, llms.txt
-and both tutorial Markdown files returned HTTP 200. The live HTML contains
-canonical URLs, reciprocal English/Spanish links and source-code structured data.
-Repository description, 15 topics and the live homepage have been applied.
+Release commit `2cdb0b72a18ec940b10eaaeaf555ba23e765b03d` is on `origin/main`.
+[The release documentation run](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/36761417993)
+completed successfully, including the IndexNow step. The homepage, all 15 guide
+routes, sitemap, llms.txt and both tutorial Markdown files returned HTTP 200.
+The live HTML contains canonical URLs, reciprocal English/Spanish links and
+source-code structured data. Repository description, 15 topics and homepage
+were applied and read back.
 
-The 0.4.4 patch and post-deployment IndexNow notification are prepared for the
-next delivery. Package upload and notification receipt are still pending.
-Generation/deployment of the documentation was necessary for the authorized
-publication. No independent tests, analysis, formatters, validators, visual
-checks, Flutter builds, app execution, simulators or devices were run.
+Pub.dev accepted **0.4.4** at `2026-09-30T18:50:22.013609Z`.
+[The package API](https://pub.dev/api/packages/cupertino_fundations_models)
+confirms the latest version, site URLs, updated description and iOS topic.
+The served archive SHA256 is
+`dc493a986980ac9126cb431989bf0950566472e72d9a657ced95337197cd79a3`.
+Its README and all new public guides are present; internal research, promotion
+and site sources are excluded.
 
-No observed download uplift, indexing, Search Console ownership, paid campaign
+IndexNow received **16 URLs with HTTP 202** at `2026-09-30T18:51:05Z`.
+That means receipt with key verification pending, not indexing or ranking.
+The version-specific pub.dev metric query `?version=0.4.4` completed with
+Pana success at `2026-09-30T18:56:31.831763`: **160/160 points**, verified
+repository and no URL problems. This is evidence for the new release,
+separate from the previously cached 0.4.3 aggregate.
+
+Documentation generation/deployment and Pub's integrated checks were part of
+the authorized publication. No independent tests, analysis, formatters,
+validators, visual checks, Flutter builds, apps, simulators or devices were run.
+No messages were posted to communities. The owner authorized Search Console
+and Bing setup. Their Codex browser tabs currently require sign-in, so property
+registration awaits that authentication. The owner also asked to review each
+promotional text before it is sent or published.
+
+No observed download uplift, indexing, search-engine ownership, paid campaign
 or assistant recommendation is claimed. The original growth objective remains
 open until there is measurable adoption evidence.
