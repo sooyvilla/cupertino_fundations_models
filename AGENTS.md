@@ -23,6 +23,7 @@
 ## Flujo de trabajo
 
 - Git (`team-defined`, confirmado 2026-09-19): `main` es el destino de las entregas expresamente autorizadas. Una solicitud de subir a Git permite crear el commit de esa entrega y hacer push a `origin/main`, tras revisar los cambios y verificar el remoto. No crear ramas, merges, commits automáticos, pushes ni publicaciones en tareas que no los autoricen. Trabajos paralelos o una rama distinta requieren una instrucción específica; usar `codex/` cuando se autorice una rama de tarea.
+- Entregas (confirmado 2026-09-30): terminar el encargo completo y obtener el permiso final del usuario antes de hacer commit, push, despliegue o publicación. No subir avances parciales. Cuando se active el pipeline de pub.dev, un push autorizado a `main` con una versión nueva también inicia la publicación automática; conservar la versión en tareas que no sean una entrega del paquete. Configuración y recuperación en `doc/automated-publishing.md`.
 - Validaciones permitidas: `dart format`, `flutter analyze` y builds no interactivos proporcionales. Usar Xcode beta cuando se validen APIs de iOS 27.
 - No crear ni ejecutar pruebas salvo petición explícita.
 - No ejecutar la aplicación, simuladores o dispositivos salvo petición explícita.

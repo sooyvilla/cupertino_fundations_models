@@ -1,0 +1,62 @@
+name: Publish to pub.dev
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: [pubspec.yaml]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Check release version
+    if: github.repository == 'sooyvilla/cupertino_fundations_models' && !github.event.deleted
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Decide whether to release
+        id: release
+        run: python3 .github/scripts/pubdev_release.py
+      - name: Create release token
+        if: steps.release.outputs.create_tag == 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.PUBDEV_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.PUBDEV_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: cupertino_fundations_models
+          permission-contents: write
+      - name: Create version tag
+        if: steps.release.outputs.create_tag == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh auth setup-git --hostname github.com
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$RELEASE_TAG"
+          printf 'Created `%s` for `%s`. Its tag workflow publishes the package.\n' \
+            "$RELEASE_TAG" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  publish:
+    name: Publish new version
+    needs: prepare
+    if: needs.prepare.outputs.publish == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: pubdev-publish-${{ github.ref_name }}
+      cancel-in-progress: false
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@v1
+    with:
+      environment: pub.dev
