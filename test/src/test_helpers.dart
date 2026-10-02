@@ -37,6 +37,7 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   final List<String> disposedSessionIds = <String>[];
   Completer<ModelResponse>? respondCompleter;
   Completer<void>? cancelCompleter;
+  FoundationModelsException? cancelError;
   Stream<SessionEvent>? controlledSessionStream;
   int _sessionIndex = 0;
 
@@ -214,6 +215,10 @@ final class FakePlatform implements CupertinoFoundationModelsPlatform {
   @override
   Future<void> cancelActiveRequest({required String sessionId}) async {
     calls.add('cancelActiveRequest');
+    final error = cancelError;
+    if (error != null) {
+      throw error;
+    }
     await cancelCompleter?.future;
   }
 

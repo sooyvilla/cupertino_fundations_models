@@ -1,6 +1,6 @@
 # Private Cloud Compute setup
 
-For package **0.4.3**. Apple requirements checked September 21, 2026;
+For package **0.5.0**. Apple requirements checked September 21, 2026;
 recheck the linked pages before applying because eligibility and beta APIs can
 change. This guide does not establish that your account or app is approved.
 
@@ -61,8 +61,10 @@ changing native configuration; a Dart hot reload cannot change its signature.
 
 ## Runtime and application requirements
 
-- This plugin exposes PCC only on iOS 27+, built with an SDK exposing PCC
-  (Xcode 27+/Swift 6.4). Its iOS 15 deployment target does not enable PCC there.
+- This plugin exposes PCC on iOS/iPadOS 27+ and macOS 27+, built with an SDK
+  exposing PCC (Xcode 27+/Swift 6.4). Deployment targets iOS 15 and macOS 12
+  do not enable PCC on older systems. See
+  [platform requirements and host setup](apple-platforms.md).
 - Use an Apple Intelligence-capable device, enabled Apple Intelligence, a
   supported region and a working network. PCC needs no app-supplied API key.
 - Handle daily user limits, network errors and service availability. iCloud+

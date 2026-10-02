@@ -1,7 +1,7 @@
 ---
 layout: "guide"
-title: "Frequently asked questions — Flutter iOS Foundation Models"
-description: "Answers about offline AI, Apple Intelligence availability, iPhone support, privacy, JSON, streaming and Speech."
+title: "Frequently asked questions — Foundation Models for Flutter"
+description: "Answers about offline AI, Apple Intelligence availability, iPhone, iPad and Mac support, privacy, JSON, streaming and Speech."
 permalink: "/faq/"
 source: "source/faq.md"
 source_path: "doc/faq.md"

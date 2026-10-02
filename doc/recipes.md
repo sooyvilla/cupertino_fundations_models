@@ -1,4 +1,7 @@
-# Flutter iOS local AI recipes
+# Flutter local AI recipes for Apple platforms
+
+The same Dart recipes apply to iOS/iPadOS and macOS in version 0.5.0.
+See [platform status and Mac host setup](apple-platforms.md).
 
 Here are small tasks you can adapt to your Flutter app: summarize a passage,
 extract appointment fields and classify a note. Start with

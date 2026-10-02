@@ -7,9 +7,9 @@
 
 ## Perfil confirmado
 
-- Proyecto existente: paquete Flutter iOS con API pública Dart y puente nativo Swift.
+- Proyecto existente: paquete Flutter iOS/iPadOS y macOS con API pública Dart y puente nativo Swift compartido en `darwin/`.
 - La integración nativa debe conservar soporte CocoaPods y Swift Package Manager.
-- El deployment target del plugin permanece en iOS 15; cada uso de Foundation Models debe protegerse por SDK y disponibilidad de iOS 26 o iOS 27.
+- Los deployment targets del plugin permanecen en iOS 15 y macOS 12; cada uso de Foundation Models debe protegerse por SDK y disponibilidad de iOS/macOS 26 o 27, incluyendo iOS/macOS 26.4 para contar tokens.
 - Mantener cero dependencias runtime de terceros salvo que el usuario autorice expresamente una nueva dependencia.
 
 ## Arquitectura y convenciones
@@ -18,7 +18,7 @@
 - No exponer `MethodChannel` como API pública ni asumir capacidades por modelo de dispositivo; consultar availability y capabilities nativas.
 - Mantener límites de privacidad explícitos: local por defecto y PCC/proveedores externos solo según la política solicitada por la app.
 - El núcleo integra Apple local/PCC. La aplicación consumidora decide la orquestación con APIs externas, consentimiento, historial y reintentos; no agregar routing híbrido implícito al paquete.
-- Mantener alineados `pubspec.yaml`, `README.md`, `CHANGELOG.md`, el ejemplo y los manifiestos iOS cuando cambie la API pública.
+- Mantener alineados `pubspec.yaml`, `README.md`, `CHANGELOG.md`, el ejemplo y los manifiestos Apple cuando cambie la API pública o compatibilidad.
 
 ## Flujo de trabajo
 

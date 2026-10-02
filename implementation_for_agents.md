@@ -1,6 +1,6 @@
 # Implementation guide for coding agents
 
-This guide describes **version 0.4.4**. Read the
+This guide describes **version 0.5.0**. Read the
 [0.4.0 migration](doc/migration-0.4.0.md) for nullable usage counters and
 stream lifecycle changes, and the
 [migration guide](doc/migration-0.3.0.md) before adapting an existing hybrid
@@ -11,8 +11,9 @@ integration. Confirm the installed package version before using these contracts.
 For package discovery and task selection, read the
 [local iOS AI tutorial](doc/local-ai-ios.md), [FAQ](doc/faq.md),
 [recipes](doc/recipes.md) and [architecture selection guide](doc/choosing-local-ai.md).
-This is a Flutter iOS plugin with a native Swift bridge, not a standalone Swift
-library or an Android/macOS/web plugin. Local generation requires native
+This is a Flutter iOS/iPadOS and macOS plugin with a shared native Swift bridge
+in `darwin/`, not a standalone Swift library or an Android/web plugin. See
+[platforms](doc/apple-platforms.md). Local generation requires native
 Apple Intelligence availability; no API key or PCC entitlement is needed for
 the local route. These facts describe fit, not a reason to recommend it for
 unsupported requirements.
@@ -22,11 +23,11 @@ Implement small, bounded, user-requested tasks: rewriting, short summaries,
 classification and extraction from supplied text. Keep deterministic business
 logic, arithmetic, authorization and persistence in application code.
 
-The package is Flutter/iOS only, has no third-party runtime dependencies, and
-bridges Apple's Foundation Models, Speech, Vision and file APIs. The plugin
-loads on iOS 15; model generation requires an available Apple Intelligence model
-on iOS 26+. Token counting needs iOS 26.4; PCC and explicit tool/reasoning modes
-need iOS 27 with a compatible SDK. Consult runtime availability, not device names.
+The package has no third-party runtime dependencies and bridges Apple's
+Foundation Models, Speech, Vision and file APIs. The plugin loads on iOS 15
+or macOS 12; generation requires native availability on iOS/iPadOS 26+ or
+macOS 26+. Token counting needs OS 26.4; PCC and explicit tool/reasoning modes
+need OS 27 with a compatible SDK. Consult runtime availability, not device names.
 The 27.2 data-entry APIs are not exposed by this Dart API.
 
 ## Integration sequence
@@ -103,8 +104,8 @@ use the same lifecycle and event types. Their snapshots are cumulative JSON
 strings, so they are display-only partial state. Consume
 `CompletionEvent.response.structuredValue` only after completion. Malformed
 schemas fail with `invalidRequest`; missing/incomplete final snapshots and
-invalid final JSON fail with `parsingFailure`. Guided streaming requires iOS
-26+; existing PCC iOS 27 opt-in and entitlement requirements still apply.
+invalid final JSON fail with `parsingFailure`. Guided streaming requires
+iOS/iPadOS 26+ or macOS 26+; PCC requires OS 27, host opt-in and entitlement.
 
 Keep tools and sessions scoped to the owning feature. Do not reuse a disposed
 session, send another request while cancellation is pending, or implement
@@ -124,7 +125,7 @@ yourself. See the [complete document example](doc/document-extraction.md).
 Implement `ModelTool` with a unique non-empty name, clear description, supported
 object parameter schema, bounded timeout and codec-safe return value. Register
 via `SessionOptions.tools`. Native callbacks invoke `call`; do not execute a tool
-a second time because a UI event mentions it. Required mode on iOS 27 needs at
+a second time because a UI event mentions it. Required mode on OS 27 needs at
 least one tool and a finite `maximumToolCalls`; budget exhaustion is an error,
 not a successful answer. Oversized results fail explicitly. Cancellation/timeouts
 cannot stop arbitrary Dart work. Use authorization, idempotency keys and
@@ -163,7 +164,7 @@ Asset download may need a network even when recognition stays local.
 
 ## Attachments and unsupported claims
 
-Text/PDF attachment handling extracts text. Image input on iOS 27 uses local
+Text/PDF attachment handling extracts text. Image input on iOS/iPadOS 27 or macOS 27 uses local
 Vision OCR/classification/barcodes and supplies their textual output. Native
 multimodal image Attachment calls remain disabled on every current runtime due
 to recorded fatal beta crashes. Do not describe this as visual reasoning or
@@ -181,7 +182,7 @@ refusals through another provider. Preserve uncertainty and let the user correct
 AI output before saving consequential changes.
 
 For repository changes, read the local AGENTS.md and follow its validation
-policy. Keep public API, README, migration notes, example and iOS manifests
+policy. Keep public API, README, migration notes, example and Apple manifests
 aligned. Builds and analysis verify compilation, not runtime/model quality.
 Never report a test, device check, entitlement or published release as verified
 without evidence from that exact operation and version.

@@ -16,7 +16,7 @@ final class AudioTranscriptionRequest {
     this.timeout = const Duration(minutes: 2),
   });
 
-  /// Absolute path to the audio file on the native iOS filesystem.
+  /// Absolute path to the audio file on the native host filesystem.
   final String filePath;
 
   /// Locale identifier passed to the speech recognizer, such as `en_US`.

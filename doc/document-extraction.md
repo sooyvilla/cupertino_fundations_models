@@ -58,7 +58,7 @@ These are suggested future checks, not results from this release:
 
 | Scenario | Evidence to collect |
 | --- | --- |
-| Local guided stream on iOS 26 and 27 | Partial snapshots, decoded terminal structure, source row coverage and exact amounts. |
+| Local guided stream on iOS/iPadOS and macOS 26 and 27 | Partial snapshots, decoded terminal structure, source row coverage and exact amounts. |
 | Long tables and deliberately small output limit | Structure status, usage when supplied, unknown stop reason; no inferred truncation proof. |
 | Cancel before first output and mid-stream | Awaited cleanup, no later output, safe session disposal. |
 | First-result, idle and total deadlines | Typed timeout phase and no new request until cleanup finishes. |

@@ -2,13 +2,13 @@
 
 Un cambio de código o documentación en `main` no crea una versión. La publicación se inicia cuando el push cambia el campo `version` de `pubspec.yaml` y esa versión todavía no existe en pub.dev.
 
-El workflow `.github/workflows/publish-pub-dev.yml` compara el manifiesto anterior al push con el del commit recibido. Crea el tag `v<version>` sobre ese commit y el evento del tag publica el paquete. Antes de instalar Flutter, comprueba que el tag coincide con el manifiesto, que el commit pertenece a `main` y que la versión sigue sin publicarse. Si pub.dev falla o responde de forma inesperada, se detiene.
+El workflow `.github/workflows/publish-pub-dev.yml` compara el manifiesto anterior al push con el del commit recibido. Crea el tag `v<version>` sobre ese commit y el evento del tag publica el paquete. Antes de crear el tag o publicar, exige análisis, tests, cobertura Dart completa y compilación de los ejemplos Apple. Después comprueba que el tag coincide con el manifiesto, que el commit pertenece a `main` y que la versión sigue sin publicarse. Si pub.dev falla o responde de forma inesperada, se detiene.
 
 Pub.dev autentica la publicación con OIDC de GitHub; no se guarda una credencial personal de pub.dev. La creación del tag usa un token temporal de una GitHub App limitada a este repositorio. Su clave privada sí se conserva como un secreto de Actions.
 
 ## Activación inicial
 
-La configuración externa está guardada y confirmada. El dueño autorizó entregar el pipeline a `main`, conservando `0.4.4`. La primera publicación con este pipeline sigue pendiente de una versión nueva autorizada.
+La configuración externa está guardada y confirmada. La instalación inicial conservó `0.4.4`. El 2 de octubre de 2026 el dueño autorizó ampliar pruebas y cobertura, exigirlas en el pipeline y después entregar `0.5.0`. La publicación OIDC de esa versión debe confirmarse mediante su run del tag y la respuesta de pub.dev.
 
 La revisión de fuente del 1 de octubre de 2026 no encontró un fallo concreto en el flujo de publicación ni en su recuperación. No se ejecutaron el script, el workflow ni las comprobaciones de publicación. La configuración de las cuentas se confirmó posteriormente mediante sus pantallas de administración.
 
@@ -81,7 +81,7 @@ Tras completar GitHub, revisar estos valores y pulsar **UPDATE**. La publicació
 
 ### 5. Entregar el pipeline
 
-Avisar cuando los cuatro pasos anteriores estén guardados; no compartir la clave privada. Confirmar la configuración visible y obtener la aprobación final del dueño antes de hacer commit y push del CI/CD a `origin/main`. La subida de esta configuración, con `0.4.4` sin cambios, no publicará otra versión del paquete. La ampliación de plataformas permanece pausada.
+Avisar cuando los cuatro pasos anteriores estén guardados; no compartir la clave privada. Confirmar la configuración visible y obtener la aprobación final del dueño antes de hacer commit y push del CI/CD a `origin/main`. La subida de esta configuración, con `0.4.4` sin cambios, no publicará otra versión del paquete. Esta aprobación corresponde a la instalación inicial; la ampliación Apple y su entrega posterior se autorizan por separado.
 
 La GitHub App es necesaria porque los tags creados con el `GITHUB_TOKEN` habitual no disparan otro workflow. Pub.dev exige que su autenticación automática provenga del evento de un tag de versión. Las reglas de protección del repositorio deben permitir a la App crear esos tags.
 
@@ -91,12 +91,16 @@ El cierre tiene tres estados distintos: desarrollo local preparado, configuraci�
 
 Terminar todo el trabajo antes de subirlo. Preparar la nueva versión y mantener alineados el changelog, el podspec, la versión de diagnóstico y el lock del ejemplo cuando corresponda. Revisar el resultado completo y recibir la aprobación de entrega; después subir el commit final a `main`.
 
-- Misma versión: se omite la publicación. Si `pubspec.yaml` no cambió, el workflow ni siquiera se inicia para ese push.
+- Misma versión: se ejecutan los controles de calidad y se omite la publicación.
 - Versión diferente y aún inexistente: se crea su tag y se inicia la publicación.
 - Versión ya publicada: se omite sin intentar reemplazarla.
 - Error de configuración o de red: el workflow falla y conserva el código; no continúa a ciegas.
 
-El workflow oficial de Dart instala Flutter, resuelve dependencias y ejecuta las comprobaciones integradas de `pub publish` antes de subir el paquete. No agrega una suite de tests, builds iOS ni ejecuciones en dispositivos. Estas comprobaciones de publicación aún no se han ejecutado para este pipeline.
+El job `verify` usa Flutter `3.47.5`, ejecuta `flutter analyze --no-pub`, las pruebas Python de los controles de entrega y `flutter test --coverage`. `.github/scripts/check_coverage.py` exige exactamente 100% de líneas ejecutables Dart bajo `lib/`, rechaza informes vacíos, inconsistentes o sin archivos ejecutables y conserva el LCOV como artifact. Los archivos con solo exports o firmas abstractas no tienen líneas ejecutables; no se excluye código ejecutable para alcanzar el umbral. La cobertura no mide Swift ni ramas.
+
+`apple-builds` depende de `verify` y compila el ejemplo iOS Release sin firma y macOS Debug en `macos-latest`. La versión de Xcode corresponde a la imagen del runner; la validación local usa Xcode 27.2 beta para incluir las APIs nuevas. Estos builds no ejecutan apps ni prueban permisos, assets, modelos o PCC firmado.
+
+`prepare` depende de ambos jobs y solo corre en pushes del repositorio principal. Los PR hacia `main` ejecutan los controles con permisos de lectura y no acceden al token de la App ni a OIDC. Los pushes a `main` y los tags vuelven a comprobar el commit recibido; cualquier fallo bloquea los jobs de entrega. El workflow oficial de Dart finalmente ejecuta `dart pub publish --dry-run` y publica dentro de `pub.dev` con OIDC.
 
 ## Si una publicación falla
 

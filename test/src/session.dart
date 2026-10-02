@@ -37,7 +37,6 @@ void main() {
       );
       await session.prewarm(promptPrefix: const Prompt.text('prefix'));
       await session.cancelActiveRequest();
-      await session.dispose();
 
       expect(
         platform.calls,
@@ -47,7 +46,6 @@ void main() {
           'generateStructured',
           'prewarm',
           'cancelActiveRequest',
-          'disposeSession',
         ]),
       );
       expect(
@@ -70,6 +68,8 @@ void main() {
         )).isError,
         isTrue,
       );
+      await session.dispose();
+      expect(platform.calls, contains('disposeSession'));
     });
 
     test('returns tool failure when a registered tool throws', () async {

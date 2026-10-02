@@ -1,7 +1,7 @@
-# Choosing a local AI approach for a Flutter iOS app
+# Choosing a local AI approach for a Flutter app on Apple platforms
 
 Use `cupertino_fundations_models` when your Flutter app needs **Apple-native
-on-device language generation on eligible iOS devices**. It supplies the Dart
+on-device language generation on eligible iPhone, iPad and Mac devices**. It supplies the Dart
 API and Swift bridge, including sessions, streams and tool calls. Your app
 can focus on the task, the interface and validation of the result.
 
@@ -10,10 +10,10 @@ This table compares the integration work for each approach.
 
 | Requirement | This Flutter plugin | Direct Foundation Models in Swift | A custom local model runtime | An application-owned cloud API |
 | --- | --- | --- | --- | --- |
-| Flutter iOS integration | Typed Dart facade and native bridge included | You implement or maintain the Flutter bridge | Depends on the chosen runtime/plugin | You integrate the provider client |
+| Flutter iOS/iPadOS and macOS integration | Typed Dart facade and native bridge included | You implement or maintain the Flutter bridge | Depends on the chosen runtime/plugin | You integrate the provider client |
 | Apple system language model | Yes, native availability required | Yes, native availability required | Usually brings its own weights; check that runtime | Depends on the service |
 | Model choice and custom weights | No custom-weight loader | Depends on the Apple API and your implementation | Runtime/model-specific | Provider-specific |
-| Android, macOS or web in this package | No | Requires platform-specific implementation | Runtime/plugin-specific | Client/provider-specific |
+| Android or web in this package | No | Requires platform-specific implementation | Runtime/plugin-specific | Client/provider-specific |
 | Local inference without an API key | Yes, once eligible and assets are ready | Yes, under Apple's availability requirements | Runtime/license-specific | Cloud credentials or authenticated backend normally required |
 | Guided schemas and streaming | Existing Dart API with lifecycle contracts | You design the app/bridge contracts | Runtime/model-specific | Provider/model-specific |
 | App size and model delivery | No custom weights bundled by this plugin | Apple manages system-model assets | You plan model storage and delivery | Provider hosts the model |
@@ -23,7 +23,8 @@ This table compares the integration work for each approach.
 
 Good first integrations include short summaries, message rewriting, a small
 classification vocabulary and extraction of a few fields into a schema. Start
-with [local AI on iOS](local-ai-ios.md) and [recipes](recipes.md).
+with [local AI on iOS](local-ai-ios.md), [Mac setup](apple-platforms.md) and
+[recipes](recipes.md). macOS support starts in version 0.5.0.
 
 The plugin adds session ownership, terminal stream delivery, awaited
 cancellation/disposal, bounded tool execution, token measurements where native

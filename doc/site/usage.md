@@ -1,6 +1,6 @@
 ---
 layout: "guide"
-title: "Usage contracts — Flutter iOS Foundation Models"
+title: "Usage contracts — Foundation Models for Flutter"
 description: "Public contracts for availability, sessions, cumulative streaming, guided JSON, tools, tokens and Speech."
 permalink: "/usage/"
 source: "source/usage.md"

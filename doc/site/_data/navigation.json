@@ -7,32 +7,39 @@
     "description": "Install Apple Foundation Models in Flutter iOS and get an availability-checked local response."
   },
   {
-    "label": "Español: IA local iOS",
+    "label": "Apple platforms and macOS setup",
+    "url": "/apple-platforms/",
+    "source": "source/apple-platforms.md",
+    "raw": "/markdown/doc/apple-platforms.md",
+    "description": "iPhone, iPad and Mac support, native API requirements, Mac host permissions and Flutter limits for other Apple platforms."
+  },
+  {
+    "label": "Español: IA local de Apple",
     "url": "/es/ia-local-ios/",
     "source": "source/README.es.md",
     "raw": "/markdown/doc/README.es.md",
-    "description": "Integra inteligencia artificial local nativa de Apple en Flutter iOS, sin API key para generación local."
+    "description": "Integra inteligencia artificial local nativa de Apple en Flutter iOS, iPadOS y macOS, sin API key para generación local."
   },
   {
     "label": "Task recipes",
     "url": "/recipes/",
     "source": "source/recipes.md",
     "raw": "/markdown/doc/recipes.md",
-    "description": "Flutter iOS local AI examples for summaries, structured extraction and small-vocabulary classification."
+    "description": "Native local AI recipes for Flutter on iPhone, iPad and Mac: summaries, structured extraction and classification."
   },
   {
     "label": "Frequently asked questions",
     "url": "/faq/",
     "source": "source/faq.md",
     "raw": "/markdown/doc/faq.md",
-    "description": "Answers about offline AI, Apple Intelligence availability, iPhone support, privacy, JSON, streaming and Speech."
+    "description": "Answers about offline AI, Apple Intelligence availability, iPhone, iPad and Mac support, privacy, JSON, streaming and Speech."
   },
   {
     "label": "Choose an AI approach",
     "url": "/choosing-local-ai/",
     "source": "source/choosing-local-ai.md",
     "raw": "/markdown/doc/choosing-local-ai.md",
-    "description": "Compare a native Flutter iOS bridge, direct Swift, custom local models and an application-owned cloud API."
+    "description": "Compare this Flutter bridge, direct Swift, custom local models and an application-owned cloud API."
   },
   {
     "label": "Usage contracts",
@@ -60,7 +67,7 @@
     "url": "/troubleshooting/",
     "source": "source/troubleshooting.md",
     "raw": "/markdown/doc/troubleshooting.md",
-    "description": "Known Foundation Models failures, documented corrections and typed error recovery for Flutter iOS."
+    "description": "Known Foundation Models failures, documented corrections and typed error recovery for Flutter on Apple platforms."
   },
   {
     "label": "Application-owned routing",
@@ -88,14 +95,14 @@
     "url": "/agents/",
     "source": "source/implementation_for_agents.md",
     "raw": "/markdown/implementation_for_agents.md",
-    "description": "Exact Dart symbols, lifecycle, privacy and unsupported claims for coding assistants using the iOS plugin."
+    "description": "Exact Dart symbols, lifecycle, privacy and platform limits for coding assistants using this Flutter plugin."
   },
   {
     "label": "Full package overview",
     "url": "/overview/",
     "source": "source/README.md",
     "raw": "/markdown/README.md",
-    "description": "Complete Flutter iOS package installation, compatibility, native AI features, sessions and privacy setup."
+    "description": "Complete package installation, iPhone, iPad and Mac compatibility, native AI features, sessions and privacy setup."
   },
   {
     "label": "Release notes",

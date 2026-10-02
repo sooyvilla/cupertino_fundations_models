@@ -4,15 +4,71 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths: [pubspec.yaml]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
+  verify:
+    name: Tests and 100% Dart coverage
+    if: ${{ !github.event.deleted }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Resolve dependencies
+        run: flutter pub get
+      - name: Analyze Dart sources
+        run: flutter analyze --no-pub
+      - name: Test release and coverage guards
+        run: python3 -m unittest discover -s .github/scripts/tests -v
+      - name: Run Flutter tests
+        run: flutter test --coverage --reporter expanded
+      - name: Require complete Dart line coverage
+        run: python3 .github/scripts/check_coverage.py
+      - name: Save coverage report
+        if: ${{ !cancelled() && hashFiles('coverage/lcov.info') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: dart-coverage
+          path: coverage/lcov.info
+          if-no-files-found: error
+          retention-days: 14
+
+  apple-builds:
+    name: Compile iOS and macOS examples
+    needs: verify
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.5'
+          channel: stable
+          cache: true
+      - name: Compile iOS without signing
+        working-directory: example
+        run: flutter build ios --release --no-codesign
+      - name: Compile macOS
+        working-directory: example
+        run: flutter build macos --debug
+
   prepare:
     name: Check release version
-    if: github.repository == 'sooyvilla/cupertino_fundations_models' && !github.event.deleted
+    needs: [verify, apple-builds]
+    if: github.event_name == 'push' && github.repository == 'sooyvilla/cupertino_fundations_models' && !github.event.deleted
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -49,7 +105,7 @@ jobs:
 
   publish:
     name: Publish new version
-    needs: prepare
+    needs: [verify, apple-builds, prepare]
     if: needs.prepare.outputs.publish == 'true'
     permissions:
       contents: read

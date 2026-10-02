@@ -7,10 +7,10 @@ import 'schema.dart';
 /// Sampling behavior requested from the native model.
 enum SamplingMode { greedy, randomTopK, randomProbabilityThreshold }
 
-/// Tool calling mode for a model request on iOS 27 or later.
+/// Tool calling mode for a model request on iOS or macOS 27 or later.
 enum ToolCallingMode { allowed, required, disallowed }
 
-/// Reasoning preference for iOS 27 Private Cloud Compute requests.
+/// Reasoning preference for iOS or macOS 27 Private Cloud Compute requests.
 final class ReasoningLevel {
   const ReasoningLevel.custom(String value)
     : this._('custom', customValue: value);
@@ -106,27 +106,7 @@ final class GenerationOptions {
     this.idleTimeout,
     this.totalTimeout,
     this.diagnostics,
-  }) : assert(samplingTopK > 0, 'samplingTopK must be greater than zero.'),
-       assert(
-         samplingProbabilityThreshold >= 0 && samplingProbabilityThreshold <= 1,
-         'samplingProbabilityThreshold must be between zero and one.',
-       ),
-       assert(
-         samplingSeed == null || samplingSeed >= 0,
-         'samplingSeed cannot be negative.',
-       ),
-       assert(
-         temperature == null || (temperature >= 0 && temperature <= 1),
-         'temperature must be between zero and one.',
-       ),
-       assert(
-         maximumResponseTokens == null || maximumResponseTokens > 0,
-         'maximumResponseTokens must be greater than zero.',
-       ),
-       assert(
-         maximumToolCalls >= 1 && maximumToolCalls <= 128,
-         'maximumToolCalls must be between 1 and 128.',
-       );
+  });
 
   final SamplingMode samplingMode;
   final int samplingTopK;
@@ -263,7 +243,7 @@ final class ModelResponse {
   final GenerationTermination termination;
 }
 
-/// Token usage returned by Foundation Models on iOS 27 or later.
+/// Token usage returned by Foundation Models on iOS or macOS 27 or later.
 final class ModelUsage {
   const ModelUsage({
     required this.inputTokenCount,
@@ -346,8 +326,10 @@ sealed class SessionEvent {
           requestId: (map['requestId'] as String?) ?? '',
           code: (map['code'] as String?) ?? 'unknown',
           message: (map['message'] as String?) ?? 'Request failed.',
-          details: (map['details'] as Map<Object?, Object?>?)
-                  ?.cast<String, Object?>() ?? const <String, Object?>{},
+          details:
+              (map['details'] as Map<Object?, Object?>?)
+                  ?.cast<String, Object?>() ??
+              const <String, Object?>{},
         );
       default:
         return UnknownSessionEvent(payload: map.cast<String, Object?>());

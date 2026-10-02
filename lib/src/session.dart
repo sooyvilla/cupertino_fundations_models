@@ -258,7 +258,7 @@ final class FoundationModelSession {
       configuration: options.diagnostics,
       runtimeMetadata: <String, Object?>{
         ..._runtimeMetadata,
-        'packageVersion': '0.4.4',
+        'packageVersion': '0.5.0',
       },
     );
   }
@@ -294,7 +294,8 @@ final class FoundationModelSession {
             ? GenerationDiagnosticStage.cancelled
             : GenerationDiagnosticStage.failed,
         errorCode: failure?.code ?? FoundationModelsErrorCode.unknown,
-        termination: failure?.termination ??
+        termination:
+            failure?.termination ??
             const GenerationTermination(status: GenerationStatus.failed),
       );
       rethrow;
@@ -352,8 +353,7 @@ final class FoundationModelSession {
     return FoundationModelsException(
       code: FoundationModelsErrorCode.generationTimeout,
       message: 'The model did not respond within ${timeout.inMilliseconds}ms.',
-      recoverySuggestion:
-          'Shorten the prompt or adjust the request deadline.',
+      recoverySuggestion: 'Shorten the prompt or adjust the request deadline.',
       details: const <String, Object?>{'timeoutPhase': 'total'},
     );
   }

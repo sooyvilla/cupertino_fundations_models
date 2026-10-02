@@ -1,21 +1,21 @@
-# Inteligencia artificial local para iOS con Flutter
+# Inteligencia artificial local de Apple con Flutter
 
-En esta guía vas a añadir un resumen de texto que se genera dentro del iPhone,
+En esta guía vas a añadir un resumen de texto que se genera dentro del iPhone, iPad o Mac,
 usando `cupertino_fundations_models`. La librería conecta Dart con Foundation
 Models, el framework nativo de Apple. También permite reescribir mensajes,
 clasificar contenido, extraer JSON estructurado y llamar funciones de tu app.
 La generación local no necesita una clave de API.
 
-[English](local-ai-ios.md) · [Recetas](recipes.md) · [Preguntas frecuentes](faq.md)
+[English](local-ai-ios.md) · [Plataformas y macOS](apple-platforms.md) · [Recetas](recipes.md) · [Preguntas frecuentes](faq.md)
 
 ## Qué necesitas
 
 | Requisito | Qué significa |
 | --- | --- |
 | Flutter 3.41+ y Dart 3.11+ | Versiones mínimas declaradas por el paquete. |
-| macOS y un SDK de Xcode apropiado | Compilar el host nativo iOS; cada función puede exigir un SDK adicional. |
-| iOS 26+ para generar | El deployment target iOS 15 permite incluir el plugin, pero no generar con Foundation Models en iOS 15. |
-| Dispositivo apto para Apple Intelligence, ajustes, idioma y modelos disponibles | Consulta disponibilidad nativa; la versión de iOS por sí sola no basta. |
+| macOS y un SDK de Xcode apropiado | Compilar el host nativo iOS o macOS; cada función puede exigir un SDK adicional. |
+| iOS/iPadOS 26+ o macOS 26+ para generar | Los deployment targets iOS 15 y macOS 12 permiten incluir el plugin, pero no habilitan el modelo en sistemas anteriores. |
+| Dispositivo apto para Apple Intelligence, ajustes, idioma y modelos disponibles | Consulta disponibilidad nativa; la versión del sistema por sí sola no basta. |
 
 El plugin admite CocoaPods y Swift Package Manager. No añade paquetes runtime
 de terceros ni exige incluir un modelo GGUF en tu aplicación. Apple administra
@@ -34,8 +34,11 @@ Si prefieres indicar la versión en el archivo, añade:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.4
+  cupertino_fundations_models: ^0.5.0
 ```
+
+La versión `0.5.0` añade macOS. Sigue la
+[configuración del host](apple-platforms.md#macos-host-setup) para usarlo en Mac.
 
 Usa el identificador exacto, conservando la escritura existente `fundations`:
 
@@ -43,7 +46,7 @@ Usa el identificador exacto, conservando la escritura existente `fundations`:
 import 'package:cupertino_fundations_models/cupertino_fundations_models.dart';
 ```
 
-Vuelve a compilar la app iOS después de añadir o actualizar el plugin. Hot reload
+Vuelve a compilar la app iOS o macOS después de añadir o actualizar el plugin. Hot reload
 no instala un puente Swift nuevo. Una app exclusivamente local no necesita
 activar PCC. Generar texto por sí solo no requiere permisos de micrófono ni
 las descripciones de uso de Speech.
@@ -125,15 +128,16 @@ permitir reconocimiento mediante servidores Apple Speech.
 
 PCC es una ruta cloud opcional de Apple. No se necesita para generar localmente.
 La [guía Private Cloud Compute](private-cloud-compute.md) explica sus requisitos
-separados: iOS 27, entitlement Apple, firma, activación del host y consentimiento.
+separados: iOS/iPadOS 27 o macOS 27, entitlement Apple, firma, activación del host y consentimiento.
 Una bandera en Info.plist no concede acceso a la nube.
 
 ## Tener en cuenta los límites del modelo
 
-Esta librería admite **iOS**. No ofrece un plugin macOS, Android o web ni es
-un SDK para aplicaciones escritas únicamente en Swift. El soporte más amplio
-del framework Apple no implica que este plugin lo implemente. No todos los
-iPhone pueden generar con Apple Intelligence.
+El código del repositorio admite **iOS/iPadOS y macOS**. No ofrece un backend
+Android o web ni es un SDK para aplicaciones escritas únicamente en Swift.
+visionOS y watchOS no tienen un target oficial Flutter; tvOS tampoco ofrece
+las APIs del modelo usadas aquí. Consulta la [matriz investigada](apple-platforms.md).
+No todos los dispositivos Apple pueden generar con Apple Intelligence.
 
 Usa tareas cortas y definidas. El modelo local no es un buscador web, una
 fuente de hechos verificados ni un agente autónomo general. Consulta la

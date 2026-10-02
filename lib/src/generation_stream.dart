@@ -55,11 +55,15 @@ final class GenerationStream {
         onError: _onSourceError,
         onDone: () {
           if (!_settled) {
-            _fail(const FoundationModelsException(
-              code: FoundationModelsErrorCode.nativeFailure,
-              message: 'The stream closed without a terminal event.',
-              details: <String, Object?>{'streamClosedWithoutResult': true},
-            ), StackTrace.current, cancel: true);
+            _fail(
+              const FoundationModelsException(
+                code: FoundationModelsErrorCode.nativeFailure,
+                message: 'The stream closed without a terminal event.',
+                details: <String, Object?>{'streamClosedWithoutResult': true},
+              ),
+              StackTrace.current,
+              cancel: true,
+            );
           }
         },
       );
@@ -77,7 +81,9 @@ final class GenerationStream {
     _activityTimer = Timer(
       duration,
       () => _timeout(
-        first ? GenerationTimeoutPhase.firstResponse : GenerationTimeoutPhase.idle,
+        first
+            ? GenerationTimeoutPhase.firstResponse
+            : GenerationTimeoutPhase.idle,
         duration,
       ),
     );
@@ -142,7 +148,8 @@ final class GenerationStream {
     _fail(
       FoundationModelsException(
         code: FoundationModelsErrorCode.generationTimeout,
-        message: 'Generation ${phase.name} timeout after ${duration.inMilliseconds}ms.',
+        message:
+            'Generation ${phase.name} timeout after ${duration.inMilliseconds}ms.',
         details: <String, Object?>{'timeoutPhase': phase.name},
       ),
       StackTrace.current,
@@ -167,7 +174,8 @@ final class GenerationStream {
             ? GenerationDiagnosticStage.cancelled
             : GenerationDiagnosticStage.failed,
         errorCode: failure?.code ?? FoundationModelsErrorCode.unknown,
-        termination: failure?.termination ??
+        termination:
+            failure?.termination ??
             const GenerationTermination(status: GenerationStatus.failed),
       );
     }
@@ -187,8 +195,16 @@ final class GenerationStream {
     }
   }
 
-  Future<void> _cancel() {
+  Future<void> _cancel() async {
     final cancel = !_settled;
+    if (!cancel) {
+      try {
+        await _cleanup;
+      } on Object {
+        return;
+      }
+      return;
+    }
     if (cancel) {
       _settled = true;
       trace.emit(

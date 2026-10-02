@@ -25,7 +25,7 @@ jobs:
       - name: Prepare shared documentation sources
         run: |
           mkdir -p doc/site/_includes/source doc/site/markdown/doc doc/site/markdown/example/lib
-          for name in local-ai-ios README.es recipes faq choosing-local-ai usage document-extraction private-cloud-compute troubleshooting app-owned-routing migration-0.3.0 migration-0.4.0; do
+          for name in apple-platforms local-ai-ios README.es recipes faq choosing-local-ai usage document-extraction private-cloud-compute troubleshooting app-owned-routing migration-0.3.0 migration-0.4.0; do
             cp "doc/$name.md" "doc/site/_includes/source/$name.md"
             cp "doc/$name.md" "doc/site/markdown/doc/$name.md"
           done

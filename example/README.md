@@ -1,6 +1,6 @@
-# Flutter iOS local AI example — Apple Foundation Models
+# Flutter iOS, iPadOS and macOS local AI example — Apple Foundation Models
 
-A Flutter chat demonstrating the native Apple API in version 0.4.4. For apps
+A Flutter chat demonstrating the native Apple API in version 0.5.0. For apps
 using the earlier hybrid API, see the [migration guide](../doc/migration-0.3.0.md).
 
 For an availability-checked first integration, start with
@@ -32,8 +32,8 @@ application; there is no Gemini client or provider key in this example.
 ## Setup
 
 Use Flutter 3.41+/Dart 3.11+, an Apple Intelligence-capable device with its model
-ready, and a suitable Xcode SDK. Generation needs iOS 26+, token counts need
-26.4+, and PCC/new tool modes need iOS 27+. Earlier releases were compiled with Xcode
+ready, and a suitable Xcode SDK. Generation needs iOS/iPadOS 26+ or macOS 26+,
+token counts need OS 26.4+, and PCC/new tool modes need OS 27+. Earlier releases were compiled with Xcode
 27.2 beta. Version 0.4.0 has source review only, without a new build or runtime
 validation; prior results do not validate the changed source.
 
@@ -59,13 +59,37 @@ flutter run
 No API key is needed for local generation. A simulator is not a substitute for
 validating Apple Intelligence, microphone, assets, permissions or PCC on a device.
 
+## macOS host
+
+The repository includes `macos/Runner.xcworkspace`, a macOS 12 deployment
+configuration and the same Dart example used on iPhone/iPad. Model generation
+requires macOS 26+ and native Apple Intelligence availability. The plugin's
+macOS support starts in 0.5.0; the path dependency uses the checked-out source.
+
+Both Debug/Profile and Release entitlements allow microphone input, reading
+user-selected files and outgoing network access for the demo's optional server
+Speech mode. The Info.plist contains Speech/microphone usage descriptions and
+keeps PCC opt-in disabled. See [Mac setup and platform research](../doc/apple-platforms.md).
+
+When you choose to run it yourself, from this directory:
+
+```bash
+flutter pub get
+flutter run -d macos
+```
+
+The Mac Debug host and the unsigned iOS Release host compile with Xcode 27.2
+beta and Flutter 3.47.5. Neither app was launched for this integration. Permission
+prompts, model/Speech readiness and entitled PCC remain unverified on Mac.
+Dart unit coverage does not measure the native Swift bridge.
+
 ## Behavior and limits
 
 A route/language change resets the native conversation. One session accepts one
 request at a time. Images are preprocessed with Vision into text; native image
 Attachment calls are disabled. Large documents need application-side chunking.
 This sample is not an autonomous agent or a tool authorization framework.
-Guided streaming needs iOS 26+; PCC keeps its existing iOS 27 host opt-in and
+Guided streaming needs iOS/iPadOS 26+ or macOS 26+; PCC keeps its OS 27 host opt-in and
 managed-entitlement requirements.
 
 The existing `CFM_SMOKE_TEST` entry point is an **opt-in device harness**, not

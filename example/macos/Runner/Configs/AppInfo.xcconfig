@@ -1,0 +1,6 @@
+
+PRODUCT_NAME = cupertino_fundations_models_example
+
+PRODUCT_BUNDLE_IDENTIFIER = com.example.cupertinoFundationsModelsExample
+
+PRODUCT_COPYRIGHT = Copyright © 2026 sooyvilla. All rights reserved.

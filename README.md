@@ -1,11 +1,12 @@
-# Cupertino Foundation Models — local AI for Flutter iOS
+# Cupertino Foundation Models — local AI for Flutter on Apple platforms
 
 [![pub.dev](https://img.shields.io/pub/v/cupertino_fundations_models.svg)](https://pub.dev/packages/cupertino_fundations_models)
 [![pub points](https://img.shields.io/pub/points/cupertino_fundations_models)](https://pub.dev/packages/cupertino_fundations_models/score)
 [![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Use Apple's **Foundation Models** from Dart to summarize text, rewrite a
-message, extract structured fields or classify content in your Flutter iOS app.
+message, extract structured fields or classify content in your Flutter iOS,
+iPadOS or macOS app.
 The plugin connects directly to the native framework through Swift, with
 sessions, streaming, guided JSON and tools you define in your app.
 
@@ -16,13 +17,14 @@ Swift Package Manager, and adds no third-party runtime dependencies.
 
 [Documentation](https://sooyvilla.github.io/cupertino_fundations_models/) ·
 [Start with local AI on iOS](doc/local-ai-ios.md) ·
-[Español: inteligencia artificial local para iOS](doc/README.es.md) ·
+[Español](doc/README.es.md) · [Apple platforms and macOS setup](doc/apple-platforms.md) ·
 [Recipes](doc/recipes.md) · [FAQ](doc/faq.md) ·
 [API reference](https://pub.dev/documentation/cupertino_fundations_models/latest/)
 
-**iOS only.** Generation needs iOS 26+, an eligible device, Apple Intelligence
-and downloaded model assets. The plugin can be included in an iOS 15+ app;
-that deployment target does not make generation available on older systems.
+Generation needs iOS/iPadOS 26+ or macOS 26+, an eligible device, Apple
+Intelligence and downloaded model assets. The plugin deployment targets are
+iOS 15 and macOS 12; these do not make generation available on older systems.
+Version 0.5.0 adds macOS support through the same Dart API.
 On-device inference can work offline after Apple's required model assets are
 available; initial downloads and optional cloud/Speech modes can need network.
 
@@ -37,7 +39,7 @@ available; initial downloads and optional cloud/Speech modes can need network.
 | A clear local/cloud boundary | Explicit local mode and `CloudPolicy.never`; PCC requires a separate opt-in. |
 | Integration without a custom Swift bridge | Public Dart API, an example app, compatibility tables and recovery guides. |
 
-Start with short, well-defined tasks on eligible iOS devices. If your app needs
+Start with short, well-defined tasks on eligible Apple devices. If your app needs
 other platforms, custom models or a cloud API, read
 [choosing a local AI approach](doc/choosing-local-ai.md).
 
@@ -58,13 +60,16 @@ Or declare the dependency directly:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.4.4
+  cupertino_fundations_models: ^0.5.0
 ```
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
 
-Rebuild the iOS host after adding or upgrading the plugin; hot reload cannot
+For the Mac backend, follow the
+[macOS host setup](doc/apple-platforms.md#macos-host-setup).
+
+Rebuild the iOS or macOS host after adding or upgrading the plugin; hot reload cannot
 install a changed Swift bridge. When upgrading from an older release, follow
 the migration guides above as well.
 
@@ -114,7 +119,9 @@ you whether an answer was truncated. Schema errors identify the failing path.
 See [complete contracts](doc/usage.md), [document extraction](doc/document-extraction.md)
 and [PCC eligibility and permission](doc/private-cloud-compute.md). The examples
 in this documentation update were reviewed against the source but were not
-run on a device. Physical iPhone and PCC verification remain pending.
+run on a device. The iOS and macOS examples compile with Xcode 27.2 beta.
+Dart tests reach 100% executable line coverage; this does not measure Swift
+coverage or establish device permissions, model readiness or entitled PCC generation.
 
 ## Choose a bounded task
 
@@ -136,15 +143,19 @@ need an application-level strategy. See [API/local integration](doc/app-owned-ro
 
 | Feature | Minimum runtime | Package behavior |
 | --- | --- | --- |
-| Text, sessions, streaming, tools, structured output | iOS 26 | Native Foundation Models with runtime availability checks. |
-| Content tagging and prewarm | iOS 26 | Explicit session use case and `prewarm()`. |
-| Local prompt/instructions/tools/schema/transcript token counts | iOS 26.4 | Requires this package to be built with Xcode 27+. |
-| Usage, reasoning options, explicit tool mode, transcript error policy | iOS 27 | SDK and selected-model support also required. |
-| Private Cloud Compute (PCC) | iOS 27 | Explicit policy, host opt-in, Apple's managed entitlement, availability, network and quota. |
-| Text/JSON/CSV/Markdown and text PDFs | iOS 26 | Extracted locally and inserted as text. |
-| Images | iOS 27 | Local Vision OCR/classification/barcodes; **not native multimodal understanding**. |
-| Audio files and live microphone | iOS 15 | SpeechAnalyzer on iOS 26+, legacy Speech fallback where supported; iOS 27 uses native input providers. |
-| CocoaPods and Swift Package Manager | iOS 15 deployment | Both use the same Swift sources. |
+| Text, sessions, streaming, tools, structured output | iOS/iPadOS 26, macOS 26 | Native Foundation Models with runtime availability checks. |
+| Content tagging and prewarm | iOS/iPadOS 26, macOS 26 | Explicit session use case and `prewarm()`. |
+| Local prompt/instructions/tools/schema/transcript token counts | iOS/iPadOS 26.4, macOS 26.4 | Requires this package to be built with Xcode 27+. |
+| Usage, reasoning options, explicit tool mode, transcript error policy | iOS/iPadOS 27, macOS 27 | SDK and selected-model support also required. |
+| Private Cloud Compute (PCC) | iOS/iPadOS 27, macOS 27 | Explicit policy, host opt-in, Apple's managed entitlement, availability, network and quota. |
+| Text/JSON/CSV/Markdown and text PDFs | iOS/iPadOS 26, macOS 26 | Extracted locally and inserted as text. |
+| Images | iOS/iPadOS 27, macOS 27 | Local Vision OCR/classification/barcodes; **not native multimodal understanding**. |
+| Audio files and live microphone | iOS/iPadOS 15, macOS 12 | SpeechAnalyzer on OS 26+, legacy Speech fallback where supported; OS 27 uses native input providers. |
+| CocoaPods and Swift Package Manager | iOS 15, macOS 12 deployment | Both use the shared `darwin/` Swift sources. |
+
+iPadOS uses the iOS plugin target. visionOS and watchOS do not have an official
+Flutter deployment target; tvOS also lacks the Foundation Models APIs used here.
+See the [platform research and requirements](doc/apple-platforms.md).
 
 Use `getCapabilities()` for the exposed feature set and `checkAvailability()`
 for whether generation can run now. `getDiagnostics(localeIdentifier: ...)`
@@ -235,8 +246,8 @@ try {
 }
 ```
 
-Guided streaming requires iOS 26+ and the same Apple Intelligence availability
-as other generation. PCC additionally requires iOS 27, the host opt-in and
+Guided streaming requires iOS/iPadOS 26+ or macOS 26+ and the same Apple Intelligence
+availability as other generation. PCC additionally requires OS 27, the host opt-in and
 Apple's managed entitlement.
 
 See the [usage reference](doc/usage.md) for structured generation, tools,
@@ -274,6 +285,10 @@ server fallback, and `server` permits Apple Speech networking. **Speech server
 recognition is separate from PCC.** Model and Speech asset downloads can require
 network even when inference is on-device.
 
+On a sandboxed Mac host, configure user-selected file access and audio input
+for those features. Server Speech also needs outgoing network access. See the
+[macOS entitlements and example](doc/apple-platforms.md#macos-host-setup).
+
 For PCC, first follow the [eligibility, entitlement request and signing guide](doc/private-cloud-compute.md).
 Apple approval and correctly signed host provisioning are required before
 enabling this separate package flag:
@@ -291,7 +306,8 @@ language/capability getters and native image attachment path disabled.
 ## Documentation
 
 - [Local AI for Flutter iOS: installation and first response](doc/local-ai-ios.md)
-- [Guía en español: IA local nativa para iOS con Flutter](doc/README.es.md)
+- [Apple platform compatibility and macOS setup](doc/apple-platforms.md)
+- [Guía en español: IA local nativa de Apple con Flutter](doc/README.es.md)
 - [Summarization, structured extraction and classification recipes](doc/recipes.md)
 - [FAQ: offline AI, devices, privacy and platform support](doc/faq.md)
 - [Choosing Apple Foundation Models, a custom model or a cloud API](doc/choosing-local-ai.md)
@@ -321,18 +337,19 @@ required assets are available. The package does not ship an LLM model file.
 
 Yes. Import `package:cupertino_fundations_models/cupertino_fundations_models.dart`
 and use the typed Dart facade. The plugin supplies the native Swift bridge.
-You still need an iOS host built with an appropriate Apple SDK.
+You still need an iOS or macOS host built with an appropriate Apple SDK.
 
 ### Does this support every iPhone or an app written only in Swift?
 
-No. This is a Flutter plugin for iOS; it is not a standalone Swift SDK and does
-not support Android, macOS or web. Generation requires iOS 26+, an eligible
+No. This Flutter plugin supports iOS/iPadOS and macOS in repository source;
+it is not a standalone Swift SDK and does not support Android or web.
+Generation requires OS 26+, an eligible
 Apple Intelligence device, language/region support, enabled settings and assets.
-Use `checkAvailability()` rather than a hard-coded list of iPhone models.
+Use `checkAvailability()` rather than a hard-coded list of device models.
 
 ### Are local AI and Private Cloud Compute the same?
 
-No. PCC is an optional Apple cloud route with iOS 27, entitlement, signing,
+No. PCC is an optional Apple cloud route with iOS/iPadOS 27 or macOS 27, entitlement, signing,
 policy, consent and availability requirements. Local generation does not need
 PCC approval. Speech server recognition has its own privacy policy.
 

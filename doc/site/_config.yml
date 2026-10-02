@@ -1,11 +1,11 @@
 title: Cupertino Foundation Models
-description: Use Apple Foundation Models from Flutter for local AI on iOS, with structured JSON, streaming, tools and speech-to-text.
+description: Use Apple Foundation Models from Flutter for local AI on iOS, iPadOS and macOS, with structured JSON, streaming, tools and speech-to-text.
 url: https://sooyvilla.github.io
 baseurl: /cupertino_fundations_models
 repository_url: https://github.com/sooyvilla/cupertino_fundations_models
 package_url: https://pub.dev/packages/cupertino_fundations_models
 api_url: https://pub.dev/documentation/cupertino_fundations_models/latest/
-stable_version: 0.4.4
+stable_version: 0.5.0
 search_console_verification: lK46B48wPa7y2TPv4dsiqu-Yg_og6LjdYpdBbE9o76M
 bing_verification: 27EED85DCF89B23D52DFEFBE38086212
 lang: en

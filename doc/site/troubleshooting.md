@@ -1,7 +1,7 @@
 ---
 layout: "guide"
-title: "Troubleshooting — Flutter iOS Foundation Models"
-description: "Known Foundation Models failures, documented corrections and typed error recovery for Flutter iOS."
+title: "Troubleshooting — Foundation Models for Flutter"
+description: "Known Foundation Models failures, documented corrections and typed error recovery for Flutter on Apple platforms."
 permalink: "/troubleshooting/"
 source: "source/troubleshooting.md"
 source_path: "doc/troubleshooting.md"

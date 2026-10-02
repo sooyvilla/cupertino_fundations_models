@@ -1,9 +1,9 @@
 ---
-title: Local AI for Flutter iOS | Cupertino Foundation Models
-description: Use Apple Foundation Models from Flutter to summarize text, extract JSON and stream responses on iOS. Local generation runs on the device without an API key.
+title: Local AI for Flutter on Apple platforms | Cupertino Foundation Models
+description: Use Apple Foundation Models from Flutter to summarize text, extract JSON and stream responses on iOS, iPadOS and macOS. Local generation runs on the device without an API key.
 permalink: /
 ---
-# Native local AI for Flutter iOS
+# Native local AI for Flutter on Apple platforms
 
 ![Local AI from Flutter: conceptual iPhone illustration with summary, JSON and streaming.]({{ '/assets/local-ai-flutter-en.png' | relative_url }})
 
@@ -14,12 +14,16 @@ You work in Dart, with sessions, streaming, guided JSON and tools defined by
 your app.
 
 [Start with local AI]({{ '/local-ai-ios/' | relative_url }}) ·
-[Español: inteligencia artificial local para iOS]({{ '/es/ia-local-ios/' | relative_url }}) ·
+[Español: inteligencia artificial local de Apple]({{ '/es/ia-local-ios/' | relative_url }}) ·
 [Get the package]({{ site.package_url }})
 
 ```sh
 flutter pub add cupertino_fundations_models
 ```
+
+Version 0.5.0 adds Mac support. Follow
+the [platform matrix and Mac setup]({{ '/apple-platforms/' | relative_url }})
+for the native host configuration.
 
 ## Keep generation on the device
 
@@ -32,6 +36,7 @@ have separate network/privacy behavior; PCC is an explicit optional cloud route.
 
 | What you need | Where to start |
 | --- | --- |
+| Mac host setup and Apple platform compatibility | [Apple platforms]({{ '/apple-platforms/' | relative_url }}) |
 | Your first availability-checked response | [Local iOS AI tutorial]({{ '/local-ai-ios/' | relative_url }}) |
 | Structured JSON extraction and classification | [Task recipes]({{ '/recipes/' | relative_url }}) |
 | Sessions, cumulative streams, tools and cancellation | [Usage contracts]({{ '/usage/' | relative_url }}) |
@@ -41,13 +46,13 @@ have separate network/privacy behavior; PCC is an explicit optional cloud route.
 
 The plugin supports CocoaPods and Swift Package Manager and adds no third-party
 runtime dependencies. It is an independent MIT-licensed package for **Flutter
-iOS**, not a standalone Swift SDK or an Android/macOS/web plugin.
+iOS/iPadOS and macOS**; Android and web have no backend.
 
 ## Check availability before offering AI
 
-Generation requires iOS 26+, a device eligible for Apple Intelligence, supported
-settings/locale and model assets. The package can be included in an iOS 15+
-app, but that deployment target does not enable generation on older systems.
+Generation requires iOS/iPadOS 26+ or macOS 26+, a device eligible for Apple
+Intelligence, supported settings/locale and model assets. The deployment targets
+iOS 15 and macOS 12 do not enable generation on older systems.
 Some features have newer runtime and SDK requirements.
 
 Use `checkAvailability()` and handle request failures. Keep tasks bounded and
@@ -64,5 +69,5 @@ validate model output; guided JSON does not prove that facts or amounts are corr
 
 This project is maintained by Sebastián Villa. If you run into an integration
 problem, [open an issue]({{ site.repository_url }}/issues) with your package
-version, iOS version and a small example. If the package helps your app,
+version, OS version and a small example. If the package helps your app,
 a pub.dev like or GitHub star helps other developers discover it.

@@ -1,9 +1,9 @@
 import 'generation.dart';
 
-/// File category requested from the native iOS document picker.
+/// File category requested from the native Apple file picker.
 enum FoundationModelsFileKind { any, image, audio, text }
 
-/// File selected through the native iOS document picker.
+/// File selected through the native Apple file picker.
 final class PickedFoundationModelsFile {
   /// Creates a selected-file descriptor.
   const PickedFoundationModelsFile({

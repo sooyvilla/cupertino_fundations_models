@@ -5,6 +5,22 @@ source findings and validation limits. It consolidates the available project
 history and the August 12 / September 1, 2026 support sessions. It is not a claim
 that every past conversation or every possible crash was recovered.
 
+## macOS integration
+
+macOS support starts in version 0.5.0. Confirm that the host uses this version
+or the repository checkout, then rebuild the native host after updating the
+plugin. The shared source directory is `darwin/`, for both CocoaPods and Swift
+Package Manager; old direct references to the package's `ios/` source need updating.
+
+For denied microphone access, check the usage description, audio-input sandbox
+entitlement and macOS Privacy & Security settings. For unreadable selected files,
+check user-selected file access. Server Speech requires its separate consent
+and outgoing network access. Use typed availability and diagnostics for model
+readiness rather than assuming that every Mac on OS 26 can generate.
+
+See [platform requirements and Mac setup](apple-platforms.md). The Mac host has
+source review only; the historical iPhone results below do not validate it.
+
 ## Historical reports from the example
 
 | Symptom and evidence | Cause / mitigation in the current source | Recovery and remaining limit |

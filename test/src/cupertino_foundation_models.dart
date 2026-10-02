@@ -10,6 +10,9 @@ void main() {
 
       final platform = FakePlatform();
       final api = CupertinoFoundationModels(platform: platform);
+      expect(await api.getSupportedLanguages(), isEmpty);
+      expect(await api.countTokens(const Prompt.text('hello')), 5);
+      expect((await api.liveTranscription().toList()).single.text, 'live');
 
       expect((await api.getCapabilities()).supportsFullPower, isTrue);
       expect(

@@ -1,8 +1,8 @@
-# Questions about local AI on iOS
+# Questions about local AI on Apple platforms
 
 ## What is cupertino_fundations_models?
 
-An independent MIT-licensed Flutter iOS plugin that bridges Dart to Apple's
+An independent MIT-licensed Flutter iOS/iPadOS and macOS plugin that bridges Dart to Apple's
 native Foundation Models and Speech frameworks. It exposes local language
 generation, sessions, streaming, guided structured output and app-defined tools.
 Start with the [English tutorial](local-ai-ios.md) or [guía en español](README.es.md).
@@ -30,11 +30,11 @@ require network. PCC, server Speech and networking tools still need a connection
 No custom model file is required by this plugin. Apple manages the system
 model. The package is not a GGUF, llama.cpp, ONNX or custom-weight runtime.
 
-## Which iOS versions are supported?
+## Which OS versions are supported?
 
-The plugin deployment target is iOS 15. Foundation Models generation requires
-iOS 26+ and native Apple Intelligence availability. Some options require iOS 27
-or a newer build SDK. Read the [compatibility table](../README.md#features-and-compatibility).
+The plugin deployment targets are iOS 15 and macOS 12. Foundation Models
+generation requires iOS/iPadOS 26+ or macOS 26+ and native Apple Intelligence
+availability. Some options require OS 27 or a newer build SDK. Read the [compatibility table](../README.md#features-and-compatibility).
 
 ## Does it support every iPhone running iOS 26?
 
@@ -44,8 +44,10 @@ on the user's device now.
 
 ## Does the plugin support macOS, Android or web?
 
-No. The declared Flutter plugin platform is iOS. Broader Apple framework
-availability is not a promise of broader plugin platform support.
+Version 0.5.0 supports macOS alongside iOS/iPadOS. Android and web have no backend.
+visionOS and watchOS have no official Flutter target, and tvOS also lacks the
+model APIs used here.
+See [Apple platforms and Mac setup](apple-platforms.md).
 
 ## Can I import this package into a Swift-only app?
 
@@ -59,7 +61,7 @@ Apple platform frameworks. Development tooling is separate from runtime dependen
 
 ## Does it support CocoaPods and Swift Package Manager?
 
-Yes. Both plugin integrations use the same Swift sources. Your iOS host still
+Yes. Both plugin integrations use the same Swift sources. Your iOS or macOS host still
 needs an appropriate build SDK, deployment configuration and native rebuild
 after an upgrade.
 
@@ -84,7 +86,7 @@ automatically safe or offline. Cancellation does not undo a tool's side effects.
 
 ## Is Private Cloud Compute enabled by default?
 
-No. PCC requires its own policy, iOS 27 runtime, Apple-managed entitlement,
+No. PCC requires its own policy, iOS/iPadOS 27 or macOS 27 runtime, Apple-managed entitlement,
 host signing and provisioning, an opt-in flag, availability and appropriate
 application consent. Physical PCC verification remains pending.
 See [PCC setup](private-cloud-compute.md).
@@ -104,7 +106,7 @@ assets and unsupported locales. Apple Speech servers are not PCC.
 
 ## Does image input provide native multimodal reasoning?
 
-No. The documented iOS 27 path uses Vision OCR, image classification and
+No. The documented iOS/iPadOS 27 and macOS 27 path uses Vision OCR, image classification and
 barcodes to provide text context. Native Foundation Models image attachments
 remain disabled because of recorded fatal beta crashes. The package therefore
 does not offer unrestricted chart, diagram or handwriting understanding.

@@ -1,3 +1,20 @@
+## 0.5.0
+
+- Add macOS registration and shared Darwin Swift sources for CocoaPods and Swift
+  Package Manager, retaining iOS 15 and adding macOS 12 deployment targets.
+- Extend native generation, sessions, streaming, structured output, tools,
+  token counting, diagnostics and opt-in PCC to their matching macOS runtimes.
+- Add a Mac file picker, microphone permission handling and a macOS example host.
+- Document iPadOS support through the iOS target and the Flutter/API limits for
+  visionOS, watchOS and tvOS. iOS and macOS examples compile with Xcode 27.2
+  beta; device permissions, model/Speech readiness and entitled PCC remain unverified.
+- Require Dart analysis, tests, 100% executable Dart line coverage and Apple
+  example builds before creating a release tag or publishing to pub.dev.
+- Fix live transcription cancellation while awaiting input and duplicate
+  streaming cleanup errors; expand lifecycle, token, tool and diagnostics tests.
+- Centralize generation option validation in serialization for every build mode,
+  preserving const constructors and rejecting invalid values before native calls.
+
 ## 0.4.4
 
 - Rewrite the getting-started guide around practical local AI tasks, with

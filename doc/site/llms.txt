@@ -2,17 +2,17 @@
 layout: null
 permalink: /llms.txt
 ---
-# Cupertino Foundation Models for Flutter iOS
+# Cupertino Foundation Models for Flutter on Apple platforms
 
-> cupertino_fundations_models bridges Dart to native Apple Foundation Models on iOS. Local AI text generation, guided structured JSON, cumulative streaming, sessions, tools and Apple Speech. MIT licensed; no third-party runtime dependencies.
+> cupertino_fundations_models bridges Dart to native Apple Foundation Models on iOS/iPadOS and macOS. Local AI text generation, guided structured JSON, cumulative streaming, sessions, tools and Apple Speech. MIT licensed; no third-party runtime dependencies.
 
 Package: {{ site.package_url }}
 Source: {{ site.repository_url }}
-Published API version: {{ site.stable_version }}
+Documented API version: {{ site.stable_version }}
 
-Local generation requires iOS 26+, an eligible Apple Intelligence device, enabled settings, a supported locale and model assets. The plugin deployment target is iOS 15; this does not enable generation on iOS 15. Explicit ModelMode.local + CloudPolicy.never needs no API key or PCC entitlement. Asset setup may need network. Tools and Speech have separate privacy/network behavior.
+Local generation requires iOS/iPadOS 26+ or macOS 26+, an eligible Apple Intelligence device, enabled settings, a supported locale and model assets. The plugin deployment targets are iOS 15 and macOS 12; these do not enable generation on older systems. Explicit ModelMode.local + CloudPolicy.never needs no API key or PCC entitlement. Asset setup may need network. Tools and Speech have separate privacy/network behavior.
 
-This is an iOS Flutter plugin, not a standalone Swift SDK or an Android/macOS/web implementation. No custom-model loader, native multimodal image attachment or automatic external-provider fallback is exposed. Guided output needs application validation. PCC requires iOS 27, Apple's managed entitlement, signed host opt-in, policy and availability; the package flag alone grants nothing.
+Version 0.5.0 supports iOS/iPadOS and macOS. It is not a standalone Swift SDK or an Android/web implementation. visionOS and watchOS have no official Flutter target; tvOS also lacks the model APIs used here. No custom-model loader, native multimodal image attachment or automatic external-provider fallback is exposed. Guided output needs application validation. PCC requires iOS/iPadOS 27 or macOS 27, Apple's managed entitlement, signed host opt-in, policy and availability; the package flag alone grants nothing.
 
 ## Documentation
 

@@ -130,12 +130,13 @@ final class MethodChannelCupertinoFoundationModels
     required GenerationOptions options,
     StructuredSchema? schema,
   }) async {
-    final Object? response = await _invoke<Object?>('measureTokenBudget', <String, Object?>{
-      'sessionId': sessionId,
-      'prompt': prompt.toMap(),
-      if (schema != null) 'schema': schema.toMap(),
-      'options': options.toMap(),
-    });
+    final Object? response =
+        await _invoke<Object?>('measureTokenBudget', <String, Object?>{
+          'sessionId': sessionId,
+          'prompt': prompt.toMap(),
+          if (schema != null) 'schema': schema.toMap(),
+          'options': options.toMap(),
+        });
     return TokenBudget.fromMap(_asMap(response));
   }
 
@@ -186,38 +187,112 @@ final class MethodChannelCupertinoFoundationModels
   @override
   Stream<LiveTranscriptionEvent> liveTranscription({
     required LiveTranscriptionRequest request,
-  }) async* {
-    if (_liveTranscriptionActive) {
-      throw const FoundationModelsException(
-        code: FoundationModelsErrorCode.concurrentRequests,
-        message: 'A microphone transcription is already active.',
-        recoverySuggestion:
-            'Cancel and await the current subscription before starting another.',
-      );
-    }
-    _liveTranscriptionActive = true;
-    try {
-      await for (final Object? value
-          in _transcriptionEventChannel.receiveBroadcastStream(
-            request.toMap(),
-          )) {
-        final LiveTranscriptionEvent event = LiveTranscriptionEvent.fromMap(
-          _asMap(value),
-        );
-        yield event;
-        if (event.isFinal) {
-          break;
+  }) {
+    late final StreamController<LiveTranscriptionEvent> controller;
+    StreamSubscription<Object?>? subscription;
+    Future<void>? cleanup;
+    bool ownsCapture = false;
+    bool settled = false;
+
+    Future<void> stop() async {
+      try {
+        await subscription?.cancel();
+      } finally {
+        if (ownsCapture) {
+          try {
+            await _invoke<void>('stopLiveTranscription');
+          } finally {
+            _liveTranscriptionActive = false;
+          }
         }
       }
-    } on PlatformException catch (error) {
-      throw FoundationModelsException.fromPlatformException(error);
-    } finally {
+    }
+
+    Future<void> clean() => cleanup ??= stop();
+
+    Future<void> finish() async {
+      settled = true;
       try {
-        await _invoke<void>('stopLiveTranscription');
+        await clean();
+      } on Object catch (error, stack) {
+        controller.addError(error, stack);
       } finally {
-        _liveTranscriptionActive = false;
+        unawaited(controller.close());
       }
     }
+
+    void fail(Object error, StackTrace stack) {
+      if (settled) {
+        return;
+      }
+      controller.addError(
+        error is PlatformException
+            ? FoundationModelsException.fromPlatformException(error)
+            : error,
+        stack,
+      );
+      unawaited(finish());
+    }
+
+    controller = StreamController<LiveTranscriptionEvent>(
+      onListen: () {
+        if (_liveTranscriptionActive) {
+          fail(
+            const FoundationModelsException(
+              code: FoundationModelsErrorCode.concurrentRequests,
+              message: 'A microphone transcription is already active.',
+              recoverySuggestion:
+                  'Cancel and await the current subscription before starting another.',
+            ),
+            StackTrace.current,
+          );
+          return;
+        }
+        _liveTranscriptionActive = true;
+        ownsCapture = true;
+        try {
+          subscription = _transcriptionEventChannel
+              .receiveBroadcastStream(request.toMap())
+              .listen(
+                (Object? value) {
+                  if (settled) {
+                    return;
+                  }
+                  try {
+                    final event = LiveTranscriptionEvent.fromMap(_asMap(value));
+                    controller.add(event);
+                    if (event.isFinal) {
+                      unawaited(finish());
+                    }
+                  } on Object catch (error, stack) {
+                    fail(error, stack);
+                  }
+                },
+                onError: fail,
+                onDone: () {
+                  if (!settled) {
+                    unawaited(finish());
+                  }
+                },
+              );
+        } on Object catch (error, stack) {
+          fail(error, stack);
+        }
+      },
+      onCancel: () async {
+        if (settled) {
+          try {
+            await cleanup;
+          } on Object {
+            return;
+          }
+          return;
+        }
+        settled = true;
+        await clean();
+      },
+    );
+    return controller.stream;
   }
 
   @override
@@ -446,9 +521,9 @@ final class MethodChannelCupertinoFoundationModels
     } on MissingPluginException {
       throw const FoundationModelsException(
         code: FoundationModelsErrorCode.unsupportedPlatform,
-        message: 'The native iOS Foundation Models plugin is unavailable.',
+        message: 'The native Apple Foundation Models plugin is unavailable.',
         recoverySuggestion:
-            'Use an iOS host with the plugin registered and rebuild after adding it.',
+            'Use an iOS or macOS host with the plugin registered and rebuild after adding it.',
       );
     } on PlatformException catch (exception) {
       throw FoundationModelsException.fromPlatformException(exception);

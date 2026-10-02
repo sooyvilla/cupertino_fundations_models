@@ -3,8 +3,9 @@
 Read [README](README.md), [the implementation guide](implementation_for_agents.md)
 and local repository instructions before changing code. Public documentation is
 primarily English; keep the Spanish getting-started guide aligned with its
-English counterpart. Keep Dart contracts typed, native integration in Swift, iOS deployment
-target 15, CocoaPods and Swift Package Manager support, and zero third-party
+English counterpart. Keep Dart contracts typed, native integration in shared
+`darwin/` Swift sources, deployment targets iOS 15 and macOS 12, CocoaPods and
+Swift Package Manager support, and zero third-party
 runtime dependencies unless explicitly approved.
 
 Use native availability checks and local-only privacy defaults. Do not silently
@@ -27,7 +28,7 @@ is intentionally excluded from the published archive.
 Follow the active repository/user instructions: tests, analysis, formatting,
 builds, validators, apps, simulators and devices require an explicit request.
 Reading source and reviewing the diff do not authorize those operations.
-When validation is requested, use an appropriate Xcode beta for iOS 27 APIs and
+When validation is requested, use an appropriate Xcode beta for iOS/macOS 27 APIs and
 record the exact checks, SDK, results and unverified runtime paths. A publication
 dry run does not publish. Version bumps, commits, pushes and
 publication require the corresponding authorization. Authorized deliveries use

@@ -1,6 +1,9 @@
 # Usage reference
 
-This reference describes version 0.4.4. See the [README](../README.md) for
+Version 0.5.0 supports iOS/iPadOS and macOS with the same Dart API.
+See [platform and host requirements](apple-platforms.md).
+
+This reference describes version 0.5.0. See the [README](../README.md) for
 installation and the [0.4.0 migration guide](migration-0.4.0.md) for breaking changes.
 Migration from the removed hybrid API is covered in [0.3.0](migration-0.3.0.md).
 For Apple cloud, complete [PCC eligibility, entitlement and host setup](private-cloud-compute.md)
@@ -37,7 +40,7 @@ One-shot facade calls create and dispose their own session. A reused
 | `generateStructured(prompt: ..., schema: ..., options: ...)` | Guided generation with a supported object-root schema. |
 | `prewarm(promptPrefix: ...)` | Hint to preload resources; not an availability guarantee. |
 | `measureTokenBudget(prompt: ..., schema: ..., options: ...)` | Separate component measurements for the actual session model; unavailable fields remain unknown. |
-| `countTokens()` | Local transcript token count, iOS 26.4+ with an Xcode 27 build. |
+| `countTokens()` | Local transcript token count, iOS/iPadOS 26.4+ or macOS 26.4+ with an Xcode 27 build. |
 | `cancelActiveRequest()` | Cancel and await the matching native work. |
 | `dispose()` | Release the native session; concurrent callers await the same disposal. |
 
@@ -59,12 +62,12 @@ persistence or cross-provider replay occurs.
   repeatability across OS/model versions is not guaranteed.
 - `maximumToolCalls`: 1–128 calls per request, default 16. A budget breach fails
   the request; it does not guarantee the model produced an answer.
-- `toolCallingMode`: `allowed` by default. `required` and `disallowed` need iOS
+- `toolCallingMode`: `allowed` by default. `required` and `disallowed` need iOS/iPadOS 27 or macOS
   27 and a compatible SDK. Required mode needs registered tools.
-- `reasoningLevel`: automatic by default; explicit/custom values need iOS 27
+- `reasoningLevel`: automatic by default; explicit/custom values need iOS/iPadOS 27 or macOS 27
   and support from the selected model.
-- `includeSchemaInPrompt`: uses the older guided-generation option on iOS 26
-  and `ContextOptions` on iOS 27.
+- `includeSchemaInPrompt`: uses the older guided-generation option on iOS/iPadOS 26 or macOS 26
+  and `ContextOptions` on OS 27.
 - `cloudPolicy`: nullable request restriction. Null inherits session selection;
   `never` rejects PCC. Other values cannot change the selected model.
 - `timeout`: positive duration, default 60 seconds. Existing fallback: a
@@ -108,7 +111,7 @@ if (measurement?.precision == TokenPrecision.exact) {
 ```
 
 `TokenBudget.components` has `prompt`, `instructions`, `tools`, `schema` and
-`transcript`. On supported local iOS 26.4+ SDK/runtime paths, `exact` means the
+`transcript`. On supported local iOS/iPadOS 26.4+ or macOS 26.4+ SDK/runtime paths, `exact` means the
 native tokenizer's count for that particular component and session model.
 `estimated` is reserved for explicitly labeled estimates; this implementation
 never substitutes an estimate. `unavailable` supplies no count and a reason.
@@ -127,7 +130,7 @@ assume local and PCC have the same capacity. Measurements do not mutate the
 transcript or reserve capacity, and token counting itself has no generation
 timeout. It occupies the session until the native measurement finishes.
 
-On iOS 27, `ModelResponse.usage` may contain actual native input, cached-input,
+On iOS/iPadOS 27 or macOS 27, `ModelResponse.usage` may contain actual native input, cached-input,
 output, reasoning and total token counts. Earlier systems return null. Each
 counter is also nullable when absent, never synthesized as zero. Cached and
 reasoning counts are subcategories, not extra tokens to add to `totalTokenCount`.
@@ -255,8 +258,8 @@ to append or consume as a final result. `CompletionEvent.response.text` is the
 complete JSON string and `structuredValue` is decoded only after native content
 reports completion. A missing final snapshot, incomplete JSON, or a decoding
 failure returns `parsingFailure`; preserve the user's input and retry or
-simplify the schema. This needs iOS 26+ and normal model availability; PCC adds
-the existing iOS 27 host opt-in and entitlement requirements.
+simplify the schema. This needs iOS/iPadOS 26+ or macOS 26+ and normal model availability; PCC adds
+the existing OS 27 host opt-in and entitlement requirements.
 
 ## Tools
 
@@ -308,7 +311,7 @@ picked temporary copies after all requests using them finish.
 | --- | --- |
 | UTF-8 text, Markdown, JSON, CSV | At most 5 MiB; non-empty text is inserted into the prompt. |
 | Text PDF | At most 20 MiB; PDFKit extraction, at most 5 MiB extracted text. |
-| Image bytes/files on iOS 27 | At most 50 MiB; downsample to 2,048 pixels, then local Vision OCR/classification/barcodes. |
+| Image bytes/files on iOS/iPadOS 27 or macOS 27 | At most 50 MiB; downsample to 2,048 pixels, then local Vision OCR/classification/barcodes. |
 | Scanned PDF | OCR externally or supply individual images; text extraction alone is insufficient. |
 | Audio | Use `transcribeAudio()` first, then send bounded text. |
 | Word/binary/unsupported files | Typed error; convert to a supported format. |
@@ -369,8 +372,8 @@ modern Speech finalizes segments while the capture continues, so segment
 finality is not the end of the whole stream. Cancellation ends capture; it does
 not promise an extra final transcript event. Preserve the last received text.
 
-The modern engine uses SpeechAnalyzer/SpeechTranscriber on iOS 26+, with
-AssetInputSequenceProvider/CaptureInputSequenceProvider on iOS 27. Supported
+The modern engine uses SpeechAnalyzer/SpeechTranscriber on iOS/iPadOS 26+ or macOS 26+, with
+AssetInputSequenceProvider/CaptureInputSequenceProvider on OS 27. Supported
 locales and asset downloads are determined at runtime. Metadata identifies the
 engine and effective mode. `taskHint` and `addsPunctuation` apply to the legacy
 SFSpeechRecognizer path; the modern path uses its native transcription options.
