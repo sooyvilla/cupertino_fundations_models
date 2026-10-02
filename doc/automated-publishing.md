@@ -8,7 +8,7 @@ Pub.dev autentica la publicación con OIDC de GitHub; no se guarda una credencia
 
 ## Activación inicial
 
-La configuración externa está guardada y confirmada. La instalación inicial conservó `0.4.4`. El 2 de octubre de 2026 el dueño autorizó ampliar pruebas y cobertura, exigirlas en el pipeline y después entregar `0.5.0`. La publicación OIDC de esa versión debe confirmarse mediante su run del tag y la respuesta de pub.dev.
+La configuración externa está guardada y confirmada. La instalación inicial conservó `0.4.4`. El 2 de octubre de 2026 el dueño autorizó ampliar pruebas y cobertura, exigirlas en el pipeline y después entregar `0.5.0`. La primera publicación OIDC quedó confirmada el 2 de octubre de 2026: el [run de v0.5.0](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/37079180625) terminó en verde y la API de pub.dev registra `0.5.0` publicada a las `23:53:23 UTC`, con targets iOS y macOS. El tag apunta al commit `4c3f074a55e058aa41997772a851962ab6013973`. Tanto el run de main como el del tag pasaron 67 tests Flutter, 29 tests Python, cobertura Dart 1007/1007 y ambos builds Apple; el dry-run de publicación tuvo cero advertencias.
 
 La revisión de fuente del 1 de octubre de 2026 no encontró un fallo concreto en el flujo de publicación ni en su recuperación. No se ejecutaron el script, el workflow ni las comprobaciones de publicación. La configuración de las cuentas se confirmó posteriormente mediante sus pantallas de administración.
 
