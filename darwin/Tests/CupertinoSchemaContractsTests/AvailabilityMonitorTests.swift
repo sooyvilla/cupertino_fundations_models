@@ -66,17 +66,26 @@ final class AvailabilityMonitorTests: XCTestCase {
 
     @MainActor
     func testExplicitPollingReadsChangesWithoutDuplicateEventsAndStopsImmediately() async throws {
+        let firstPoll = expectation(description: "Polling reads the initial state")
+        let available = expectation(description: "Polling emits the changed state")
         var state = "assetsUnavailable"
         var reads = 0
         var values: [String] = []
-        let monitor = AvailabilityMonitor(read: { reads += 1; return ["status": state] },
-            emit: { values.append($0["status"] as! String) }, pollingInterval: 0.005)
+        let monitor = AvailabilityMonitor(read: {
+            reads += 1
+            if reads == 2 { firstPoll.fulfill() }
+            return ["status": state]
+        }, emit: {
+            let status = $0["status"] as! String
+            values.append(status)
+            if status == "available" { available.fulfill() }
+        }, pollingInterval: 0.005)
         monitor.start()
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await fulfillment(of: [firstPoll], timeout: 2)
         XCTAssertGreaterThan(reads, 1)
         XCTAssertEqual(values.count, 1)
         state = "available"
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await fulfillment(of: [available], timeout: 2)
         XCTAssertEqual(values, ["assetsUnavailable", "available"])
         monitor.stop()
         let count = reads

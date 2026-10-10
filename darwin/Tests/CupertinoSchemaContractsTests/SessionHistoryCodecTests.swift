@@ -35,7 +35,8 @@ final class SessionHistoryCodecTests: XCTestCase {
         let original = Transcript(entries: [.instructions(instructions), .prompt(prompt), .response(response)])
         let map = try envelope(original)
         let restored = try SessionHistoryCodec.restore(map, mode: "local", useCase: "general", tools: [], environment: environment)
-        XCTAssertEqual(Array(restored), Array(original))
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        XCTAssertEqual(try encoder.encode(restored), try encoder.encode(original))
         XCTAssertEqual((map["entries"] as? [[String: Any]])?.map { $0["id"] as? String }, ["instructions", "prompt", "response"])
         XCTAssertEqual((map["entries"] as? [[String: Any]])?.last?["assetIDs"] as? [String], ["asset-version"])
     }

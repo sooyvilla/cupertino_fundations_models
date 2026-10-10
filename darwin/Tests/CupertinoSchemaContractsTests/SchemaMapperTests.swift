@@ -25,7 +25,11 @@ final class SchemaMapperTests: XCTestCase {
         let schema = try encoded(map)
         let root = try encoded(["type": "reference", "reference": "Address", "definitions": map["definitions"]!])
         XCTAssertNotNil(schema["properties"])
-        XCTAssertEqual((root["anyOf"] as? [[String: Any]])?.count, 1)
+        let rootObject = try semanticSchema(root, in: root)
+        XCTAssertEqual(rootObject["type"] as? String, "object")
+        XCTAssertEqual(rootObject["required"] as? [String], ["city"])
+        let rootFields = try XCTUnwrap(rootObject["properties"] as? [String: Any])
+        XCTAssertEqual(try semanticSchema(XCTUnwrap(rootFields["city"] as? [String: Any]), in: root)["type"] as? String, "string")
         let fields = try XCTUnwrap(schema["properties"] as? [String: Any])
         let homeAlias = try resolved(XCTUnwrap(fields["home"] as? [String: Any]), in: schema)
         let choices = try XCTUnwrap(homeAlias["anyOf"] as? [[String: Any]])
@@ -109,7 +113,7 @@ final class SchemaMapperTests: XCTestCase {
         XCTAssertEqual((fields["rating"] as? [String: Any])?["minimum"] as? Int, 1)
         XCTAssertEqual((fields["rating"] as? [String: Any])?["maximum"] as? Int, 5)
         XCTAssertEqual((fields["confidence"] as? [String: Any])?["maximum"] as? Double, 1)
-        XCTAssertEqual((fields["status"] as? [String: Any])?["enum"] as? [String], ["active", "inactive"])
+        XCTAssertEqual(try stringChoices(XCTUnwrap(fields["status"] as? [String: Any]), in: schema), Set(["active", "inactive"]))
         XCTAssertEqual((fields["aliases"] as? [String: Any])?["maxItems"] as? Int, 3)
         XCTAssertEqual((fields["active"] as? [String: Any])?["type"] as? String, "boolean")
         let address = try resolved(XCTUnwrap(fields["address"] as? [String: Any]), in: schema)
@@ -297,7 +301,8 @@ final class SchemaMapperTests: XCTestCase {
         }
         let schema = try encoded(["type": "array", "items": ["type": "string"]])
         XCTAssertNil(schema["maxItems"])
-        XCTAssertEqual(try encoded(["type": "string", "enum": ["low", "high"]])["enum"] as? [String], ["low", "high"])
+        let levels = try encoded(["type": "string", "enum": ["low", "high"]])
+        XCTAssertEqual(try stringChoices(levels, in: levels), Set(["low", "high"]))
     }
 
     func testIndependentNestedObjectsWithRepeatedFieldNamesHaveUniqueTypes() throws {
@@ -453,6 +458,31 @@ final class SchemaMapperTests: XCTestCase {
             value = try XCTUnwrap((value as? [String: Any])?[key])
         }
         return try XCTUnwrap(value as? [String: Any])
+    }
+
+    private func semanticSchema(_ node: [String: Any], in document: [String: Any]) throws -> [String: Any] {
+        var current = node
+        for _ in 0..<64 {
+            if current["$ref"] != nil { current = try resolved(current, in: document); continue }
+            if let choices = current["anyOf"] as? [[String: Any]], choices.count == 1 {
+                current = choices[0]; continue
+            }
+            return current
+        }
+        XCTFail("Native schema references did not resolve within the bounded graph.")
+        return [:]
+    }
+
+    private func stringChoices(_ node: [String: Any], in document: [String: Any], depth: Int = 0) throws -> Set<String> {
+        guard depth < 64 else { XCTFail("Native string choices exceeded the bounded graph."); return [] }
+        if node["$ref"] != nil { return try stringChoices(resolved(node, in: document), in: document, depth: depth + 1) }
+        if let values = node["enum"] as? [String] { return Set(values) }
+        if let value = node["const"] as? String { return [value] }
+        let choices = try XCTUnwrap(node["anyOf"] as? [[String: Any]], "Expected bounded native string choices.")
+        XCTAssertFalse(choices.isEmpty)
+        var values: Set<String> = []
+        for choice in choices { values.formUnion(try stringChoices(choice, in: document, depth: depth + 1)) }
+        return values
     }
 
     private func assertInvalid(_ map: [String: Any], path: String, file: StaticString = #filePath, line: UInt = #line) {

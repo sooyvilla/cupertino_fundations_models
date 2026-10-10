@@ -725,3 +725,9 @@ Cada cambio futuro debe actualizar esta seccion con:
 
 - Run38069041638 de845f724 confirmó análisis/dependencias reparados; pruebas Python/generador/Flutter aprobaron, pero el gate Linux señaló constructores de StructuredModel/StructuredField sin ejecutar. El test de sus opciones usaba const y podía resolverse en compilación.
 - Ahora ese escenario también construye ambas anotaciones con opciones de un mapa dinámico de app; conserva las mismas assertions/escenarios. No se baja el umbral ni se excluyen líneas; fuente runtime y versiones no cambian.410Flutter, análisis sin issues y gate1791/1791(40fuentes)100% aprobaron localmente. La confirmación Linux/Apple/publicación corresponde al siguiente run.
+
+### Seguimiento de recuperación — contratos nativos entre SDKs
+
+- Run38069381052 de18d5d3c aprobó todos los checks Dart/Linux, incluido el gate100%. Xcode26.6 compiló los helpers, pero cinco assertions dependían de representación interna de GenerationSchema/Transcript o de recibir polling en20ms.
+- Las pruebas ahora resuelven referencias/wrappers y comprueban las opciones exactas de enum tanto con enum como con anyOf/const. El round-trip del historial compara su Codable canónico completo, incluidos formatos/opciones/IDs; no depende del Equatable interno del SDK. Polling espera sus eventos mediante expectativas acotadas, conservando deduplicación y cancelación.
+- Sólo se modifican pruebas nativas: producción, versiones y umbrales permanecen iguales. Localmente aprobaron55XCTest; los cinco helpers conservan100% de líneas/funciones/regiones(301/32/135/57/20). Validación local con Xcode27.2beta; el siguiente run debe confirmar Xcode26.6, builds y publicación. Sin apps/modelos/dispositivos.
