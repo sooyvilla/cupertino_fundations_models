@@ -36,7 +36,7 @@
 
 ## Serie F01–F10 — acuerdo del 2026-10-09
 
-- Implementar una funcionalidad por objetivo, siguiendo la investigación de `doc/flutter-ai-competitive-research-2026-10-09.md`. F01–F10 están preparados localmente en núcleo 1.9.0; generador compatible 1.8.0. El objetivo actual es F10 y la serie acordada está implementada.
+- Implementar una funcionalidad por objetivo, siguiendo la investigación de `doc/flutter-ai-competitive-research-2026-10-09.md`. F01–F10 están publicados en núcleo 1.9.0 desde 2026-10-10; generador compatible 1.8.0 preparado sin publicación separada. La serie y la reparación de entrega están completas; no iniciar otra funcionalidad por rutina.
 - Preparar una versión local por funcionalidad, comenzando por 1.0.0 desde 0.5.0. Las siguientes entregas compatibles incrementan minor; los cambios incompatibles incrementan major. No commit, push, tag, despliegue ni publicación sin autorización posterior.
 - El usuario solicita tests robustos para toda la librería en cada entrega y 100% de cobertura de líneas Dart ejecutables. Probar escenarios cotidianos, errores, lifecycle y la integración nativa pertinente; no excluir código ejecutable ni adaptar comportamiento de producción para maquillar cobertura.
 - Distinguir cobertura Dart, cobertura Swift y calidad/runtime del modelo. Un mock de canal no prueba generación Apple. Esta autorización de tests no incluye ejecución de apps, simuladores o dispositivos.

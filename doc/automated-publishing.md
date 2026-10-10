@@ -141,7 +141,15 @@ Xcode27.2/macOS27.2 aprobó56XCTest y100% en los cinco helpers
 iOS Release sin firma y macOS Debug con ese Xcode, desde git archive en una
 carpeta cuyo nombre respeta la identidad Swift Package del plugin. Estos builds
 no ejecutan apps ni prueban generación, permisos, assets o PCC firmado.
-El nuevo pipeline remoto debe confirmar estos pasos antes de publicar.
+El [run de main](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/38071825308)
+y el [run de v1.9.0](https://github.com/sooyvilla/cupertino_fundations_models/actions/runs/38072195748)
+aprobaron análisis,51testsPython,410Flutter,53generador, cobertura Dart completa
+y ambos builds con Xcode27.2. CI ejecutó56XCTest con un caso omitido por OS27.2;
+el historial conserva134/135líneas(99.26%) y66/67regiones en el informe íntegro,
+con todas sus funciones cubiertas; los otros cuatro helpers están100%.
+Pub.dev confirmó1.9.0 publicada el2026-10-10 a17:40:20UTC. El tagv1.9.0
+apunta a97e5f6d1908a58a90f6d49badcc99d50921ed91c; no se movió un tag previo.
+La publicación del compañero1.8.0 permanece separada y no se ejecutó.
 
 `prepare` depende de ambos jobs y solo corre en pushes del repositorio principal. Los PR hacia `main` ejecutan los controles con permisos de lectura y no acceden al token de la App ni a OIDC. Los pushes a `main` y los tags vuelven a comprobar el commit recibido; cualquier fallo bloquea los jobs de entrega. El workflow oficial de Dart finalmente ejecuta `dart pub publish --dry-run` y publica dentro de `pub.dev` con OIDC.
 

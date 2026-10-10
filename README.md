@@ -79,15 +79,15 @@ Use Flutter 3.41+ and Dart 3.11+. To use the published package, add:
 flutter pub add cupertino_fundations_models
 ```
 
-When version 1.9.0 is available on pub.dev, use:
+Version 1.9.0 is published on pub.dev. Use:
 
 ```yaml
 dependencies:
   cupertino_fundations_models: ^1.9.0
 ```
 
-To use F01–F10 before this version reaches pub.dev, use this checkout as a local
-path dependency. Adjust the path to its location relative to your app:
+To develop against this checkout, use a local path dependency. Adjust the path
+to its location relative to your app:
 
 ```yaml
 dependencies:
@@ -95,7 +95,6 @@ dependencies:
     path: ../cupertino_fundations_models
 ```
 
-After 1.9.0 is published, its dependency constraint will be `^1.9.0`.
 Existing `^0.5.0` consumers do not automatically move to the major release.
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
