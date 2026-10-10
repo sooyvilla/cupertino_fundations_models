@@ -81,9 +81,6 @@ def main():
         if not re.fullmatch(r"[0-9a-f]{40}", before) or before == "0" * 40:
             raise SystemExit("Cannot compare with the previous main commit; release stopped.")
         previous = field(git("show", f"{before}:pubspec.yaml"), "version")
-        if previous == version:
-            finish(f"Version {version} is unchanged. Publication skipped.")
-            return
         if git("rev-parse", "HEAD") != os.environ["GITHUB_SHA"]:
             raise SystemExit("Checkout does not match the main push commit.")
     elif ref.startswith("refs/tags/"):
@@ -115,7 +112,9 @@ def main():
         )
         return
     finish(
-        f"Version changed from {previous} to {version}. Create {tag}.",
+        (f"Version changed from {previous} to {version}. Create {tag}."
+         if previous != version else
+         f"Version {version} is unchanged but unpublished, with no tag. Recover by creating {tag}."),
         tag=tag,
         create_tag=True,
     )

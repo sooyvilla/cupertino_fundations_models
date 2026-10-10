@@ -49,11 +49,18 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('create_tag=true', outputs)
         self.assertIn('publish=false', outputs)
 
-    def test_unchanged_version_skips_without_contacting_pub(self):
-        self.git.side_effect = None
-        self.git.return_value = 'version: 0.5.0\n'
+    def test_unchanged_published_version_skips_after_checking_pub(self):
+        self.git.side_effect = lambda *args: 'version: 0.5.0\n' if args[0] == 'show' else 'b' * 40
+        self.published.return_value = True
         self.assertIn('create_tag=false', self.run_release())
-        self.published.assert_not_called()
+        self.published.assert_called_once_with('0.5.0')
+
+    def test_unchanged_unpublished_version_recovers_a_missing_tag(self):
+        self.git.side_effect = lambda *args: 'version: 0.5.0\n' if args[0] == 'show' else 'b' * 40
+        outputs = self.run_release()
+        self.assertIn('create_tag=true', outputs)
+        self.assertIn('publish=false', outputs)
+        self.assertIn('Recover', Path('summary').read_text())
 
     def test_already_published_version_skips(self):
         self.published.return_value = True

@@ -26,7 +26,10 @@ jobs:
           channel: stable
           cache: true
       - name: Resolve dependencies
-        run: flutter pub get
+        run: |
+          flutter pub get
+          (cd packages/cupertino_fundations_models_generator && flutter pub get)
+          (cd example && flutter pub get)
       - name: Analyze Dart sources
         run: flutter analyze --no-pub
       - name: Test release and coverage guards
@@ -34,7 +37,6 @@ jobs:
       - name: Test optional Dart generator and require full coverage
         working-directory: packages/cupertino_fundations_models_generator
         run: |
-          flutter pub get
           dart test --coverage coverage --reporter expanded
           dart run coverage:format_coverage --lcov --in coverage --out coverage/lcov.info --report-on lib
           python3 ../../.github/scripts/check_coverage.py
@@ -70,6 +72,11 @@ jobs:
           flutter-version: '3.47.5'
           channel: stable
           cache: true
+      - name: Resolve example and generator dependencies
+        run: |
+          flutter pub get
+          (cd packages/cupertino_fundations_models_generator && flutter pub get)
+          (cd example && flutter pub get)
       - name: Test production native helper contracts
         run: swift test --package-path darwin --enable-code-coverage
       - name: Require complete native helper coverage

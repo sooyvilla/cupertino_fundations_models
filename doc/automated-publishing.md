@@ -91,7 +91,8 @@ El cierre tiene tres estados distintos: desarrollo local preparado, configuraci�
 
 Terminar todo el trabajo antes de subirlo. Preparar la nueva versión y mantener alineados el changelog, el podspec, la versión de diagnóstico y el lock del ejemplo cuando corresponda. Revisar el resultado completo y recibir la aprobación de entrega; después subir el commit final a `main`.
 
-- Misma versión: se ejecutan los controles de calidad y se omite la publicación.
+- Misma versión ya publicada: se ejecutan los controles de calidad y se omite la publicación.
+- Misma versión aún no publicada y sin tag: tras los controles, se recupera la entrega creando su tag en el commit reparado. Un tag existente no se mueve; se conserva la recuperación mediante su run original.
 - Versión diferente y aún inexistente: se crea su tag y se inicia la publicación.
 - Versión ya publicada: se omite sin intentar reemplazarla.
 - Error de configuración o de red: el workflow falla y conserva el código; no continúa a ciegas.
