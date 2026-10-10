@@ -59,14 +59,20 @@ jobs:
   apple-builds:
     name: Native contract tests and Apple examples
     needs: verify
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 25
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Report Apple SDK and runtime versions
+        run: |
+          xcodebuild -version
+          sw_vers
+          xcrun --sdk macosx --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-version
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.5'
@@ -79,8 +85,17 @@ jobs:
           (cd example && flutter pub get)
       - name: Test production native helper contracts
         run: swift test --package-path darwin --enable-code-coverage
-      - name: Require complete native helper coverage
-        run: python3 .github/scripts/check_schema_coverage.py
+      - name: Save native coverage report
+        if: ${{ !cancelled() && hashFiles('darwin/.build/**/codecov/*.json') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-coverage
+          path: darwin/.build/**/codecov/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+      - name: Validate native helper coverage against runtime availability
+        run: python3 .github/scripts/check_schema_coverage.py --respect-runtime-availability
       - name: Compile iOS without signing
         working-directory: example
         run: flutter build ios --release --no-codesign

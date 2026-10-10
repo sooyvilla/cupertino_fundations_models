@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import FoundationModels
 import UniformTypeIdentifiers
 import XCTest
@@ -105,14 +106,26 @@ final class SessionHistoryCodecTests: XCTestCase {
         XCTAssertThrowsError(try SessionHistoryCodec.restore(changed, mode: "local", useCase: "general", tools: [], environment: unknown))
     }
 
-    func testBinaryEntriesAndAttachmentSegmentsAreNotClaimedAsDurableHistory() throws {
+    func testBinaryEntriesAreNotClaimedAsDurableHistory() throws {
         #if compiler(>=6.4)
         guard #available(macOS 27.2, *) else { throw XCTSkip("Data entries require OS27.2.") }
         let data = Data([1, 2, 3])
         let entry = Transcript.DataEntry(id: "data", contentType: .json, content: data)
         XCTAssertThrowsError(try envelope(Transcript(entries: [.data(entry)])))
-        let attachment = Transcript.AttachmentSegment(id: "attachment", content: .data(.init(contentType: .json, content: data)))
-        XCTAssertThrowsError(try envelope(Transcript(entries: [.prompt(.init(id: "p", segments: [.attachment(attachment)]))])))
+        #endif
+    }
+
+    func testImageAttachmentSegmentsAreRejectedOnTheirSupportedRuntime() throws {
+        #if compiler(>=6.4)
+        guard #available(macOS 27.0, *) else { throw XCTSkip("Image attachments require OS27.") }
+        let context = try XCTUnwrap(CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let image = try XCTUnwrap(context.makeImage())
+        let attachment = Transcript.AttachmentSegment(id: "attachment", content: .image(.init(image)))
+        XCTAssertThrowsError(try envelope(Transcript(entries: [.prompt(.init(id: "p", segments: [.attachment(attachment)]))]))) { error in
+            guard case NativeSessionError.modelUnavailable(let code, _, _) = error else { return XCTFail("Expected unsupported attachment content.") }
+            XCTAssertEqual(code, "unsupportedTranscriptContent")
+        }
         #endif
     }
 }

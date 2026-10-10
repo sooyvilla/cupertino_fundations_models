@@ -1,8 +1,12 @@
 import json
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import check_schema_coverage
@@ -32,9 +36,71 @@ class NativeSchemaCoverageTests(unittest.TestCase):
             kind: {'count': 13, 'covered': 13} for kind in ('lines', 'functions', 'regions')
         }}
 
-    def check(self, entries):
+    def check(self, entries, runtime_profile=None):
         self.report.write_text(json.dumps({'data': [{'files': entries + [self.snapshot, self.history, self.monitor, self.languages]}]}))
-        return check_schema_coverage.check(self.report, self.root)
+        return check_schema_coverage.check(self.report, self.root, runtime_profile=runtime_profile)
+
+    def future_data_report(self):
+        source = Path(self.history['filename'])
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text('default:\nthrow unsupported("Binary/data and unknown transcript entries are outside this history profile.")\n')
+        self.history['segments'] = [[1, 13, 0, True, True, False]]
+        self.history['summary']['lines'] = {'count': 135, 'covered': 134}
+        self.history['summary']['regions'] = {'count': 140, 'covered': 139}
+
+    def test_runtime_profile_preserves_real_counts_and_default_stays_strict(self):
+        self.future_data_report()
+        with self.assertRaisesRegex(ValueError, 'SessionHistoryCodec lines'):
+            self.check([self.entry])
+        result = self.check([self.entry], runtime_profile='macos27-before27.2')
+        self.assertIn('134/135 lines (99.26%)', result)
+        self.assertIn('one data-entry rejection region requires macOS27.2', result)
+
+    def test_runtime_profile_rejects_other_regions_functions_and_changed_source(self):
+        self.future_data_report()
+        for segments in [[], [[2, 13, 0, True, True, False]], self.history['segments'] * 2 + [[3, 13, 0, True, True, False]]]:
+            with self.subTest(segments=segments):
+                self.history['segments'] = segments
+                with self.assertRaisesRegex(ValueError, '100%'):
+                    self.check([self.entry], runtime_profile='macos27-before27.2')
+        self.future_data_report()
+        self.history['summary']['functions']['covered'] = 8
+        with self.assertRaisesRegex(ValueError, 'functions'):
+            self.check([self.entry], runtime_profile='macos27-before27.2')
+        Path(self.history['filename']).write_text('changed source\n')
+        with self.assertRaisesRegex(ValueError, 'unchanged future-data rejection'):
+            self.check([self.entry], runtime_profile='macos27-before27.2')
+
+    def test_runtime_profile_rejects_wrong_or_invalid_coverage_counts(self):
+        self.future_data_report()
+        for kind in ['lines', 'regions']:
+            original = self.history['summary'][kind]
+            for total, covered in [(135, 133), (0, 0), (1, -1), (True, True), (135, 136)]:
+                with self.subTest(kind=kind, total=total, covered=covered):
+                    self.history['summary'][kind] = {'count': total, 'covered': covered}
+                    with self.assertRaisesRegex(ValueError, '100%'):
+                        self.check([self.entry], runtime_profile='macos27-before27.2')
+            self.history['summary'][kind] = original
+
+    def test_cli_runtime_profile_is_limited_to_its_known_host_sdk_and_compiler(self):
+        self.future_data_report()
+        self.check([self.entry], runtime_profile='macos27-before27.2')
+        for compiler, sdk, runtime, accepts in [('6.4', '27.2', '27.0', True), ('6.4', '27.2', '27.1.1', True),
+                ('6.4', '27.2', '27.2', False), ('6.3', '27.2', '27.0', False),
+                ('6.4', '26.6', '27.0', False), ('6.4', '27.2', '26.6', False)]:
+            with self.subTest(compiler=compiler, sdk=sdk, runtime=runtime):
+                output = io.StringIO()
+                with patch.object(sys, 'argv', ['check_schema_coverage.py', '--respect-runtime-availability']), \
+                        patch.object(check_schema_coverage.Path, 'cwd', return_value=self.root), \
+                        patch.object(check_schema_coverage.subprocess, 'run', side_effect=[SimpleNamespace(stdout=f'Apple Swift version {compiler}'),
+                            SimpleNamespace(stdout=sdk), SimpleNamespace(stdout=runtime), SimpleNamespace(stdout=str(self.report))]), \
+                        contextlib.redirect_stdout(output):
+                    if accepts:
+                        check_schema_coverage.main()
+                        self.assertIn('134/135 lines (99.26%)', output.getvalue())
+                    else:
+                        with self.assertRaisesRegex(SystemExit, '100%'):
+                            check_schema_coverage.main()
 
     def test_complete_native_contract_report_passes(self):
         self.assertIn('5/5 lines (100%)', self.check([self.entry]))

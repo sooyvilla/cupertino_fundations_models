@@ -114,20 +114,34 @@ F10 prepara el núcleo 1.9.0 con adapters opcionales; el compañero permanece en
 dependencias runtime. Los tests locales de adapters entran en la suite/gate del
 núcleo existente. Esta preparación no ejecuta el pipeline ni autoriza publicar.
 
-El job Apple fija `DEVELOPER_DIR` a Xcode 26.6 en la imagen macos-26. Este SDK
-incluye Swift 6.3 y el null schema de OS26.4: su guard y los tests usan compiler
-6.3, separado de las APIs OS27 que siguen protegidas por compiler6.4. Depender
-del Xcode default anterior omitía las pruebas de null y bloqueaba el gate;
-actualizaciones futuras del default también podrían compilar APIs OS27 en un
-host OS26 que no las puede ejercitar. El pin hace explícito este alcance de CI.
-Las firmas/SDK se contrastaron con
-[Xcode26.4](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_4-release-notes),
-[Xcode26.6](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes)
-y la [imagen oficial](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md).
-Localmente sólo está instalado Xcode27.2 beta; el job fijado no se ejecutó aquí
-ni en GitHub, y la cobertura local de contratos OS27 no se atribuye al runner OS26.
+El job Apple usa `xcode-27` y fija `DEVELOPER_DIR` al alias
+`/Applications/Xcode_27.2.app/Contents/Developer`, que apunta al Xcode27.2
+instalado en la [imagen oficial](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md).
+El runner consultado usa macOS27.0 con SDK27.2; compilar con ese SDK no habilita
+APIs que requieren runtime27.2. El workflow registra Xcode, host y SDKs antes de
+los checks. Conserva deployment targets iOS15/macOS12 y guards SDK/OS26.4,
+27.0 y27.2 de cada función. No cambia el mínimo del plugin para hacer pasar CI.
 
-`apple-builds` depende de `verify` y usa `macos-26`. Primero ejecuta `swift test --package-path darwin --enable-code-coverage` sobre los archivos de producción de los mappers de esquemas/snapshots, el codec de historial, el monitor de disponibilidad y el mapper de idiomas; `.github/scripts/check_schema_coverage.py` exige 100% de líneas, funciones y regiones de `SchemaMapper.swift`, `StructuredSnapshotMapper.swift`, `SessionHistoryCodec.swift`, `AvailabilityMonitor.swift` y `TextModelLanguageMapper.swift` en el informe LLVM. Este alcance es distinto de la cobertura Dart y no incluye todos los servicios Swift ni respuestas de un modelo real. Después compila iOS Release sin firma y macOS Debug. Los [labels oficiales](https://github.com/actions/runner-images#available-images) se consultaron al preparar F01. Estos pasos no ejecutan apps ni prueban permisos, assets, modelos o PCC firmado. El workflow modificado no se ha ejecutado en GitHub durante esta tarea.
+`apple-builds` depende de `verify`. Ejecuta
+`swift test --package-path darwin --enable-code-coverage` sobre los cinco helpers
+nativos y guarda el informe LLVM íntegro como artifact `native-coverage`.
+`.github/scripts/check_schema_coverage.py` exige100% de líneas/funciones/regiones
+por defecto. CI pasa `--respect-runtime-availability`: sólo con Swift6.4,
+SDK27.2 y hostmacOS27.0/27.1 admite la única región de rechazo de DataEntry que
+requiere macOS27.2. Valida su ubicación y sentencia exactas; cualquier otra
+región, función o diferencia de contadores falla. El reporte conserva el
+numerador/denominador y porcentaje reales, sin eliminar fuentes o fingir100%.
+Con host27.2 esa excepción desaparece automáticamente. La cobertura Dart del
+núcleo/generador permanece100% sin excepciones.
+
+Los tests de adjuntos de imagen se ejercitan desde macOS27.0; los de DataEntry
+se omiten explícitamente antes de27.2 y se prueban allí. Localmente,
+Xcode27.2/macOS27.2 aprobó56XCTest y100% en los cinco helpers
+(304/32/135/57/20líneas, funciones/regiones100%). También compilaron el ejemplo
+iOS Release sin firma y macOS Debug con ese Xcode, desde git archive en una
+carpeta cuyo nombre respeta la identidad Swift Package del plugin. Estos builds
+no ejecutan apps ni prueban generación, permisos, assets o PCC firmado.
+El nuevo pipeline remoto debe confirmar estos pasos antes de publicar.
 
 `prepare` depende de ambos jobs y solo corre en pushes del repositorio principal. Los PR hacia `main` ejecutan los controles con permisos de lectura y no acceden al token de la App ni a OIDC. Los pushes a `main` y los tags vuelven a comprobar el commit recibido; cualquier fallo bloquea los jobs de entrega. El workflow oficial de Dart finalmente ejecuta `dart pub publish --dry-run` y publica dentro de `pub.dev` con OIDC.
 

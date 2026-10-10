@@ -22,7 +22,8 @@ lossless streaming conveniences without changing existing events or routing.
 - Whole-series review: reject lossy integer bounds in manual/native Double
   guides, preserve descriptions on scalar/array/reference roots and unnamed
   nested schemas, and enable explicit null with Xcode 26.4 / Swift 6.3.
-  Pin the Apple CI job to Xcode 26.6 so its runtime/coverage scope is explicit.
+  Compile Apple CI examples with Xcode 27.2 on the macOS 27 runner. Keep runtime
+  availability checks and report native coverage against the runner's actual OS.
 - Preserve native definitions when a bare reference is the schema root on SDK 26;
   verify reference constraints, enums and Codable history across SDK representations.
 - Complete publication dry-run repairs: explicit channel type arguments, library
