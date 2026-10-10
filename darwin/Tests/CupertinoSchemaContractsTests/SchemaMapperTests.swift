@@ -455,7 +455,7 @@ final class SchemaMapperTests: XCTestCase {
         var value: Any = document
         for component in reference.dropFirst(2).split(separator: "/") {
             let key = String(component).replacingOccurrences(of: "~1", with: "/").replacingOccurrences(of: "~0", with: "~")
-            value = try XCTUnwrap((value as? [String: Any])?[key])
+            value = try XCTUnwrap((value as? [String: Any])?[key], "Missing \(key) while resolving \(reference) in native schema: \(document)")
         }
         return try XCTUnwrap(value as? [String: Any])
     }
