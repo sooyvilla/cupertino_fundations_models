@@ -23,6 +23,8 @@ lossless streaming conveniences without changing existing events or routing.
   guides, preserve descriptions on scalar/array/reference roots and unnamed
   nested schemas, and enable explicit null with Xcode 26.4 / Swift 6.3.
   Pin the Apple CI job to Xcode 26.6 so its runtime/coverage scope is explicit.
+- Preserve native definitions when a bare reference is the schema root on SDK 26;
+  verify reference constraints, enums and Codable history across SDK representations.
 - Complete publication dry-run repairs: explicit channel type arguments, library
   directives and generated style directives; add the companion's named entry point
   and a source-only staging helper for its separate archive.

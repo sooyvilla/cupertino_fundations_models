@@ -33,8 +33,11 @@ enum SchemaMapper {
         }
         var nodes = 0
         var extended = !definitions.isEmpty
-        let root: DynamicGenerationSchema = try dynamicSchema(name: "CFMRoot_" + name, map: rootMap, path: "#", definitions: definitions,
+        var root: DynamicGenerationSchema = try dynamicSchema(name: "CFMRoot_" + name, map: rootMap, path: "#", definitions: definitions,
             explicitNullSchema: explicitNullSchema, nodes: &nodes, extended: &extended)
+        if (rootMap["type"] as? String)?.lowercased() == "reference", !(rootMap["description"] is String) {
+            root = DynamicGenerationSchema(name: "CFMRoot_" + name, anyOf: [root])
+        }
         var dependencies: [DynamicGenerationSchema] = []
         for key in definitions.keys.sorted() {
             let path = "#/definitions/\(pointerComponent(key))"

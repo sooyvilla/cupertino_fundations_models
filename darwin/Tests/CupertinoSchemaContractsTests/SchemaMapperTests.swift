@@ -31,14 +31,22 @@ final class SchemaMapperTests: XCTestCase {
         let rootFields = try XCTUnwrap(rootObject["properties"] as? [String: Any])
         XCTAssertEqual(try semanticSchema(XCTUnwrap(rootFields["city"] as? [String: Any]), in: root)["type"] as? String, "string")
         let fields = try XCTUnwrap(schema["properties"] as? [String: Any])
-        let homeAlias = try resolved(XCTUnwrap(fields["home"] as? [String: Any]), in: schema)
-        let choices = try XCTUnwrap(homeAlias["anyOf"] as? [[String: Any]])
-        let home = try resolved(choices[0], in: schema)
-        XCTAssertEqual(home["required"] as? [String], ["city"])
-        let ratingAlias = try resolved(XCTUnwrap(fields["rating"] as? [String: Any]), in: schema)
-        let rating = try XCTUnwrap((ratingAlias["anyOf"] as? [[String: Any]])?.first)
+        for key in ["home", "work"] {
+            let address = try semanticSchema(XCTUnwrap(fields[key] as? [String: Any]), in: schema)
+            XCTAssertEqual(address["type"] as? String, "object")
+            XCTAssertEqual(address["required"] as? [String], ["city"])
+            let addressFields = try XCTUnwrap(address["properties"] as? [String: Any])
+            XCTAssertEqual(try semanticSchema(XCTUnwrap(addressFields["city"] as? [String: Any]), in: schema)["type"] as? String, "string")
+        }
+        let rating = try semanticSchema(XCTUnwrap(fields["rating"] as? [String: Any]), in: schema)
+        XCTAssertEqual(rating["type"] as? String, "integer")
         XCTAssertEqual(rating["minimum"] as? Int, 1)
         XCTAssertEqual(rating["maximum"] as? Int, 5)
+        let scalarRoot = try encoded(["type": "reference", "reference": "Rating", "definitions": map["definitions"]!])
+        let scalar = try semanticSchema(scalarRoot, in: scalarRoot)
+        XCTAssertEqual(scalar["type"] as? String, "integer")
+        XCTAssertEqual(scalar["minimum"] as? Int, 1)
+        XCTAssertEqual(scalar["maximum"] as? Int, 5)
     }
 
     func testRequiredNullableAndOptionalFieldsRemainIndependent() throws {
