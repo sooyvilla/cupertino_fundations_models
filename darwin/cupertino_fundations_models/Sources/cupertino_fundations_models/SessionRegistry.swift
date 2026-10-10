@@ -26,6 +26,13 @@ actor SessionRegistry {
         let id: String = UUID().uuidString
         let mode: String = arguments["mode"] as? String ?? "automatic"
         let cloudPolicy: String = arguments["cloudPolicy"] as? String ?? "never"
+        if let raw = arguments["history"], !(raw is [String: Any]) {
+            throw NativeSessionError.invalidRequest("History must be a snapshot map.")
+        }
+        let history = arguments["history"] as? [String: Any]
+        if history != nil && arguments["instructions"] is String {
+            throw NativeSessionError.invalidRequest("Restoration cannot override transcript instructions.")
+        }
         let session: NativeSession = try makeSession(
             id: id,
             mode: mode,
@@ -35,7 +42,8 @@ actor SessionRegistry {
             useCase: arguments["useCase"] as? String,
             transcriptErrorHandlingPolicy: arguments["transcriptErrorHandlingPolicy"] as? String,
             toolMaps: arguments["tools"] as? [[String: Any]] ?? [],
-            metadata: arguments["metadata"] as? [String: Any] ?? [:]
+            metadata: arguments["metadata"] as? [String: Any] ?? [:],
+            history: history
         )
         sessions[id] = session
         var runtimeMetadata: [String: Any] = [
@@ -72,6 +80,30 @@ actor SessionRegistry {
             }
         }
         #endif
+    }
+
+    func exportHistory(arguments message: FlutterChannelValue<[String: Any]>) throws -> FlutterChannelValue<[String: Any]> {
+        try Task.checkCancellation()
+        guard let id = message.value["sessionId"] as? String, let session = sessions[id] else {
+            throw NativeSessionError.sessionNotFound
+        }
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *), let native = session.languageSession as? LanguageModelSession {
+            guard !native.isResponding else { throw NativeSessionError.invalidRequest("Export history only while the session is idle.") }
+            let history = try SessionHistoryCodec.export(native.transcript, mode: session.mode, useCase: session.useCase,
+                instructions: session.instructions, locale: session.localeIdentifier, tools: session.toolDefinitions,
+                environment: historyEnvironment(), createdAt: ISO8601DateFormatter().string(from: Date()))
+            try Task.checkCancellation()
+            return FlutterChannelValue(history)
+        }
+        #endif
+        throw NativeSessionError.foundationModelsUnavailable
+    }
+
+    private func historyEnvironment() -> [String: String] {
+        let sdk = Bundle.main.object(forInfoDictionaryKey: "DTSDKName") as? String
+        return ["platform": ApplePlatform.name, "osVersion": ProcessInfo.processInfo.operatingSystemVersionString,
+                "sdkIdentifier": sdk?.isEmpty == false ? sdk! : "unknown"]
     }
 
     func countTokens(arguments message: FlutterChannelValue<[String: Any]>) async throws -> Int {
@@ -123,7 +155,7 @@ actor SessionRegistry {
             guard let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] else {
                 throw NativeSessionError.invalidSchema(path: "#", reason: "A schema must be a map.")
             }
-            _ = try SchemaMapper.generationSchema(from: schemaMap)
+            _ = try SchemaMapper.generationSchema(from: schemaMap, explicitNullSchema: AvailabilityService.explicitNullSchema)
         }
         #endif
         let unavailableReason: String = session.mode == "privateCloudCompute"
@@ -138,7 +170,7 @@ actor SessionRegistry {
             let schema: GenerationSchema?
             if arguments["schema"] != nil {
                 let schemaMap: [String: Any] = arguments["schema"] as! [String: Any]
-                schema = try SchemaMapper.generationSchema(from: schemaMap)
+                schema = try SchemaMapper.generationSchema(from: schemaMap, explicitNullSchema: AvailabilityService.explicitNullSchema)
             } else {
                 schema = nil
             }
@@ -208,7 +240,7 @@ actor SessionRegistry {
             let options: GenerationOptions = try makeGenerationOptions(arguments: optionsMap)
             try await prepareToolBudget(session: session, arguments: optionsMap)
             let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] ?? [:]
-            let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
+            let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap, explicitNullSchema: AvailabilityService.explicitNullSchema)
             #if compiler(>=6.4)
             if #available(iOS 27.0, macOS 27.0, *) {
                 let response = try await languageSession.respond(
@@ -222,6 +254,7 @@ actor SessionRegistry {
                     "text": jsonString,
                     "usedMode": session.mode,
                     "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
+                    "hasStructuredValue": true,
                     "metadata": [
                         "rawContent": String(describing: response.rawContent)
                     ],
@@ -243,6 +276,7 @@ actor SessionRegistry {
                 "text": jsonString,
                 "usedMode": session.mode,
                 "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
+                    "hasStructuredValue": true,
                 "metadata": [:],
                 "usage": NSNull(),
                 "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": response.rawContent.isComplete]
@@ -283,6 +317,7 @@ actor SessionRegistry {
                     "text": response.content,
                     "usedMode": session.mode,
                     "structuredValue": NSNull(),
+                    "hasStructuredValue": false,
                     "metadata": [
                         "rawContent": String(describing: response.rawContent)
                     ],
@@ -297,6 +332,7 @@ actor SessionRegistry {
                 "text": response.content,
                 "usedMode": session.mode,
                 "structuredValue": NSNull(),
+                    "hasStructuredValue": false,
                 "metadata": [
                     "rawContent": String(describing: response.rawContent)
                 ],
@@ -341,7 +377,7 @@ actor SessionRegistry {
                     guard let schemaMap: [String: Any] = arguments["schema"] as? [String: Any] else {
                         throw NativeSessionError.invalidRequest("A structured stream requires a schema map.")
                     }
-                    let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap)
+                    let schema: GenerationSchema = try SchemaMapper.generationSchema(from: schemaMap, explicitNullSchema: AvailabilityService.explicitNullSchema)
                     let stream: LanguageModelSession.ResponseStream<GeneratedContent>
                     #if compiler(>=6.4)
                     if #available(iOS 27.0, macOS 27.0, *) {
@@ -380,11 +416,15 @@ actor SessionRegistry {
                             latestUsage = responseUsage(snapshot.usage)
                         }
                         #endif
-                        onEvent(FlutterChannelValue([
+                        var event: [String: Any] = [
                             "type": "textSnapshot",
                             "requestId": requestId,
                             "text": snapshot.rawContent.jsonString
-                        ]))
+                        ]
+                        if optionsMap["includeStructuredSnapshots"] as? Bool == true {
+                            event["structuredSnapshot"] = try StructuredSnapshotMapper.snapshot(from: snapshot.rawContent)
+                        }
+                        onEvent(FlutterChannelValue(event))
                     }
                     try Task.checkCancellation()
                     guard let rawContent: GeneratedContent = latestRawContent,
@@ -403,12 +443,17 @@ actor SessionRegistry {
                             "text": jsonString,
                             "usedMode": session.mode,
                             "structuredValue": try SchemaMapper.structuredValue(fromJsonString: jsonString),
+                    "hasStructuredValue": true,
                             "metadata": [:],
                             "usage": latestUsage,
                             "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": true]
                         ]
                     ]))
                     return
+                }
+
+                if optionsMap["includeStructuredSnapshots"] as? Bool == true {
+                    throw NativeSessionError.invalidRequest("Structured snapshots require a guided stream schema.")
                 }
 
                 let stream: LanguageModelSession.ResponseStream<String>
@@ -448,6 +493,7 @@ actor SessionRegistry {
                         "text": latestText,
                         "usedMode": session.mode,
                         "structuredValue": NSNull(),
+                    "hasStructuredValue": false,
                         "metadata": [:],
                         "usage": latestUsage,
                         "termination": ["status": "completed", "reason": "unknown", "structuredContentComplete": NSNull()]
@@ -484,7 +530,8 @@ actor SessionRegistry {
         useCase: String?,
         transcriptErrorHandlingPolicy: String?,
         toolMaps: [[String: Any]],
-        metadata: [String: Any]
+        metadata: [String: Any],
+        history: [String: Any]? = nil
     ) throws -> NativeSession {
         guard ["local", "automatic", "privateCloudCompute"].contains(mode),
               ["never", "whenExplicit", "automaticWithUserConsent"].contains(cloudPolicy) else {
@@ -495,6 +542,15 @@ actor SessionRegistry {
         }
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
+            let restored: Transcript?
+            if let history {
+                guard (history["localeIdentifier"] as? String) == localeIdentifier else {
+                    throw NativeSessionError.invalidRequest("Restore the saved locale preflight identifier.")
+                }
+                restored = try SessionHistoryCodec.restore(history, mode: mode, useCase: useCase ?? "general",
+                    tools: toolMaps, environment: historyEnvironment())
+            } else { restored = nil }
+            let effectiveInstructions = history == nil ? instructions : history?["instructions"] as? String
             let toolCallBudget: ToolCallBudget? = toolMaps.isEmpty ? nil : ToolCallBudget()
             let tools: [any Tool] = try makeTools(
                 id: id,
@@ -520,7 +576,8 @@ actor SessionRegistry {
                             let languageSession: LanguageModelSession = makePrivateCloudSession(
                                 model: privateCloud,
                                 tools: tools,
-                                instructions: instructions
+                                instructions: effectiveInstructions,
+                                transcript: restored
                             )
                             applyTranscriptErrorHandlingPolicy(
                                 transcriptErrorHandlingPolicy,
@@ -529,12 +586,14 @@ actor SessionRegistry {
                             return NativeSession(
                                 id: id,
                                 mode: "privateCloudCompute",
-                                instructions: instructions,
+                                instructions: effectiveInstructions,
                                 metadata: metadata,
                                 languageSession: languageSession,
                                 tools: tools,
                                 useCase: "general",
-                                toolCallBudget: toolCallBudget
+                                toolCallBudget: toolCallBudget,
+                                toolDefinitions: toolMaps,
+                                localeIdentifier: localeIdentifier
                             )
                         }
                         if mode == "privateCloudCompute" {
@@ -594,7 +653,8 @@ actor SessionRegistry {
                 let languageSession: LanguageModelSession = makeLocalSession(
                     model: model,
                     tools: tools,
-                    instructions: instructions
+                    instructions: effectiveInstructions,
+                    transcript: restored
                 )
                 #if compiler(>=6.4)
                 if #available(iOS 27.0, macOS 27.0, *) {
@@ -607,13 +667,15 @@ actor SessionRegistry {
                 return NativeSession(
                     id: id,
                     mode: "local",
-                    instructions: instructions,
+                    instructions: effectiveInstructions,
                     metadata: metadata,
                     languageSession: languageSession,
                     localModel: model,
                     tools: tools,
                     useCase: useCase == "contentTagging" ? "contentTagging" : "general",
-                    toolCallBudget: toolCallBudget
+                    toolCallBudget: toolCallBudget,
+                    toolDefinitions: toolMaps,
+                    localeIdentifier: localeIdentifier
                 )
             case .unavailable(let reason):
                 let reasonText: String = String(describing: reason)
@@ -671,7 +733,7 @@ actor SessionRegistry {
             guard parametersMap["type"] as? String == "object" else {
                 throw NativeSessionError.invalidRequest("Tool parameters must use an object schema.")
             }
-            let parameters: GenerationSchema = try SchemaMapper.generationSchema(from: parametersMap)
+            let parameters: GenerationSchema = try SchemaMapper.generationSchema(from: parametersMap, explicitNullSchema: AvailabilityService.explicitNullSchema)
             tools.append(
                 DynamicTool(
                     name: name,
@@ -691,8 +753,10 @@ actor SessionRegistry {
     private func makeLocalSession(
         model: SystemLanguageModel,
         tools: [any Tool],
-        instructions: String?
+        instructions: String?,
+        transcript: Transcript?
     ) -> LanguageModelSession {
+        if let transcript { return LanguageModelSession(model: model, tools: tools, transcript: transcript) }
         if let instructions, !instructions.isEmpty {
             return LanguageModelSession(model: model, tools: tools, instructions: instructions)
         }
@@ -704,8 +768,10 @@ actor SessionRegistry {
         private func makePrivateCloudSession(
             model: PrivateCloudComputeLanguageModel,
             tools: [any Tool],
-            instructions: String?
+            instructions: String?,
+            transcript: Transcript?
         ) -> LanguageModelSession {
+            if let transcript { return LanguageModelSession(model: model, tools: tools, transcript: transcript) }
             if let instructions, !instructions.isEmpty {
                 return LanguageModelSession(model: model, tools: tools, instructions: instructions)
             }
@@ -1348,6 +1414,8 @@ struct NativeSession {
     let tools: Any?
     let useCase: String
     let toolCallBudget: ToolCallBudget?
+    let toolDefinitions: [[String: Any]]
+    let localeIdentifier: String?
 
     init(
         id: String,
@@ -1358,7 +1426,9 @@ struct NativeSession {
         localModel: Any? = nil,
         tools: Any? = nil,
         useCase: String = "general",
-        toolCallBudget: ToolCallBudget? = nil
+        toolCallBudget: ToolCallBudget? = nil,
+        toolDefinitions: [[String: Any]] = [],
+        localeIdentifier: String? = nil
     ) {
         self.id = id
         self.mode = mode
@@ -1369,13 +1439,8 @@ struct NativeSession {
         self.tools = tools
         self.useCase = useCase
         self.toolCallBudget = toolCallBudget
+        self.toolDefinitions = toolDefinitions
+        self.localeIdentifier = localeIdentifier
     }
 }
 
-enum NativeSessionError: Error {
-    case sessionNotFound
-    case foundationModelsUnavailable
-    case invalidRequest(String)
-    case invalidSchema(path: String, reason: String)
-    case modelUnavailable(code: String, message: String, recoverySuggestion: String)
-}

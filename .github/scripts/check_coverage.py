@@ -6,6 +6,7 @@ from pathlib import Path
 def declaration_only(source):
     source = re.sub(r'/\*.*?\*/|//[^\n]*', '', source, flags=re.DOTALL)
     source = re.sub(r"(?:import|export|part|library)\s+[^;]+;", '', source)
+    source = re.sub(r'\blibrary\s*;', '', source)
     source = source.strip()
     if not source:
         return True

@@ -1,3 +1,294 @@
+## 1.9.0
+
+Release 1.9.0 includes F01–F10 and the review corrections. F10 adds optional application adapters and
+lossless streaming conveniences without changing existing events or routing.
+
+- Add optional cupertino_fundations_models_adapters.dart entry point, an owned
+  FoundationModelsAdapter and borrowed Stream<SessionEvent>.adaptEvents.
+  Preserve original events/responses, structured snapshots, tools and nullable
+  usage/termination metadata; never re-execute observed tools.
+- Add TextSnapshotReducer/TextUpdate append-or-replace semantics, including final
+  reconciliation, shortening/clearing, Unicode boundaries and stale-buffer checks.
+  Append-only consumers reject revisions explicitly instead of emitting false deltas.
+- Keep streams cold, single-subscription and isolated per request. Propagate pause,
+  source errors and awaited cancellation; pending creation is disposed after early
+  cancel, and terminal delivery waits for owned cleanup. Missing/mixed terminal
+  context fails explicitly, with no fabricated success, retry or fallback.
+- Add a tested app backend interface/example and current Genkit/LangChain mapping
+  recipes. SDK/tool/schema/usage/cancellation differences remain app choices;
+  no framework provider package, SDK upgrade or official provider plugin is added.
+- Complete existing Dartdoc/guides/research/state and whole-library regressions.
+  Generator 1.8.0 stays compatible with core 1.9.0 and is versioned separately.
+- Whole-series review: reject lossy integer bounds in manual/native Double
+  guides, preserve descriptions on scalar/array/reference roots and unnamed
+  nested schemas, and enable explicit null with Xcode 26.4 / Swift 6.3.
+  Pin the Apple CI job to Xcode 26.6 so its runtime/coverage scope is explicit.
+- Complete publication dry-run repairs: explicit channel type arguments, library
+  directives and generated style directives; add the companion's named entry point
+  and a source-only staging helper for its separate archive.
+- No third-party runtime dependency, breaking API, native target change or implicit routing.
+
+## 1.8.0
+
+Prepared locally; not published. F09 adds a separate optional Dart generator
+while preserving manual/imported schemas and existing native/runtime contracts.
+
+- Add dependency-free StructuredModel/StructuredField annotations and shared
+  structural readers/StructuredPartialField state in core, with no new runtime
+  dependencies. Add cupertino_fundations_models_generator 1.8.0 as a dev package.
+- Explicit build_runner generation emits standalone *.structured.dart companions:
+  ClassCodec.schema/decode and ClassPartial. Source models stay unchanged; no
+  part directive, generated Swift, inference, assets or routing is introduced.
+- Support public concrete object models with named generative construction,
+  primitives, public enums, lists, annotated nested types and nullable choices.
+  Preserve guides/order, presence versus null, safe partial prefixes and exact
+  scalar types. Unsupported forms/invalid guides/recursive or oversized graphs
+  fail with source diagnostics rather than coercion.
+- Keep native nullable-schema availability and runtime validation unchanged.
+  Final conversion is structural; constructors/business validation stay app-owned.
+  Partial views never construct final models or authorize effects.
+- Test reproducible builder outputs, actual compiled companions, manual/import
+  equivalence, metadata/error preservation and presence/null/partial behavior.
+  Require whole-core and generator line coverage separately plus native regressions.
+- Add opt-in document/choice examples and complete existing guides, API docs and
+  agent choice questions. Prepare local CI coverage/generation checks; companion
+  publication is separate and has not been configured/executed by this task.
+- No breaking API, deployment-target change, commit, push or publication.
+
+## 1.7.0
+
+Prepared locally; not published. F08 adds optional local readiness observation and
+text-model languages while preserving existing availability/Speech contracts.
+
+- Add `watchAvailability(useCase:, localeIdentifier:, pollingInterval:,
+  pauseWhenBackgrounded:)`, a cold single-subscription stream of initial active
+  readiness and structural changes. Native Observation is the default; polling
+  is explicit and bounded from one second through five minutes.
+- Suspend native work on subscription pause and outside Flutter resumed state;
+  recheck on resume, suppress duplicate snapshots and ignore stale callbacks.
+  Await startup/cleanup; independent watchers use separate IDs and contexts.
+- Report missing plugin/unsupported OS or SDK as terminal unavailable snapshots.
+  Preserve bridge errors, malformed-payload failures and cancellation errors.
+  Existing custom platform adapters remain valid through an optional interface.
+- Add immutable `TextModelLanguage` labels and `getTextModelLanguages(useCase:)`
+  from the selected local variant, independently of Speech. Preserve the existing
+  model/Speech intersection and asset state in `getSupportedLanguages()`.
+- Neither API requests inference, assets, Speech permissions or PCC. Advertised
+  languages differ from supported regional locales and readiness; Observation
+  has no guaranteed transition cadence or download progress percentage.
+- Connect the chat's existing readiness banner with owned observation, preserving
+  dictation language choices. Test transport isolation, pause/foreground races,
+  errors/cleanup, the widget's changing status and genuine Swift Observation.
+- Expand the native coverage gate to five production helpers and update existing
+  docs, Dartdoc, integration choices and version state. No runtime dependency,
+  deployment-target change, breaking API, commit or external delivery.
+
+## 1.6.0
+
+Prepared locally; not published. F07 adds explicit compatible history export and
+restoration while preserving existing session constructors and platform adapters.
+
+- Add immutable `SessionHistory`, entry/segment/tool-call descriptors, JSON
+  serialization, `session.exportHistory`, `models.restoreSession` and optional
+  `SessionOptions.history`. An optional platform capability leaves older platform
+  implementations valid and reports unsupported history explicitly.
+- Preserve Apple's native Codable Transcript rather than rebuilding from text.
+  Retain IDs, complete structures, tools, prompt options/response formats,
+  response asset IDs and supported OS 27 reasoning/signatures/metadata.
+- Restore into a new native session with the saved route, variant, locale and
+  instructions. Require exact tool registrations and known matching platform,
+  OS and SDK. Register current callbacks without executing historical calls.
+- Bound archives to 1 MiB UTF-8 and 256 entries. Reject attachments, binary/data
+  entries, incomplete structure, unmatched/pending tools, duplicate IDs and
+  descriptor/archive mismatches instead of dropping content.
+- Keep export single-flight and lifecycle-safe. No automatic persistence,
+  transcript editing, model-asset identity guarantee or provider replay is added.
+  Apps own sensitive storage, user/thread identity, retention and encryption.
+- Test native SDK Codable round-trips, options/metadata/tool preservation,
+  compatibility failures, malformed payloads and Dart disposal/concurrency.
+  Require complete Dart coverage and line/function/region coverage of the
+  production schema/snapshot mappers and history codec.
+- Add an explicit document extraction/history alternative and update existing
+  guides, integration decisions, API docs and local release state. No runtime
+  dependency, deployment-target change, breaking API or external delivery.
+
+## 1.5.0
+
+Prepared locally; not published. F06 adds explicit null, anyOf and bounded local
+references while preserving existing valid schemas, events and legacy responses.
+
+- Add `StructuredSchema`/`SchemaProperty` nullValue, anyOf and reference
+  constructors, with root-scoped definitions. Preserve const constructors and
+  existing fields; no public enum or sealed-event variant is added.
+- Extend JSON import with null type, anyOf, root `$defs` and local `$ref` to one
+  escaped definition name. Reject cycles, remote/recursive references, assertion
+  siblings and unsupported composition forms rather than changing their meaning.
+- Bound new graphs to 32 definitions, eight union branches and 512 expanded
+  nodes; retain depth 16, field bounds and valid larger legacy literal trees.
+- Resolve null capability under SDK/OS guards, requiring OS 26.4 and this
+  package's compatible Xcode 27 SDK path. Pass the resolved native null schema
+  into the mapper; unavailable support returns a typed capability failure.
+  AnyOf/references retain their OS 26 path.
+- Add `ModelResponse.hasStructuredValue` and an explicit native presence signal
+  so final null is data while legacy missing null remains absent. Final decoders
+  accept present null; malformed presence signals and incomplete data still fail.
+- Test real Foundation Models null/union/reference schemas, reused constraints,
+  presence versus optional fields, cycles/bounds, legacy graphs and nullable
+  one-shot/stream results without generation inference.
+- Update Dartdoc, existing guides and document example. Its default date remains
+  optional; explicitNullDates opts into a required nullable date and native support.
+- No runtime dependencies, deployment-target change, major break or publication.
+
+## 1.4.0
+
+Prepared locally; not published. F05 adds opt-in structured snapshots and
+explicit property order without changing legacy streams or sealed event variants.
+
+- Add optional `propertyOrder` to object roots and object properties. Validate
+  full permutations in Dart and Swift; omission retains alphabetical native
+  order. Imported schemas accept separate `propertyOrders` keyed by input
+  object-schema JSON Pointers, preserving the strict standard-keyword subset.
+- Add `GenerationOptions.includeStructuredSnapshots` for guided streams and
+  nullable `TextSnapshotEvent.structuredSnapshot`. Defaults preserve the earlier
+  wire/event behavior; no sealed `SessionEvent` subtype or public enum is added.
+- Add immutable `StructuredSnapshot` with projected value, root availability,
+  observed/complete paths and native completeness. Use the native GeneratedContent
+  tree; withhold incomplete leaves and retain array prefixes without repairing JSON.
+- Keep snapshots replaceable and nonterminal, even when their native flag is
+  complete. Final JSON parsing and F04 final decoders remain strict and separate.
+- Reject malformed snapshot payloads with typed parsing failures, await native
+  cancellation and preserve the session's failed-cancellation protection.
+  Reject snapshot opt-in for text-only streams and one-shot requests.
+- Test authentic incomplete GeneratedContent, numeric/string withholding, nested
+  fields, empty/scalar values, revisions and real SDK property order. Extend the
+  native coverage gate to both production schema and snapshot mappers.
+- Update existing API docs, guides, recipes, AI integration choices and document
+  example. No third-party runtime dependency, SDK/deployment change or publication.
+
+## 1.3.0
+
+Prepared locally; not published. F04 adds app-owned final-value decoding while
+preserving existing response types, generation behavior and public error enums.
+This is additive to local 1.2.0, so no major-version change is required.
+
+- Add `generateStructuredDecoded<T>` to the facade and owned sessions, with an
+  explicit synchronous decoder and the existing schema/options/privacy policy.
+- Add `ModelResponse.decodeStructured<T>` for an existing final response,
+  including guided stream completion. Object/list/scalar and false/empty values
+  are supported; nullable domain results may be returned intentionally.
+- Add `DecodedModelResponse<T>` with `value` and the original `response` by
+  identity, retaining text, route, metadata, nullable usage and termination.
+- Add `StructuredDecodingException` retaining the decoder's original cause,
+  stack and native response. Default stringification omits output/cause.
+  Native schema/JSON/lifecycle failures retain their existing contracts.
+- Reject non-completed responses, missing structured values and explicitly
+  incomplete structures before conversion. Preserve unknown completeness.
+  Do not reparse text, decode partial snapshots, repair fields or retry requests.
+- Preserve facade disposal before conversion, owned-session reuse after decoder
+  failures and existing native diagnostic events. App conversion remains outside
+  native deadlines and authorization/persistence rules.
+- Expand library tests for domain models, optional fields, scalars, metadata,
+  conversion/native errors, cleanup, cancellation, timeout and concurrency.
+  Extend the document example with typed final data preserving monetary strings.
+- Update Dartdoc and existing guides, recipes, FAQ and AI integration choices.
+  No runtime dependency, Swift change, SDK/target change or generator introduced.
+
+## 1.2.0
+
+Prepared locally; not published. F03 adds optional JSON Schema data import to
+the same runtime contracts and native mapper as manual Dart definitions.
+
+- Add `StructuredSchema.fromJsonSchema(Map<String, Object?>, {name,
+  allowSwiftPatterns = false})` for the explicit JSON Schema 2020-12 generation
+  subset: six root types, nested objects/arrays, string enums and F01 constraints.
+- Require `additionalProperties: false` at every imported object. Omitted JSON
+  `required` means none at every level; manual nested defaults remain unchanged.
+- Reject unknown/type-incompatible keywords, open objects, references, unions,
+  boolean/null schemas, fractional integer limits, non-finite values and number
+  bounds that lose value in native Double conversion. Enforce depth/field limits.
+- Copy input collections and report typed `invalidRequest` failures with
+  `schemaSource: jsonSchema` and escaped input JSON Pointers before native work.
+- Require explicit Swift-pattern opt-in rather than treating ECMA-262 patterns
+  as equivalent. Native syntax/guide failures retain the existing contract.
+- Test shared contact fixtures across Dart import and the production Swift
+  mapper, boundaries, error paths, mutation isolation, one-shot output, guided
+  streaming and budgets. Keep whole-library regressions and both coverage gates.
+- Update existing API docs, guides and integration questions. The document
+  extraction example now imports its schema without changing required fields
+  or output bounds. No code generator, new runtime dependency or SDK change.
+
+## 1.1.0
+
+Prepared locally; not published. F02 extends the prepared 1.0.0 API without
+changing valid object schemas, privacy defaults or required-field defaults.
+
+- Add const `StructuredSchema.array`, `.string`, `.integer`, `.number` and
+  `.boolean` constructors. Root values use the same F01 constraint validation
+  and native mapper as properties; `type` identifies the root shape.
+- Add optional `SchemaProperty.object(requiredProperties:)` and the equivalent
+  generic property option. Null/omitted preserves all-required nested fields;
+  an empty list makes them optional, and named lists require only those fields.
+- Reject duplicate/undeclared nested required names and required lists on other
+  property types before native request admission.
+- Preserve `StructuredSchema.object`'s existing empty required-list default.
+  Tool parameters remain object-root; output roots do not change that contract.
+- Test empty lists, false, zero and empty strings as valid final values, plus
+  contact extraction with missing optional fields, guided streams and budgets.
+  Native tests inspect the real Foundation Models root/required schemas.
+- Update existing Dartdoc, guides, AI integration questions and document example.
+  JSON Schema import, null schemas, unions and generated schemas remain planned.
+
+## 1.0.0
+
+Prepared locally; not published. This is the first stable API version and the
+F01 delivery. Existing 0.5.0 Dart constructors and privacy defaults remain valid.
+
+- Add inclusive `minimum` and `maximum` to integer/number properties, native
+  Swift regex `pattern` to strings, and `minItems`, `maxItems` or `exactItems`
+  to arrays. Constraints apply to nested guided output and tool parameter schemas.
+- Validate finite, ordered bounds and non-negative counts in Dart, including
+  const values in release mode. Reject invalid native types, booleans used as
+  numeric constraints, unsupported definitions and malformed Swift patterns with
+  precise schema paths. Constraints are never silently dropped.
+- Reject invalid stream constraints before admission so an idle session is not
+  needlessly cancelled or made unusable.
+- Preserve unbounded schema transport and existing root/required-field behavior.
+  `SchemaProperty` keeps its public name and export while moving to its own file.
+- Document the complete Dart API and update the existing guides with constraints,
+  integration questions, version planning and explicit current/future boundaries.
+- Add daily-use triage/invoice scenarios, production Swift mapper tests and
+  separate Dart/native-schema coverage gates. Keep the existing library-wide
+  lifecycle, tools, Speech and release-guard regression tests.
+
+### Compatibility
+
+F01 is additive to 0.5.0. No API removal or required dependency is introduced.
+Generation still needs iOS/iPadOS 26 or macOS 26 and native model availability;
+deployment remains iOS 15/macOS 12. No code generator is required or included.
+The 1.x line will preserve compatible API changes in minor releases and move
+breaking changes to a new major. See [Dart versioning](https://dart.dev/tools/pub/versioning).
+
+### Planned feature versions
+
+Each row records one completed implementation objective. F01–F10 are combined
+in the core 1.9.0 delivery; targets 1.0.0–1.8.0 were not published individually.
+The optional generator 1.8.0 has a separate publication flow. Targets are not a promise
+to place breaking behavior in a minor release. If a contract must break, its
+version and migration instructions will be revised to the next major.
+
+| Version target | Feature | Status |
+| --- | --- | --- |
+| 1.0.0 | F01: numeric bounds, patterns and array lengths | Included in core 1.9.0 |
+| 1.1.0 | F02: additional roots and nested required fields | Included in core 1.9.0 |
+| 1.2.0 | F03: explicit JSON Schema subset import | Included in core 1.9.0 |
+| 1.3.0 | F04: generic final-value decoder with response metadata | Included in core 1.9.0 |
+| 1.4.0 | F05: structured partials and property order | Included in core 1.9.0 |
+| 1.5.0 | F06: unions, null and local references | Included in core 1.9.0 |
+| 1.6.0 | F07: export and restore session history | Included in core 1.9.0 |
+| 1.7.0 | F08: observable availability and text-model languages | Included in core 1.9.0 |
+| 1.8.0 | F09: separate optional Dart generator | Included in core 1.9.0 |
+| 1.9.0 | F10: optional ecosystem adapters and stream conveniences | Included in core 1.9.0 |
+
 ## 0.5.0
 
 - Add macOS registration and shared Darwin Swift sources for CocoaPods and Swift

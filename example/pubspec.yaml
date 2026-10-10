@@ -13,6 +13,8 @@ dependencies:
     sdk: flutter
 
 dev_dependencies:
+  build_runner: ^2.16.2
+  cupertino_fundations_models_generator: ^1.8.0
   flutter_lints: ^6.0.0
 
 flutter:

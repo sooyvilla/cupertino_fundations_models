@@ -1,7 +1,16 @@
 import 'generation.dart';
 
 /// File category requested from the native Apple file picker.
-enum FoundationModelsFileKind { any, image, audio, text }
+enum FoundationModelsFileKind {
+  /// Allows any file category supported by the native picker.
+  any,
+  /// Requests the native image filter.
+  image,
+  /// Requests the native audio filter.
+  audio,
+  /// Requests supported text documents, including text PDFs.
+  text,
+}
 
 /// File selected through the native Apple file picker.
 final class PickedFoundationModelsFile {
@@ -32,7 +41,7 @@ final class PickedFoundationModelsFile {
   /// MIME type reported for the file, when available.
   final String? mimeType;
 
-  /// File category inferred or requested for the picker result.
+  /// Picker filter requested by the app; this is not an inferred content type.
   final FoundationModelsFileKind kind;
 
   /// Converts this file into a prompt attachment.

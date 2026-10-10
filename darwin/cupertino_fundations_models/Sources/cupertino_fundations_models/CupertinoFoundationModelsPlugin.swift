@@ -20,6 +20,7 @@ public final class CupertinoFoundationModelsPlugin: NSObject, @preconcurrency Fl
     private var transcriptionTasks: [String: TrackedTask] = [:]
     private var cancellationTasks: [String: TrackedTask] = [:]
     private var disposingSessionIds: Set<String> = []
+    private var availabilityMonitors: [String: Any] = [:]
 
     private init(registry: SessionRegistry) {
         self.registry = registry
@@ -60,6 +61,39 @@ public final class CupertinoFoundationModelsPlugin: NSObject, @preconcurrency Fl
                 let languages: [[String: Any]] = await self?.availabilityService.supportedLanguages() ?? []
                 self?.complete(result, languages)
             }
+        case "getTextModelLanguages":
+            do {
+                result(try availabilityService.textModelLanguages(arguments: MessageCodec.dictionary(from: call.arguments)))
+            } catch { result(ErrorMapper.flutterError(from: error)) }
+        case "startAvailabilityWatch":
+            let arguments = MessageCodec.dictionary(from: call.arguments)
+            guard let id = arguments["watchId"] as? String, !id.isEmpty, availabilityMonitors[id] == nil else {
+                result(ErrorMapper.flutterError(from: NativeSessionError.invalidRequest("A distinct watch ID is required.")))
+                return
+            }
+            if #available(iOS 26.0, macOS 26.0, *), AvailabilityService.textModelMonitoringAvailable {
+                do {
+                    let monitor = try availabilityService.monitor(arguments: arguments) { [weak self] snapshot in
+                        self?.methodChannel?.invokeMethod("availabilityEvent", arguments: ["watchId": id, "availability": snapshot])
+                    }
+                    availabilityMonitors[id] = monitor
+                    monitor.start()
+                    result(nil)
+                } catch { result(ErrorMapper.flutterError(from: error)) }
+            } else {
+                methodChannel?.invokeMethod("availabilityEvent", arguments: ["watchId": id,
+                    "availability": availabilityService.availability(arguments: ["mode": "local", "cloudPolicy": "never"]),
+                    "isTerminal": true])
+                result(nil)
+            }
+        case "stopAvailabilityWatch":
+            let arguments = MessageCodec.dictionary(from: call.arguments)
+            if let id = arguments["watchId"] as? String {
+                if #available(iOS 26.0, macOS 26.0, *), let monitor = availabilityMonitors.removeValue(forKey: id) as? AvailabilityMonitor {
+                    monitor.stop()
+                }
+            }
+            result(nil)
         case "getDiagnostics":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)
             result(availabilityService.diagnostics(arguments: arguments))
@@ -102,6 +136,12 @@ public final class CupertinoFoundationModelsPlugin: NSObject, @preconcurrency Fl
             runSessionRequest(arguments: arguments, result: result) { registry, arguments in
                 let response: FlutterChannelValue<[String: Any]> = try await registry.measureTokenBudget(arguments: arguments)
                 return FlutterChannelValue(response.value as Any?)
+            }
+        case "exportSessionHistory":
+            let arguments = MessageCodec.dictionary(from: call.arguments)
+            runSessionRequest(arguments: arguments, result: result) { registry, message in
+                let history = try await registry.exportHistory(arguments: message)
+                return FlutterChannelValue(history.value as Any?)
             }
         case "pickFile":
             let arguments: [String: Any] = MessageCodec.dictionary(from: call.arguments)

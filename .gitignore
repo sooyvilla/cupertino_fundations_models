@@ -29,12 +29,15 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+**/coverage/
 
 # Swift Package Manager user state (Xcode schemes, breakpoints)
 **/.swiftpm/
+**/.build/
 
 /_site/
 doc/site/_site/
 doc/site/.jekyll-cache/
 doc/site/_includes/source/
 doc/site/markdown/
+packages/**/pubspec.lock

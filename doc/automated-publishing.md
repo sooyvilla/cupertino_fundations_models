@@ -98,11 +98,47 @@ Terminar todo el trabajo antes de subirlo. Preparar la nueva versión y mantener
 
 El job `verify` usa Flutter `3.47.5`, ejecuta `flutter analyze --no-pub`, las pruebas Python de los controles de entrega y `flutter test --coverage`. `.github/scripts/check_coverage.py` exige exactamente 100% de líneas ejecutables Dart bajo `lib/`, rechaza informes vacíos, inconsistentes o sin archivos ejecutables y conserva el LCOV como artifact. Los archivos con solo exports o firmas abstractas no tienen líneas ejecutables; no se excluye código ejecutable para alcanzar el umbral. La cobertura no mide Swift ni ramas.
 
-`apple-builds` depende de `verify` y compila el ejemplo iOS Release sin firma y macOS Debug en `macos-latest`. La versión de Xcode corresponde a la imagen del runner; la validación local usa Xcode 27.2 beta para incluir las APIs nuevas. Estos builds no ejecutan apps ni prueban permisos, assets, modelos o PCC firmado.
+F09 amplía verify con tests del paquete compañero y su propio gate de líneas completas,
+usando su cwd y cobertura LCOV, y generación explícita del ejemplo antes de la suite
+Flutter. Los outputs comprobados/versionados permiten probar su compilación y
+comportamiento; no se excluye código ejecutable del núcleo ni del generador. El
+núcleo excluye packages/ de su archive y conserva sólo Flutter como dependencia
+runtime. El generador 1.8.0 debe publicarse separadamente después del núcleo
+compatible; este workflow no lo publica ni autoriza esa entrega. Los overrides
+locales no entran en archives. Los cambios del workflow siguen preparados localmente,
+sin ejecución en GitHub durante esta tarea.
+
+F10 prepara el núcleo 1.9.0 con adapters opcionales; el compañero permanece en
+1.8.0 y acepta este núcleo mediante ^1.8.0. No añade jobs, frameworks ni
+dependencias runtime. Los tests locales de adapters entran en la suite/gate del
+núcleo existente. Esta preparación no ejecuta el pipeline ni autoriza publicar.
+
+El job Apple fija `DEVELOPER_DIR` a Xcode 26.6 en la imagen macos-26. Este SDK
+incluye Swift 6.3 y el null schema de OS26.4: su guard y los tests usan compiler
+6.3, separado de las APIs OS27 que siguen protegidas por compiler6.4. Depender
+del Xcode default anterior omitía las pruebas de null y bloqueaba el gate;
+actualizaciones futuras del default también podrían compilar APIs OS27 en un
+host OS26 que no las puede ejercitar. El pin hace explícito este alcance de CI.
+Las firmas/SDK se contrastaron con
+[Xcode26.4](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_4-release-notes),
+[Xcode26.6](https://developer.apple.com/documentation/xcode-release-notes/xcode-26_6-release-notes)
+y la [imagen oficial](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-Readme.md).
+Localmente sólo está instalado Xcode27.2 beta; el job fijado no se ejecutó aquí
+ni en GitHub, y la cobertura local de contratos OS27 no se atribuye al runner OS26.
+
+`apple-builds` depende de `verify` y usa `macos-26`. Primero ejecuta `swift test --package-path darwin --enable-code-coverage` sobre los archivos de producción de los mappers de esquemas/snapshots, el codec de historial, el monitor de disponibilidad y el mapper de idiomas; `.github/scripts/check_schema_coverage.py` exige 100% de líneas, funciones y regiones de `SchemaMapper.swift`, `StructuredSnapshotMapper.swift`, `SessionHistoryCodec.swift`, `AvailabilityMonitor.swift` y `TextModelLanguageMapper.swift` en el informe LLVM. Este alcance es distinto de la cobertura Dart y no incluye todos los servicios Swift ni respuestas de un modelo real. Después compila iOS Release sin firma y macOS Debug. Los [labels oficiales](https://github.com/actions/runner-images#available-images) se consultaron al preparar F01. Estos pasos no ejecutan apps ni prueban permisos, assets, modelos o PCC firmado. El workflow modificado no se ha ejecutado en GitHub durante esta tarea.
 
 `prepare` depende de ambos jobs y solo corre en pushes del repositorio principal. Los PR hacia `main` ejecutan los controles con permisos de lectura y no acceden al token de la App ni a OIDC. Los pushes a `main` y los tags vuelven a comprobar el commit recibido; cualquier fallo bloquea los jobs de entrega. El workflow oficial de Dart finalmente ejecuta `dart pub publish --dry-run` y publica dentro de `pub.dev` con OIDC.
 
 ## Si una publicación falla
+
+El compañero se prepara fuera del Git root mediante
+`.github/scripts/stage_generator_package.py`; sólo copia archivos públicos y
+biblioteca Dart, nunca overrides de origen, tests o datos privados. La exclusión
+packages/ del núcleo también oculta el pubspec del compañero si se publica desde
+su directorio anidado. `--local-core` sirve para su dry-run previo y produce un
+hint por override; para su entrega separada después del núcleo, omitir ese flag.
+Validar el archive y publicar ese compañero requieren su autorización propia.
 
 Abrir **Actions → Publish to pub.dev** y revisar el run del **tag**, además del run de `main`. Corregir una configuración externa o un problema temporal y volver a ejecutar los jobs fallidos del run original del tag. Ese run conserva el evento necesario para OIDC.
 

@@ -6,7 +6,10 @@ import 'generation_diagnostic_event.dart';
 import 'generation_termination.dart';
 import 'generation_trace.dart';
 
+/// Internal lifecycle that owns stream deadlines, admission and native cleanup.
+/// Applications receive its stream through an owned Foundation Model session.
 final class GenerationStream {
+  /// Connects request callbacks without starting native work before subscription.
   GenerationStream({
     required this.options,
     required this.trace,
@@ -17,12 +20,19 @@ final class GenerationStream {
     required this.source,
   });
 
+  /// Request deadlines and generation configuration.
   final GenerationOptions options;
+  /// Diagnostic timing state for this request.
   final GenerationTrace trace;
+  /// Validates and admits the request into its single-flight session.
   final void Function() begin;
+  /// Releases admission after terminal cleanup.
   final void Function() end;
+  /// Cancels matching native work and awaits acknowledgement.
   final Future<void> Function() cancelNative;
+  /// Marks the session unusable when cleanup cannot be confirmed.
   final void Function() cancellationFailed;
+  /// Creates the native event source after successful admission.
   final Stream<SessionEvent> Function() source;
   StreamSubscription<SessionEvent>? _subscription;
   Timer? _activityTimer;
@@ -34,6 +44,7 @@ final class GenerationStream {
   late final StreamController<SessionEvent> _controller =
       StreamController<SessionEvent>(onListen: _listen, onCancel: _cancel);
 
+  /// Single-subscription stream with one terminal result or an explicit failure.
   Stream<SessionEvent> get stream => _controller.stream;
 
   void _listen() {
@@ -158,7 +169,8 @@ final class GenerationStream {
   }
 
   void _onSourceError(Object error, StackTrace stack) {
-    _fail(error, stack);
+    _fail(error, stack, cancel: error is FoundationModelsException &&
+        error.details['decodingStage'] == 'structuredSnapshot');
   }
 
   void _fail(Object error, StackTrace stack, {bool cancel = false}) {

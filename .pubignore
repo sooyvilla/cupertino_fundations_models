@@ -4,6 +4,9 @@ AGENTS.md
 build/
 coverage/
 test/
+darwin/Package.swift
+darwin/Tests/
+darwin/.build/
 .github/
 doc/site/
 doc/discovery.md
@@ -11,3 +14,5 @@ doc/promotion.md
 doc/promotion/
 doc/repository-metadata.json
 doc/automated-publishing.md
+packages/
+example/pubspec_overrides.yaml

@@ -15,6 +15,21 @@ model, so you do not need to bundle your own weights. The package also includes
 file and live speech-to-text through Apple **Speech**, supports CocoaPods and
 Swift Package Manager, and adds no third-party runtime dependencies.
 
+Version **1.9.0** implements F01 value constraints, F02
+array/scalar roots and nested required fields, F03 JSON Schema subset import and
+F04 explicit decoding with the original response retained, and F05 opt-in native
+structured snapshots plus property order, and F06 explicit null, anyOf and local
+references with response presence kept separate. F07 adds explicit native history
+export and restoration without replaying past tools. F08 adds optional local
+availability observation and independent text-model language queries. F09 adds a
+separate optional Dart generator for object schemas, final decoders and typed
+partial views. F10 adds optional app adapters and lossless stream updates. Core
+1.9.0 includes the complete series. The compatible generator 1.8.0 is released
+separately; it is available in the repository and is not published by the core
+workflow. Version 0.5.0 does not include those new options.
+See the [release record](CHANGELOG.md#planned-feature-versions) for F01–F10 and
+[optional integration contracts](doc/usage.md#optional-adapters-and-stream-updates).
+
 [Documentation](https://sooyvilla.github.io/cupertino_fundations_models/) ·
 [Start with local AI on iOS](doc/local-ai-ios.md) ·
 [Español](doc/README.es.md) · [Apple platforms and macOS setup](doc/apple-platforms.md) ·
@@ -33,7 +48,15 @@ available; initial downloads and optional cloud/Speech modes can need network.
 | Need | What this package provides |
 | --- | --- |
 | Local text features | Dart APIs backed directly by native Foundation Models sessions. |
-| Extract fields into JSON | `StructuredSchema`, guided generation and decoded final output. |
+| Extract fields into JSON | `StructuredSchema`, guided generation, optional value constraints and decoded final output. |
+| Reuse existing JSON Schema definitions | `StructuredSchema.fromJsonSchema` imports an explicit closed-object subset without code generation. |
+| Generate companions from Dart classes | Optional development-only generator emits the same runtime schemas, final decoders and typed partial views. |
+| Convert final output to a Dart type | `generateStructuredDecoded<T>` and `ModelResponse.decodeStructured<T>` retain the complete original response. |
+| Display fields while guided output arrives | Opt-in immutable `TextSnapshotEvent.structuredSnapshot` and per-object generation order. |
+| Keep local readiness visible | Optional `watchAvailability`, native Observation or explicit polling, foreground refresh and cleanup. |
+| Choose text-only languages | `getTextModelLanguages(useCase: ...)` queries the local variant independently of Speech. |
+| Continue an Apple session later | Explicit immutable `SessionHistory`, JSON export and creation of a compatible new session. |
+| Integrate an app backend or delta consumer | Optional adapters retain original events; append/replacement updates preserve revised text and final reconciliation. |
 | Streaming with a defined lifecycle | Cumulative snapshots, terminal results, cancellation and session disposal. |
 | App-defined tool calling | Typed tool registration; your app owns argument validation and authorization. |
 | A clear local/cloud boundary | Explicit local mode and `CloudPolicy.never`; PCC requires a separate opt-in. |
@@ -50,18 +73,30 @@ changes. Version 0.3.0 removed hybrid routing; read the
 
 ## Quick start
 
-Use Flutter 3.41+ and Dart 3.11+. Add:
+Use Flutter 3.41+ and Dart 3.11+. To use the published package, add:
 
 ```sh
 flutter pub add cupertino_fundations_models
 ```
 
-Or declare the dependency directly:
+When version 1.9.0 is available on pub.dev, use:
 
 ```yaml
 dependencies:
-  cupertino_fundations_models: ^0.5.0
+  cupertino_fundations_models: ^1.9.0
 ```
+
+To use F01–F10 before this version reaches pub.dev, use this checkout as a local
+path dependency. Adjust the path to its location relative to your app:
+
+```yaml
+dependencies:
+  cupertino_fundations_models:
+    path: ../cupertino_fundations_models
+```
+
+After 1.9.0 is published, its dependency constraint will be `^1.9.0`.
+Existing `^0.5.0` consumers do not automatically move to the major release.
 
 The [example app](example/pubspec.yaml) uses a local path dependency to run
 against the checked-out source.
@@ -110,6 +145,124 @@ Use `session.streamStructured(prompt: ..., schema: ...)` for native schema-guide
 streaming on local or explicitly authorized PCC sessions. Partial JSON snapshots
 and decoded completion results remain separate.
 
+In the 1.9.0 API, constraints can express the values the app expects:
+
+```dart
+const schema = StructuredSchema.object(
+  name: 'SupportTriage',
+  requiredProperties: ['severity', 'actions'],
+  properties: {
+    'severity': SchemaProperty.integer(minimum: 1, maximum: 5),
+    'ticket': SchemaProperty.string(pattern: r'^SUP-[0-9]{4}$'),
+    'actions': SchemaProperty.array(
+      items: SchemaProperty.string(),
+      exactItems: 3,
+    ),
+  },
+);
+```
+
+Use inclusive `minimum`/`maximum` bounds for numeric properties, a Swift regex
+`pattern` for strings, and `minItems`/`maxItems` or `exactItems` for arrays.
+These constraints apply to native generation, including nested properties and
+tool parameter schemas. Invalid Dart bounds fail before request admission;
+integer limits on number schemas must retain their exact value as native Double.
+Root and unnamed nested descriptions are preserved as native guidance.
+Native regex/schema errors identify their path. Guided data still needs app
+validation. See [constraints and examples](doc/usage.md#structured-generation).
+
+F02 also supports root arrays, strings, integers, numbers and booleans. For a
+list of contacts, each object can require its name and omit an unavailable email:
+
+```dart
+const contacts = StructuredSchema.array(
+  name: 'Contacts',
+  maxItems: 10,
+  items: SchemaProperty.object(
+    requiredProperties: ['name'],
+    properties: {
+      'name': SchemaProperty.string(),
+      'email': SchemaProperty.string(),
+    },
+  ),
+);
+```
+
+Use `.string`, `.integer`, `.number` or `.boolean` for a single guided value.
+Final `structuredValue` preserves `false`, zero, an empty string or an empty
+list. For nested objects, omitted `requiredProperties` keeps every child required;
+`[]` makes every child optional. Root-object defaults remain unchanged. Tool
+parameter schemas still require an object root.
+
+F03 also accepts existing schema definitions as data:
+
+```dart
+final contact = StructuredSchema.fromJsonSchema({
+  'title': 'Contact',
+  'type': 'object',
+  'additionalProperties': false,
+  'properties': {
+    'name': {'type': 'string'},
+    'email': {'type': 'string'},
+  },
+  'required': ['name'],
+});
+```
+
+Use this schema with the same generation, streaming and budget APIs. Every
+imported object must explicitly use `additionalProperties: false`; omitted
+JSON `required` makes all fields optional at that level. Unknown keywords fail
+with an input path. Patterns require explicit `allowSwiftPatterns: true` because
+native Swift syntax can differ from the JSON standard. See the
+[supported subset and error contract](doc/usage.md#import-json-schema-definitions).
+Manual constructors remain available. F09 offers a separate optional generator;
+see [generation setup and profile](doc/usage.md#optional-dart-generation).
+
+F04 converts the final guided value with your existing app decoder:
+
+```dart
+final result = await models.generateStructuredDecoded<(String, String?)>(
+  prompt: const Prompt.text('Morgan supplied a name only.'),
+  schema: contact,
+  decoder: (value) {
+    final fields = value! as Map<String, Object?>;
+    return (fields['name']! as String, fields['email'] as String?);
+  },
+  mode: ModelMode.local,
+  cloudPolicy: CloudPolicy.never,
+);
+final (name, email) = result.value;
+final originalResponse = result.response;
+```
+
+The same helper exists on an owned session. To convert an existing final response,
+including `CompletionEvent.response`, use `response.decodeStructured<T>(decoder: ...)`.
+The original text, mode, metadata, usage and termination remain available.
+Decoder errors use `StructuredDecodingException` with the original response,
+cause and stack; native schema/JSON failures retain their existing errors.
+No partial snapshots are decoded or requests retried. See the
+[final-value contract](doc/usage.md#decode-final-values-to-dart-types).
+
+F05 lets guided streams opt into `GenerationOptions(includeStructuredSnapshots: true)`.
+Each `TextSnapshotEvent` may carry an immutable native projection, observed and
+complete JSON Pointer paths, and a root completeness flag. Incomplete leaves
+are withheld; replace the previous snapshot and decode final app models only
+from `CompletionEvent.response`. Even a complete snapshot is not a terminal event.
+
+Object constructors accept a full `propertyOrder`; omission retains alphabetical
+order. For imported definitions, use the separate `propertyOrders` option rather
+than adding a custom JSON keyword. See [structured progress and order](doc/usage.md#structured-snapshots-and-property-order).
+
+F06 adds `nullValue`, `anyOf` and local `reference` constructors on roots and
+properties, with a root `definitions` registry. JSON import accepts the same
+forms through `type: null`, `anyOf`, root `$defs` and local `$ref`. Optional
+absence remains different from a present null value. Null support requires
+OS 26.4 and a compatible SDK; references/unions retain OS 26 support.
+
+Read `response.hasStructuredValue` before treating a null root as data. With
+explicit presence, a nullable F04 decoder receives null; missing/legacy absent
+data still fails. See [graph limits, availability and presence](doc/usage.md#null-anyof-and-local-references).
+
 Use `session.measureTokenBudget` when the selected model supports token counts.
 Requests expose typed `termination`, separate first-result, idle and total
 deadlines, and optional diagnostic callbacks. Missing usage counters remain
@@ -119,9 +272,13 @@ you whether an answer was truncated. Schema errors identify the failing path.
 See [complete contracts](doc/usage.md), [document extraction](doc/document-extraction.md)
 and [PCC eligibility and permission](doc/private-cloud-compute.md). The examples
 in this documentation update were reviewed against the source but were not
-run on a device. The iOS and macOS examples compile with Xcode 27.2 beta.
-Dart tests reach 100% executable line coverage; this does not measure Swift
-coverage or establish device permissions, model readiness or entitled PCC generation.
+run on a device. The 0.5.0 iOS and macOS examples were compiled with Xcode
+27.2 beta; this F01–F10 iteration runs Dart tests and native helper contract tests
+without rebuilding or launching either example host.
+Dart tests cover every executable library line. Dedicated Swift tests exercise
+the production schema/snapshot mappers, history codec, availability monitor and
+text-language mapper against Apple frameworks, requiring full helper coverage. These are different scopes: they do not establish model quality,
+coverage of every native service, device permissions or entitled PCC generation.
 
 ## Choose a bounded task
 
@@ -145,7 +302,10 @@ need an application-level strategy. See [API/local integration](doc/app-owned-ro
 | --- | --- | --- |
 | Text, sessions, streaming, tools, structured output | iOS/iPadOS 26, macOS 26 | Native Foundation Models with runtime availability checks. |
 | Content tagging and prewarm | iOS/iPadOS 26, macOS 26 | Explicit session use case and `prewarm()`. |
+| Local readiness observation and text-model languages | iOS/iPadOS 26, macOS 26 | Observation has no transition-cadence guarantee; polling is explicit. No PCC or Speech request. |
+| Native session history export/restore | iOS/iPadOS 26, macOS 26 | Strict same-platform/OS/SDK profile; PCC still requires OS 27 and host approval. |
 | Local prompt/instructions/tools/schema/transcript token counts | iOS/iPadOS 26.4, macOS 26.4 | Requires this package to be built with Xcode 27+. |
+| Explicit null schemas | iOS/iPadOS 26.4, macOS 26.4 | Xcode 26.4+ / Swift 6.3+ SDK build; anyOf/local refs retain OS 26 support. |
 | Usage, reasoning options, explicit tool mode, transcript error policy | iOS/iPadOS 27, macOS 27 | SDK and selected-model support also required. |
 | Private Cloud Compute (PCC) | iOS/iPadOS 27, macOS 27 | Explicit policy, host opt-in, Apple's managed entitlement, availability, network and quota. |
 | Text/JSON/CSV/Markdown and text PDFs | iOS/iPadOS 26, macOS 26 | Extracted locally and inserted as text. |
@@ -169,10 +329,119 @@ entries. This package does not expose those additions, Dynamic Profiles,
 arbitrary model executors or a Photos picker. The previously crashing native
 paths remain disabled pending device evidence.
 
+## Optional app adapters and stream updates
+
+F10 in local 1.9.0 uses a separate import, without adding framework/provider
+runtime dependencies:
+
+```dart
+import 'package:cupertino_fundations_models/cupertino_fundations_models_adapters.dart';
+
+final adapter = FoundationModelsAdapter(models: models);
+var text = '';
+final subscription = adapter.stream(prompt: Prompt.text('Summarize supplied text.')).listen((frame) {
+  if (frame.textUpdate case final update?) text = update.applyTo(text);
+  if (frame.original case CompletionEvent(:final response)) useFinalResponse(response);
+}, onError: showRequestError);
+await subscription.cancel();
+```
+
+Each owned request creates/disposes its own Apple session; existing sessions can
+use `session.stream(...).adaptEvents()` with borrowed ownership. Original tools,
+snapshots, final responses, nullable counters and failure details remain available.
+A revised/shortened snapshot produces replacement, never a false suffix. Consumers
+that only accept append can choose `allowReplacements: false` and fail explicitly.
+
+The app chooses external frameworks/providers, schema translation, credentials,
+consent and history. Genkit/LangChain recipes are contract guidance rather than
+bundled provider plugins. See [lifecycle, metadata and integration recipes](doc/usage.md#optional-adapters-and-stream-updates).
+
+## Optional Dart generation
+
+F09 in local 1.9.0 adds `cupertino_fundations_models_generator` as a separate
+**dev dependency**. The core adds its own dependency-free `StructuredModel` and
+`StructuredField` annotations; it does not depend on the generator or build tools.
+Manual constructors and JSON Schema import remain available.
+
+Annotate one concrete model per source library under `lib/`, with public final
+fields and a public generative constructor whose named parameters match them.
+Explicitly run `dart run build_runner build` to create `model.structured.dart`.
+Import that companion and use `ModelCodec.schema`, `ModelCodec.decode` or
+`ModelPartial.fromSnapshot(snapshot)`. No `part` directive or Swift generation is
+needed. Each partial field exposes presence, completeness and safe value separately.
+
+The initial profile covers primitives, enums, lists, annotated nested models and
+nullable choices; unsupported forms fail with source diagnostics. Generated final
+conversion checks structure, not native guides or business truth. Generation does
+not issue model requests, acquire assets or change local/PCC policy. See
+[local installation, full profile and examples](doc/usage.md#optional-dart-generation).
+An integrating coding agent asks once which definition route the user wants when
+that choice is missing; it respects a previous manual/generated choice.
+
+## Observe local availability and query text languages
+
+F08 in local 1.9.0 keeps a local readiness display current without issuing a
+model request:
+
+```dart
+final languages = await models.getTextModelLanguages();
+final subscription = models.watchAvailability(localeIdentifier: 'es_CO').listen(
+  (availability) => updateReadiness(availability),
+  onError: (Object error) => showAvailabilityError(error),
+);
+// When the feature owner finishes:
+await subscription.cancel();
+```
+
+Use `useCase: FoundationModelsUseCase.contentTagging` for that local variant.
+`watchAvailability` emits the initial active snapshot and meaningful changes,
+stops work while paused or outside foreground, and rechecks on resume. Native
+Observation is the default; `pollingInterval: Duration(seconds: 15)` explicitly
+selects bounded polling instead. Neither mode requests generation, model downloads,
+Speech permissions or PCC. Readiness can change before a request.
+
+`TextModelLanguage` has native identifiers and localized labels, with no Speech
+asset flag. Advertised languages are not every regional locale accepted by the
+model, nor proof that it is ready. `getSupportedLanguages()` keeps its existing
+model/Speech intersection for apps using dictation. See [full lifecycle, errors and
+language contract](doc/usage.md#observable-local-availability-and-text-languages).
+
+## Export and restore session history
+
+F07 in local 1.9.0 can retain native conversation context explicitly:
+
+```dart
+final snapshot = await session.exportHistory();
+final json = snapshot.toJson();
+await session.dispose();
+final restored = await models.restoreSession(
+  history: SessionHistory.fromJson(json),
+  tools: currentTools,
+);
+try {
+  final response = await restored.respond(Prompt.text('Continue our conversation.'));
+} finally {
+  await restored.dispose();
+}
+```
+
+Export requires an idle session. The immutable descriptors are inspectable; the
+native Codable archive also retains SDK options, formats and metadata. Restoring
+creates a new session without invoking historical tool callbacks. Register current
+implementations with the same tool definitions; PCC needs explicit cloud permission.
+The app owns storage, account/thread selection, encryption and retention.
+
+The initial profile requires the same platform, exact OS version and known build
+SDK identifier, route, variant, locale and tool registrations. It accepts bounded
+text/complete structured content, completed tools and OS 27 reasoning; it rejects
+attachments, binary data and incomplete/pending content. It does not support editing
+or replaying descriptors as a transcript. See [limits, errors and ownership](doc/usage.md#export-and-restore-session-history).
+
 ## Sessions and streaming
 
 Use `models.respond()` for independent tasks. Reuse a session only when prior
-turns are needed; its transcript lasts until disposal and is not persisted.
+turns are needed; its transcript lasts until disposal. F07 allows explicit export
+and restoration; the package never persists it automatically.
 
 ```dart
 final models = CupertinoFoundationModels();

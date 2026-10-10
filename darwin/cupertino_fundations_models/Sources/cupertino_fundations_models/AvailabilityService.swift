@@ -8,6 +8,29 @@ import Speech
 
 @MainActor
 final class AvailabilityService {
+    nonisolated static var textModelMonitoringAvailable: Bool {
+        #if canImport(FoundationModels) && canImport(Observation)
+        if #available(iOS 26.0, macOS 26.0, *) { return true }
+        #endif
+        return false
+    }
+    #if canImport(FoundationModels)
+    @available(iOS 26.0, macOS 26.0, *)
+    nonisolated static var explicitNullSchema: DynamicGenerationSchema? {
+        #if compiler(>=6.3)
+        if #available(iOS 26.4, macOS 26.4, *) { return .null }
+        #endif
+        return nil
+    }
+    #endif
+
+    nonisolated static var explicitNullSchemasAvailable: Bool {
+        #if canImport(FoundationModels) && compiler(>=6.3)
+        if #available(iOS 26.4, macOS 26.4, *) { return true }
+        #endif
+        return false
+    }
+
     func capabilities() -> [String: Any] {
         let majorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
         var capabilities: [String] = []
@@ -75,6 +98,15 @@ final class AvailabilityService {
             "supportedLanguages": supportedLanguages,
             "details": [
                 "foundationModelsRuntime": foundationModelsRuntime,
+                "structuredSnapshots": foundationModelsRuntime,
+                "explicitPropertyOrder": foundationModelsRuntime,
+                "schemaAnyOf": foundationModelsRuntime,
+                "schemaReferences": foundationModelsRuntime,
+                "sessionHistory": foundationModelsRuntime,
+                "availabilityObservation": Self.textModelMonitoringAvailable,
+                "availabilityPolling": Self.textModelMonitoringAvailable,
+                "textModelLanguages": foundationModelsRuntime,
+                "explicitNullSchemas": Self.explicitNullSchemasAvailable,
                 "ios27PrimaryRuntime": ApplePlatform.name == "iOS" && majorVersion >= 27,
                 "macos27PrimaryRuntime": ApplePlatform.name == "macOS" && majorVersion >= 27,
                 "appleDynamicProfilesSdkAvailable": dynamicProfilesSdkAvailable,
@@ -84,6 +116,46 @@ final class AvailabilityService {
                 "imageFallback": "visionPreprocessing"
             ]
         ]
+    }
+
+    func textModelLanguages(arguments: [String: Any]) throws -> [[String: Any]] {
+        let useCase = try textUseCase(arguments)
+        #if canImport(FoundationModels)
+        if #available(iOS 26.0, macOS 26.0, *) {
+            let model = useCase == "contentTagging" ? SystemLanguageModel(useCase: .contentTagging) : SystemLanguageModel.default
+            return TextModelLanguageMapper.rows(model.supportedLanguages)
+        }
+        #endif
+        return []
+    }
+
+    @available(iOS 26.0, macOS 26.0, *)
+    func monitor(arguments: [String: Any], emit: @escaping ([String: Any]) -> Void) throws -> AvailabilityMonitor {
+        let useCase = try textUseCase(arguments)
+        let interval: TimeInterval?
+        if let raw = arguments["pollingIntervalMs"] {
+            guard let number = raw as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+                  number.doubleValue.isFinite, number.doubleValue >= 1000, number.doubleValue <= 300_000 else {
+                throw NativeSessionError.invalidRequest("Polling requires one second through five minutes.")
+            }
+            interval = number.doubleValue / 1000
+        } else { interval = nil }
+        #if canImport(FoundationModels)
+        let model = useCase == "contentTagging" ? SystemLanguageModel(useCase: .contentTagging) : SystemLanguageModel.default
+        return AvailabilityMonitor(read: { [self] in
+            localAvailability(model: model, localeIdentifier: arguments["localeIdentifier"] as? String)
+        }, emit: emit, pollingInterval: interval)
+        #else
+        throw NativeSessionError.foundationModelsUnavailable
+        #endif
+    }
+
+    private func textUseCase(_ arguments: [String: Any]) throws -> String {
+        let value = arguments["useCase"] as? String ?? "general"
+        guard ["general", "contentTagging"].contains(value) else {
+            throw NativeSessionError.invalidRequest("Unknown local text-model variant.")
+        }
+        return value
     }
 
     func supportedLanguages() async -> [[String: Any]] {
@@ -282,11 +354,25 @@ final class AvailabilityService {
     }
 
     private func localAvailability(mode: String, localeIdentifier: String? = nil) -> [String: Any] {
-        let majorVersion: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
-
         #if canImport(FoundationModels)
         if #available(iOS 26.0, macOS 26.0, *) {
             let model: SystemLanguageModel = SystemLanguageModel.default
+            return localAvailability(model: model, localeIdentifier: localeIdentifier)
+        }
+        #endif
+
+        return unavailable(
+            mode: mode,
+            status: "unsupportedOsVersion",
+            reason: "Foundation Models is not available in the SDK used to build this app.",
+            recoverySuggestion: "Build with an Xcode SDK that includes Foundation Models and retry on \(ApplePlatform.name) 26 or later."
+        )
+    }
+
+    #if canImport(FoundationModels)
+    @available(iOS 26.0, macOS 26.0, *)
+    private func localAvailability(model: SystemLanguageModel, localeIdentifier: String?) -> [String: Any] {
+        let majorVersion = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
             switch model.availability {
             case .available:
                 if let localeIdentifier, !model.supportsLocale(Locale(identifier: localeIdentifier)) {
@@ -328,16 +414,8 @@ final class AvailabilityService {
                     recoverySuggestion: "Try again on the latest supported \(ApplePlatform.name) release."
                 )
             }
-        }
-        #endif
-
-        return unavailable(
-            mode: mode,
-            status: "unsupportedOsVersion",
-            reason: "Foundation Models is not available in the SDK used to build this app.",
-            recoverySuggestion: "Build with an Xcode SDK that includes Foundation Models and retry on \(ApplePlatform.name) 26 or later."
-        )
     }
+    #endif
 
     #if canImport(FoundationModels) && compiler(>=6.4)
     @available(iOS 27.0, macOS 27.0, *)

@@ -36,6 +36,15 @@ class CoverageGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Missing executable'):
             self.check(self.record())
 
+    def test_documented_unnamed_library_has_no_executable_lines(self):
+        (self.root / 'lib/package.dart').write_text("/// Package documentation.\nlibrary;\nexport 'model.dart';\n")
+        self.assertIn('100%', self.check(self.record()))
+
+    def test_unnamed_library_does_not_hide_executable_functions(self):
+        (self.root / 'lib/package.dart').write_text('library;\nint value() => 1;')
+        with self.assertRaisesRegex(ValueError, 'Missing executable'):
+            self.check(self.record())
+
     def test_method_body_in_interface_is_executable(self):
         (self.root / 'lib/platform.dart').write_text('abstract interface class Platform { int count() => 1; }')
         with self.assertRaisesRegex(ValueError, 'Missing executable'):

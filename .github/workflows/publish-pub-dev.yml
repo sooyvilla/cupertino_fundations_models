@@ -31,6 +31,16 @@ jobs:
         run: flutter analyze --no-pub
       - name: Test release and coverage guards
         run: python3 -m unittest discover -s .github/scripts/tests -v
+      - name: Test optional Dart generator and require full coverage
+        working-directory: packages/cupertino_fundations_models_generator
+        run: |
+          flutter pub get
+          dart test --coverage coverage --reporter expanded
+          dart run coverage:format_coverage --lcov --in coverage --out coverage/lcov.info --report-on lib
+          python3 ../../.github/scripts/check_coverage.py
+      - name: Generate optional example companions
+        working-directory: example
+        run: dart run build_runner build
       - name: Run Flutter tests
         run: flutter test --coverage --reporter expanded
       - name: Require complete Dart line coverage
@@ -45,10 +55,12 @@ jobs:
           retention-days: 14
 
   apple-builds:
-    name: Compile iOS and macOS examples
+    name: Native contract tests and Apple examples
     needs: verify
-    runs-on: macos-latest
+    runs-on: macos-26
     timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
       - uses: actions/checkout@v6
         with:
@@ -58,6 +70,10 @@ jobs:
           flutter-version: '3.47.5'
           channel: stable
           cache: true
+      - name: Test production native helper contracts
+        run: swift test --package-path darwin --enable-code-coverage
+      - name: Require complete native helper coverage
+        run: python3 .github/scripts/check_schema_coverage.py
       - name: Compile iOS without signing
         working-directory: example
         run: flutter build ios --release --no-codesign

@@ -1,5 +1,16 @@
 # Local AI for Flutter iOS with Apple Foundation Models
 
+The prepared local 1.9.0 release adds guided value constraints, array/scalar
+roots, nested required-field choices, explicit JSON Schema subset import and
+app-owned final-value decoding with original response metadata, plus opt-in
+native structured snapshots, property order and bounded null/anyOf/local
+references with explicit final presence, plus explicit native session history
+export/restoration, local readiness observation and independent text-model
+languages, plus an optional separate Dart generator and app/stream adapters. This
+text-only tutorial also applies to published 0.5.0. Use a local path dependency
+for F01–F10 before publication; see [installation](../README.md#quick-start)
+and [structured contracts](usage.md#structured-generation).
+
 This guide adds a short, on-device summary to a Flutter iOS app using
 `cupertino_fundations_models`. The package connects Dart to Apple's native
 Foundation Models framework. The same APIs support rewriting, classification,
@@ -99,6 +110,11 @@ than treating every null result as the same condition.
 | Task | API | Important contract |
 | --- | --- | --- |
 | Independent text generation | `models.respond()` | Creates and disposes a session for that call. |
+| Connect an app interface or delta display | Optional F10 adapter/events import | Preserve original results, revisions, ownership and unknown usage; no provider routing. |
+| Generate object-model companions | Optional F09 dev package | Same runtime APIs; manual/imported definitions remain available. |
+| Follow changing local readiness | F08 `models.watchAvailability(...)` | Observation or explicit polling, foreground refresh and awaited cancellation; no inference. |
+| Choose text-only languages | `models.getTextModelLanguages(useCase: ...)` | Independent of Speech; advertised languages do not guarantee readiness or every regional locale. |
+| Continue a saved conversation | F07 `session.exportHistory()` / `models.restoreSession(...)` | App-owned sensitive storage and strict compatibility; no tool replay. |
 | Conversation using earlier turns | `models.createSession()` | The app owns disposal and transcript lifetime. |
 | Show incremental text | `session.stream()` | Replace displayed text with each cumulative snapshot. |
 | Extract typed JSON fields | `models.generateStructured()` | Supply a supported `StructuredSchema`; validate business meaning afterward. |

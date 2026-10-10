@@ -46,6 +46,7 @@ enable Siri AI, read the user's Siri language, or add watch/accessory apps.
 | --- | --- | --- | --- |
 | Include the plugin, select files, legacy Speech where supported | 15+ | 12+ | Host permissions and an appropriate Flutter/Xcode toolchain. |
 | Local generation, sessions, streaming, schemas, tools, prewarm | 26+ | 26+ | SDK containing Foundation Models and native model availability. |
+| Explicit null schemas | 26.4+ | 26.4+ | Xcode 26.4+ / Swift 6.3+ build; separate from OS27/token-counting compile guards. |
 | Local token counting | 26.4+ | 26.4+ | Xcode 27 / Swift 6.4 build. |
 | Usage, explicit tool/reasoning modes, PCC | 27+ | 27+ | Compatible SDK and selected-model capabilities; PCC also needs its separate host setup. |
 | Modern SpeechAnalyzer | 26+ | 26+ | Supported locale, assets and audio format. |
@@ -110,22 +111,64 @@ documents `sharedDarwinSource`; its
 [Swift Package Manager guide](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-plugin-authors)
 also supports this shared layout. No third-party runtime dependency is added.
 
+## Optional application adapters
+
+F10 changes Dart adaptation/ownership only and adds no native backend or deployment
+requirement. Apple SDK/runtime/availability/PCC constraints are preserved. Genkit/
+LangChain bindings are caller-owned recipes; an external framework's platform list
+does not extend this plugin's iOS/iPadOS/macOS model support. See
+[adapter lifecycle and mapping](usage.md#optional-adapters-and-stream-updates).
+
+## Optional development-time generation
+## Optional development-time generation
+
+F09 runs in the developer's Flutter/Dart environment using a separate companion
+package. Generated Dart consumes existing core APIs; it adds no native platform
+registration or Foundation Models capability. Runtime Apple requirements remain
+unchanged, including OS26.4 for explicit null. No Swift, entitlements, assets or
+provider routing is generated. See [generation profile](usage.md#optional-dart-generation).
+
+## Local monitoring and language queries
+
+F08 uses `SystemLanguageModel`/Observation on iOS/iPadOS 26+ and macOS 26+, with
+explicit polling as an alternative. The deployment targets remain iOS 15/macOS
+12; older OS/build SDKs return terminal unavailable readiness. Missing non-Apple
+backends return unsupportedPlatform rather than adding Android/web/desktop engines.
+No PCC or Speech access is initiated by either new API. Flutter lifecycle handling
+suspends outside resumed and rechecks on foreground; hosts can own this policy.
+See [complete monitoring contract](usage.md#observable-local-availability-and-text-languages).
+
 ## Evidence and remaining limits
 
-This change was reviewed against installed macOS SDK declarations, Flutter
-host templates and official documentation. The macOS Debug example and the
-iOS Release example without signing compile with Xcode 27.2 beta and Flutter
-3.47.5. Dart analysis passes and the unit suite reaches 100% executable line
-coverage. The publication pipeline requires these tests, the coverage gate and
-both Apple builds before creating a tag or publishing.
+The 0.5.0 platform integration was reviewed against installed macOS SDK
+declarations, Flutter templates and official documentation. Its macOS Debug and
+unsigned iOS Release examples were compiled with Xcode 27.2 beta/Flutter 3.47.5,
+and its Dart analysis/tests passed. Those are historical results for that source.
+
+The local F01–F10/1.9.0 iteration runs the full Dart suite and native helper contract
+tests. The native tests compile the production schema/snapshot mappers and history
+codec, availability monitor and text-language mapper against Apple frameworks,
+requiring full coverage of each. Observation tests use an authentic observable
+state; they do not establish live Apple readiness transitions. Codable history
+tests retain SDK options, formats, tools and supported reasoning metadata. They use authentic SDK
+null/union/reference construction as well as
+partial content and inspect the supplied property order. No current example build, app, simulator or
+device execution is claimed. The prepared CI retains Apple builds and adds these
+native contracts before any future authorized publication.
+
+F09 also runs builder contracts in the optional companion and compiles its actual
+generated Dart through Flutter tests. The companion has its own complete line gate;
+generated example files are functional fixtures outside core executable-library
+coverage. No native source or model bridge is generated.
 
 The 100% threshold covers Dart lines reported by the VM, including all
 executable libraries under `lib/`. Export directives and abstract interface
-signatures have no executable lines. It does not measure Swift coverage or
-branch coverage. No app, simulator or device was launched; permission prompts,
+signatures have no executable lines. This threshold does not measure Swift or
+Dart branch coverage. The separate native threshold covers all five helpers'
+lines/functions/regions, not the rest of the Swift services. Permission prompts,
 Speech assets, actual generation and entitled PCC still need runtime evidence.
 
 Native image attachments and previously unsafe PCC language/capability getters
-remain disabled on both builds. Image context uses the existing Vision text
+remain disabled in the shared source. Image context uses the existing Vision text
 preprocessing. Older iPhone results and successful local generation do not
 establish Mac compatibility or entitled PCC generation.

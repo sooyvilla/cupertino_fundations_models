@@ -1,0 +1,5 @@
+dependency_overrides:
+  cupertino_fundations_models:
+    path: ..
+  cupertino_fundations_models_generator:
+    path: ../packages/cupertino_fundations_models_generator

@@ -1,5 +1,144 @@
 # Questions about local AI on Apple platforms
 
+## What changes in the prepared 1.9.0 API?
+
+F01 adds inclusive numeric bounds, Swift regex patterns and array-length
+constraints to manual guided schemas. F02 adds root lists/scalars and required
+lists at each nested object. Omitted nested lists keep all fields required;
+an empty list makes them optional. F03 imports an explicit JSON Schema subset
+alongside manual constructors. F04 converts final data to an app Dart type while
+retaining the full original response. F05 adds opt-in native structured snapshots
+and per-object property order. F06 adds null, anyOf and local references,
+with final presence separate from null. F07 adds native history export and
+compatible explicit restoration without historical tool execution. F08 adds local
+availability observation and a separate text-language query. Existing unbounded 0.5.0 calls remain
+valid. This version is prepared locally and has not been published; use a path
+dependency before release. See [usage](usage.md#structured-generation) and the
+[F01–F10 release record](../CHANGELOG.md#planned-feature-versions).
+
+F09 supplies a separate optional Dart generator in local 1.9.0. An integrating
+coding agent asks once for manual/imported or generated definitions when that
+choice is missing, and preserves a prior preference.
+
+The whole-series review also preserves descriptions on every native root and
+unnamed nested schema, rejects integer bounds that would round in Double guides
+on all definition routes, and enables explicit null with Xcode26.4/Swift6.3 plus
+OS26.4. Token counting and OS27 APIs keep their separate SDK guards. See
+[constraints](usage.md#structured-generation) and
+[platform requirements](apple-platforms.md#runtime-and-build-requirements).
+
+## Can I integrate an app backend or consume text deltas?
+
+F10 in core 1.9.0 offers the optional adapters entry point. FoundationModelsAdapter
+owns a fresh session per generate/stream request; adaptEvents borrows an existing
+session stream. Both retain raw responses/events and nullable usage. TextUpdate
+represents append or replacement, including final reconciliation; strict append
+consumers reject revisions explicitly and clean up.
+
+The app owns framework bindings, providers, credentials, consent, telemetry and
+history. Genkit/LangChain recipes describe current mapping limits, with no new
+runtime dependency, routing or bundled official provider. See
+[contracts and framework decisions](usage.md#optional-adapters-and-stream-updates).
+
+## Can I generate schemas and decoders from Dart models?
+
+Yes, in local 1.9.0: add the separate generator as a dev dependency, annotate with
+StructuredModel/StructuredField, then explicitly run build_runner. Standalone
+*.structured.dart companions provide ClassCodec.schema/decode and ClassPartial.
+No part directive, generated Swift or third-party core runtime dependency is added.
+
+The bounded profile supports object models with named generative construction,
+primitives, enums, typed lists, annotated nested models and nullable choices.
+Unsupported forms fail with source diagnostics. Final decoding checks structure,
+not guidance/business truth; partial fields retain presence/completeness/value
+without final construction. See [full generation profile](usage.md#optional-dart-generation).
+
+## Can I reuse an existing JSON Schema without generating Dart?
+
+Yes, in local 1.9.0: use `StructuredSchema.fromJsonSchema`. The strict 2020-12
+generation subset accepts scalar/null types, anyOf and root-local references,
+closed objects, typed array items, string
+enums and supported bounds. Every object must explicitly set
+`additionalProperties: false`; omitted JSON `required` means no required fields
+at that level. Unknown keywords fail with an input path instead of being ignored.
+See the [complete profile](usage.md#import-json-schema-definitions).
+
+This is not a general JSON Schema data validator. Remote/recursive references,
+oneOf, type lists and format remain unsupported. String `pattern` requires
+explicit `allowSwiftPatterns: true` because the native engine uses Swift syntax.
+Choose either import or manual constructors according to the app's existing
+definitions; both produce the same native contract and add no build step.
+
+## Can I get a Dart model without losing usage and response metadata?
+
+Yes, in local 1.9.0: call `generateStructuredDecoded<T>` on the facade or session
+with your synchronous app decoder. `DecodedModelResponse<T>.value` is the domain
+value and `.response` is the original `ModelResponse`. For an existing final
+response or stream completion, call `response.decodeStructured<T>` directly.
+
+The callback receives the final object/list/scalar; false and empty values stay
+valid. Decoder throws use `StructuredDecodingException`, retaining response,
+cause and stack; native schema/JSON errors retain their existing codes. Partial
+snapshots are not decoded automatically, and no generator or retry is required.
+See [decoding and cleanup](usage.md#decode-final-values-to-dart-types).
+
+## Can I show structured fields before generation completes?
+
+Yes, in local 1.9.0: guided streams can use
+`GenerationOptions(includeStructuredSnapshots: true)` and read
+`TextSnapshotEvent.structuredSnapshot`. Complete leaves and partial containers
+form an immutable projection, with observed/complete paths. Incomplete strings
+and numbers are withheld rather than repaired. Replace prior state on each event.
+
+Even a snapshot whose root is complete remains nonterminal; use only
+`CompletionEvent.response` for final decoding or data review. Set full
+`propertyOrder` lists per object, or separate `propertyOrders` definition paths
+when importing JSON Schema. Omission keeps alphabetical order. See the
+[progress contract](usage.md#structured-snapshots-and-property-order).
+
+## How do I distinguish omission from null?
+
+Required presence and nullable anyOf are independent. Use containsKey on final
+maps and ModelResponse.hasStructuredValue at the root. Native null has true
+presence; legacy null without that signal stays absent. Null needs OS26.4 and a
+compatible SDK; unions/references use OS26. Unavailable support fails instead
+of falling back to omission. See [the graph profile](usage.md#null-anyof-and-local-references).
+
+## Can the UI follow local availability without repeated manual checks?
+
+Yes, in local 1.9.0: `watchAvailability` emits initial active readiness and changed
+snapshots, using native Observation by default. It pauses work outside foreground
+and on subscription pause, then rechecks on resume. Cancel and await the
+subscription when its owner finishes. Native observation has no guaranteed event
+cadence; explicit `pollingInterval` from one second through five minutes is an
+alternative. Neither strategy initiates generation, downloads, Speech or PCC.
+
+A missing plugin/unsupported OS or SDK produces a terminal unavailable snapshot;
+bridge failures remain errors. There is no download percentage or automatic retry.
+See [watch lifecycle and limits](usage.md#observable-local-availability-and-text-languages).
+
+## Can I query text languages without requiring Speech?
+
+Yes: `getTextModelLanguages(useCase: ...)` returns the selected local variant's
+advertised languages and localized `TextModelLanguage` labels. It does not query
+Speech or claim its assets are installed. Regional locale fallbacks and model
+readiness remain separate checks. `getSupportedLanguages()` keeps the previous
+model/Speech intersection for dictation; PCC language queries remain disabled.
+
+## Can I resume an Apple conversation after disposing its session?
+
+Yes, with F07 in local 1.9.0: export an idle session using `exportHistory`, retain
+its `SessionHistory.toJson()` in app-owned storage and call `restoreSession` with
+the parsed snapshot and current matching tools. It creates a new session without
+replaying old tools. Storage, account/thread selection, encryption and retention
+belong to the app; nothing is persisted automatically.
+
+The initial profile requires matching platform, exact OS, known SDK, route,
+variant, locale and tool registrations. It rejects attachment/data entries,
+incomplete structure or pending tools and bounds the archive to 1 MiB/256 entries.
+It preserves native Codable context rather than rebuilding text, but cannot promise
+identical current model assets. See [complete history contract](usage.md#export-and-restore-session-history).
+
 ## What is cupertino_fundations_models?
 
 An independent MIT-licensed Flutter iOS/iPadOS and macOS plugin that bridges Dart to Apple's
@@ -67,7 +206,7 @@ after an upgrade.
 
 ## Can I request structured JSON rather than prompt for JSON?
 
-Yes. Supply a supported object-root `StructuredSchema` to
+Yes. Supply a supported `StructuredSchema` to
 `generateStructured()` or `streamStructured()`. A prompt that says “return JSON”
 does not enable native schema guidance. Guided output still needs application
 validation for facts, amounts, dates and business constraints.

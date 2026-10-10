@@ -5,7 +5,10 @@ import 'generation_diagnostic_event.dart';
 import 'generation_diagnostics.dart';
 import 'generation_termination.dart';
 
+/// Internal per-request timing and diagnostic dispatcher.
+/// Metadata is frozen at construction and callback failures never stop generation.
 final class GenerationTrace {
+  /// Creates timing state for an admitted or subsequently subscribed request.
   GenerationTrace({
     required this.requestId,
     required this.sessionId,
@@ -14,15 +17,22 @@ final class GenerationTrace {
     required Map<String, Object?> runtimeMetadata,
   }) : runtimeMetadata = Map<String, Object?>.unmodifiable(runtimeMetadata);
 
+  /// Dart correlation identifier for this request.
   final String requestId;
+  /// Session that owns the request.
   final String sessionId;
+  /// Selected native route.
   final ModelMode mode;
+  /// Optional callback and output-capture policy.
   final GenerationDiagnostics? configuration;
+  /// Immutable runtime metadata snapshot.
   final Map<String, Object?> runtimeMetadata;
   final Stopwatch _clock = Stopwatch();
   Duration? _firstResponseLatency;
+  /// Native correlation identifier, assigned when the transport supplies one.
   String? nativeRequestId;
 
+  /// Emits bounded metadata under the configured diagnostic policy.
   void emit(
     GenerationDiagnosticStage stage, {
     String? output,

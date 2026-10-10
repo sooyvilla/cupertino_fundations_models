@@ -96,6 +96,8 @@ final class _ChatScreenState extends State<ChatScreen> {
   final List<ChatMessageView> _messages = <ChatMessageView>[];
 
   ModelAvailability? _localAvailability;
+  StreamSubscription<ModelAvailability>? _availabilityWatch;
+  int _availabilityEpoch = 0;
   PickedFoundationModelsFile? _pendingAttachment;
   StreamSubscription<LiveTranscriptionEvent>? _liveTranscription;
   bool _sending = false;
@@ -349,6 +351,8 @@ final class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    _availabilityEpoch++;
+    unawaited(_availabilityWatch?.cancel());
     unawaited(_liveTranscription?.cancel());
     unawaited(_disposeSession());
     _input.dispose();
@@ -357,16 +361,30 @@ final class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _refreshAvailability() async {
+    final epoch = ++_availabilityEpoch;
+    final previous = _availabilityWatch;
+    _availabilityWatch = null;
     try {
+      await previous?.cancel();
+      if (!mounted || epoch != _availabilityEpoch) return;
       final ModelAvailability availability = await _models.checkAvailability(
         mode: ModelMode.local,
         localeIdentifier: _selectedLocaleIdentifier,
       );
-      if (mounted) {
+      if (mounted && epoch == _availabilityEpoch) {
         setState(() => _localAvailability = availability);
+        _availabilityWatch = _models.watchAvailability(localeIdentifier: _selectedLocaleIdentifier).listen((snapshot) {
+          if (mounted && epoch == _availabilityEpoch) setState(() => _localAvailability = snapshot);
+        }, onError: (Object error) {
+          if (mounted && epoch == _availabilityEpoch) {
+            setState(() => _localAvailability = ModelAvailability(mode: ModelMode.local,
+              status: AvailabilityStatus.unknown, isAvailable: false, supportsFullPower: false,
+              reason: error is FoundationModelsException ? error.message : 'Local availability monitoring failed.'));
+          }
+        });
       }
     } on FoundationModelsException catch (error) {
-      if (mounted) {
+      if (mounted && epoch == _availabilityEpoch) {
         setState(
           () =>
               _localAvailability = ModelAvailability.fromMap(<Object?, Object?>{

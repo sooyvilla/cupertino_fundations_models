@@ -1,8 +1,24 @@
 /// Selects the speech recognition path used for audio transcription.
-enum AudioTranscriptionMode { automatic, onDevice, server }
+enum AudioTranscriptionMode {
+  /// Allows native engine selection, including legacy Apple server recognition.
+  automatic,
+  /// Requires on-device recognition; unavailable local assets cause a failure.
+  onDevice,
+  /// Allows Apple's network-backed Speech recognition, separately from PCC.
+  server,
+}
 
 /// Gives Apple's speech recognizer context about the expected audio content.
-enum AudioTranscriptionTaskHint { unspecified, dictation, search, confirmation }
+enum AudioTranscriptionTaskHint {
+  /// Supplies no specific task hint to the native recognizer.
+  unspecified,
+  /// Hints that the audio contains ordinary dictated prose.
+  dictation,
+  /// Hints that the audio contains a search query.
+  search,
+  /// Hints that the audio contains a short confirmation response.
+  confirmation,
+}
 
 /// Request used to transcribe an audio file through Apple's Speech framework.
 final class AudioTranscriptionRequest {
@@ -213,7 +229,9 @@ final class AudioTranscriptionSegment {
   /// Duration of the segment within the source audio.
   final Duration duration;
 
-  /// Recognition confidence reported by Speech, from `0.0` to `1.0`.
+  /// Legacy Speech confidence from zero to one, when that engine supplies it.
+  /// SpeechAnalyzer currently returns zero as an unavailable-confidence marker;
+  /// zero alone does not establish that the transcription is unreliable.
   final double confidence;
 }
 

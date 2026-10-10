@@ -1,0 +1,9 @@
+builders:
+  structured_models:
+    import: "package:cupertino_fundations_models_generator/builder.dart"
+    builder_factories: ["structuredModelsBuilder"]
+    build_extensions: {".dart": [".structured.dart"]}
+    auto_apply: dependents
+    build_to: source
+    defaults:
+      generate_for: ["lib/**.dart"]

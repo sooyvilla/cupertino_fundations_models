@@ -9,14 +9,20 @@ import '../file_selection.dart';
 import '../generation.dart';
 import '../schema.dart';
 import '../session.dart';
+import '../session_history.dart';
+import '../text_model_language.dart';
 import '../token_budget.dart';
 import '../tools.dart';
 import '../transcription.dart';
 import 'cupertino_foundation_models_platform.dart';
+import 'foundation_models_availability_platform.dart';
+import 'foundation_models_history_platform.dart';
 
 /// MethodChannel implementation for Apple platforms.
 final class MethodChannelCupertinoFoundationModels
-    implements CupertinoFoundationModelsPlatform {
+    implements CupertinoFoundationModelsPlatform, FoundationModelsHistoryPlatform, FoundationModelsAvailabilityPlatform {
+  /// Registers internal callbacks on supplied or default native channels.
+  /// Custom channels support isolated tests; applications use the facade.
   MethodChannelCupertinoFoundationModels({
     MethodChannel? methodChannel,
     EventChannel? transcriptionEventChannel,
@@ -39,6 +45,7 @@ final class MethodChannelCupertinoFoundationModels
       <String, _ActiveGenerationStream>{};
   int _requestSequence = 0;
   bool _liveTranscriptionActive = false;
+  final Map<String, StreamController<ModelAvailability>> _availabilityWatches = {};
 
   @override
   Future<FoundationModelsCapabilities> getCapabilities() async {
@@ -56,6 +63,50 @@ final class MethodChannelCupertinoFoundationModels
         .whereType<Map<Object?, Object?>>()
         .map(FoundationModelsLanguage.fromMap)
         .toList(growable: false);
+  }
+
+  @override
+  Future<List<TextModelLanguage>> getTextModelLanguages({required FoundationModelsUseCase useCase}) async {
+    final response = await _invoke<Object?>('getTextModelLanguages', {'useCase': useCase.name});
+    if (response is! List || response.any((value) => value is! Map<Object?, Object?>)) {
+      throw const FoundationModelsException(code: FoundationModelsErrorCode.parsingFailure,
+        message: 'The text-model language payload is malformed.');
+    }
+    try {
+      return List<TextModelLanguage>.unmodifiable(response.map((value) => TextModelLanguage.fromMap(value as Map<Object?, Object?>)));
+    } on Object {
+      throw const FoundationModelsException(code: FoundationModelsErrorCode.parsingFailure,
+        message: 'The text-model language labels are malformed.');
+    }
+  }
+
+  @override
+  Stream<ModelAvailability> watchAvailability({required FoundationModelsUseCase useCase,
+    required String? localeIdentifier, required Duration? pollingInterval}) {
+    final id = _createRequestId();
+    late StreamController<ModelAvailability> controller;
+    Future<void>? starting;
+    var started = false;
+    controller = StreamController<ModelAvailability>(onListen: () {
+      _availabilityWatches[id] = controller;
+      starting = () async {
+        try {
+          await _invoke<void>('startAvailabilityWatch', {'watchId': id, 'useCase': useCase.name,
+            'localeIdentifier': localeIdentifier, if (pollingInterval != null) 'pollingIntervalMs': pollingInterval.inMilliseconds});
+          started = true;
+        } on Object catch (error, stack) {
+          if (_availabilityWatches.remove(id) != null) {
+            controller.addError(error, stack);
+            unawaited(controller.close());
+          }
+        }
+      }();
+    }, onCancel: () async {
+      _availabilityWatches.remove(id);
+      await starting;
+      if (started) await _invoke<void>('stopAvailabilityWatch', {'watchId': id});
+    });
+    return controller.stream;
   }
 
   @override
@@ -103,6 +154,12 @@ final class MethodChannelCupertinoFoundationModels
       _liveSessions[sessionId] = session;
     }
     return session;
+  }
+
+  @override
+  Future<SessionHistory> exportSessionHistory({required String sessionId}) async {
+    final response = await _invoke<Object?>('exportSessionHistory', <String, Object?>{'sessionId': sessionId});
+    return SessionHistory.fromMap(_asMap(response).cast<String, Object?>());
   }
 
   @override
@@ -402,6 +459,29 @@ final class MethodChannelCupertinoFoundationModels
 
   /// Handles calls initiated by the native side, currently tool invocations.
   Future<Object?> _handleNativeCall(MethodCall call) async {
+    if (call.method == 'availabilityEvent') {
+      final envelope = _asMap(call.arguments);
+      final controller = _availabilityWatches[envelope['watchId']];
+      if (controller == null) return null;
+      try {
+        final raw = envelope['availability'];
+        if (raw is! Map<Object?, Object?> || raw['mode'] != 'local' || raw['status'] is! String ||
+            raw['isAvailable'] is! bool || raw['supportsFullPower'] != false) {
+          throw const FormatException('Malformed local availability snapshot.');
+        }
+        controller.add(ModelAvailability.fromMap(raw));
+        if (envelope['isTerminal'] == true) {
+          _availabilityWatches.remove(envelope['watchId']);
+          unawaited(controller.close());
+        }
+      } on Object {
+        _availabilityWatches.remove(envelope['watchId']);
+        controller.addError(const FoundationModelsException(code: FoundationModelsErrorCode.parsingFailure,
+          message: 'The local availability payload is malformed.'));
+        unawaited(controller.close());
+      }
+      return null;
+    }
     if (call.method == 'streamEvent') {
       await _handleStreamEvent(_asMap(call.arguments));
       return null;
@@ -489,7 +569,15 @@ final class MethodChannelCupertinoFoundationModels
       return;
     }
 
-    final SessionEvent event = SessionEvent.fromMap(_asMap(arguments['event']));
+    final SessionEvent event;
+    try {
+      event = SessionEvent.fromMap(_asMap(arguments['event']));
+    } on FoundationModelsException catch (error, stackTrace) {
+      _activeStreams.remove(requestId);
+      active.controller.addError(error, stackTrace);
+      await active.controller.close();
+      return;
+    }
     final terminal = event is CompletionEvent || event is FailureEvent;
     if (terminal) {
       _activeStreams.remove(requestId);
@@ -553,12 +641,16 @@ final class MethodChannelCupertinoFoundationModels
   }
 }
 
+/// Internal ownership record for one native request's event controller.
 final class _ActiveGenerationStream {
+  /// Associates the controller with the session allowed to dispose it.
   const _ActiveGenerationStream({
     required this.sessionId,
     required this.controller,
   });
 
+  /// Native owner of the in-flight stream.
   final String sessionId;
+  /// Controller receiving only events for this native request.
   final StreamController<SessionEvent> controller;
 }

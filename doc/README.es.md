@@ -6,6 +6,26 @@ Models, el framework nativo de Apple. También permite reescribir mensajes,
 clasificar contenido, extraer JSON estructurado y llamar funciones de tu app.
 La generación local no necesita una clave de API.
 
+Este checkout prepara **1.9.0 local**, todavía sin publicar. F01 añade rangos
+numéricos, patrones Swift y límites de arrays; F02 permite raíces de lista o
+valores simples y elegir qué campos anidados son requeridos. Omitir esa lista
+mantiene todos los hijos requeridos; `[]` los hace opcionales. F03 permite importar
+un subconjunto explícito de JSON Schema junto a los constructores manuales.
+F04 convierte el resultado final a un tipo Dart con un decoder de tu app y
+conserva la respuesta completa. F05 ofrece parciales estructurados optativos y
+orden explícito por objeto. F06 añade null, anyOf y referencias locales, con
+presencia final separada de null. F07 permite exportar y restaurar historial nativo
+compatible de forma explícita, sin volver a ejecutar herramientas anteriores.
+F08 añade disponibilidad local observable e idiomas de texto separados de Speech. La instalación publicada 0.5.0 mantiene la API anterior;
+para usar F01–F10 ahora, configura una dependencia `path`
+al checkout como se explica en el [README](../README.md#quick-start).
+
+La revisión de la serie conserva las descripciones de todas las raíces y esquemas
+anidados sin nombre, y rechaza límites enteros que se redondearían en las guías
+Double también en la vía manual. Los esquemas integer conservan su rango de 64
+bits. Null explícito necesita OS26.4 y Xcode26.4/Swift6.3 o posterior; las APIs de
+OS27 y el conteo de tokens mantienen sus guards separados.
+
 [English](local-ai-ios.md) · [Plataformas y macOS](apple-platforms.md) · [Recetas](recipes.md) · [Preguntas frecuentes](faq.md)
 
 ## Qué necesitas
@@ -51,7 +71,114 @@ no instala un puente Swift nuevo. Una app exclusivamente local no necesita
 activar PCC. Generar texto por sí solo no requiere permisos de micrófono ni
 las descripciones de uso de Speech.
 
+F06 ofrece nullValue/anyOf/reference con definitions raíz. En JSON usa type:null,
+anyOf, $defs raíz y $ref local. Usa containsKey para distinguir un campo omitido
+de null, y hasStructuredValue para distinguir null raíz de ausencia. Null exige
+OS26.4 y SDK compatible; uniones/referencias usan OS26. No hay referencias remotas,
+ciclos, oneOf implícito ni fallback automático a omisión. Consulta
+[disponibilidad y límites](usage.md#null-anyof-and-local-references).
+
+## Adapters optativos y texto revisable
+
+F10 usa la entrada cupertino_fundations_models_adapters.dart. FoundationModelsAdapter
+administra sesiones nuevas para generate/stream; adaptEvents adapta una sesión
+prestada sin disponerla. Conserva eventos/respuestas originales, snapshots, tools,
+metadatos y contadores desconocidos. TextUpdate permite añadir o reemplazar, incluso
+cuando cambia el texto final. Un destino sólo append puede rechazar revisiones con
+allowReplacements:false; no se fabrica un delta ni se reintenta por otro proveedor.
+
+La app decide framework, proveedor, consentimiento, historial y cancelación. Las
+recetas Genkit/LangChain documentan sus diferencias; no instalan plugins ni suben
+el SDK del núcleo. Cancela y espera cleanup; pause afecta entrega, no los deadlines
+nativos. Consulta [contrato y recetas](usage.md#optional-adapters-and-stream-updates).
+
+## Elegir generación Dart opcional
+
+F09 prepara cupertino_fundations_models_generator en 1.8.0 local, compatible con núcleo 1.9.0, como dependencia
+de desarrollo. El núcleo sólo añade anotaciones propias, sin depender de analyzer,
+source_gen o build_runner en runtime. La IA que integre el paquete pregunta una
+vez por la vía manual/importada o generada si falta esa preferencia, y respeta la
+respuesta previa. No instala herramientas ni migra tus modelos por rutina.
+
+StructuredModel/StructuredField generan *.structured.dart con ClassCodec.schema,
+ClassCodec.decode y ClassPartial; no modifican tu clase ni generan Swift. La
+conversión final comprueba estructura y conserva errores F04; no valida hechos ni
+los guides nativos. Parciales exponen presencia, completitud y valor por separado,
+sin ejecutar constructores finales. Null explícito/listas nullable mantienen el
+requisito OS26.4. El perfil inicial exige clases concretas públicas, campos final,
+constructores generativos con parámetros nombrados y grafos acíclicos acotados.
+Consulta [setup local, límites y errores](usage.md#optional-dart-generation).
+
+## Observar disponibilidad e idiomas de texto
+
+En 1.9.0 local, `models.watchAvailability(localeIdentifier: 'es_CO')` devuelve un
+stream frío con estado inicial activo y cambios sin duplicados. Usa Observation
+nativo por defecto; puedes elegir polling explícito con `pollingInterval:
+Duration(seconds: 15)`, entre un segundo y cinco minutos. Se detiene al pausar la
+suscripción o salir de primer plano, y consulta de nuevo al volver. Cancela y
+espera la suscripción cuando termine su dueño. No inicia generación, descargas,
+permisos de voz ni PCC, y no promete porcentaje ni cadencia de descarga.
+
+`models.getTextModelLanguages(useCase: ...)` consulta sólo el modelo local general
+o contentTagging, con identifiers y nombres localizados. Su lista no demuestra
+readiness ni cubre todos los locales regionales admitidos por supportsLocale.
+`getSupportedLanguages()` conserva la intersección con Speech para dictado. SDK/OS
+no compatibles producen un estado terminal del watch; errores del puente siguen
+siendo errores. Consulta [contrato y lifecycle](usage.md#observable-local-availability-and-text-languages).
+
+## Continuar una conversación explícitamente
+
+En 1.9.0 local, llama `session.exportHistory()` cuando la sesión esté libre.
+`history.toJson()` produce datos para que tu app decida dónde guardarlos; el paquete
+no escribe ni transmite el historial. `models.restoreSession(history:
+SessionHistory.fromJson(json), tools: currentTools)` crea una sesión nueva con el
+contexto guardado y callbacks actuales, sin ejecutar llamadas históricas.
+
+El snapshot es sensible. Tu app decide usuario/conversación, cifrado, acceso y
+retención. El perfil inicial exige misma plataforma, versión exacta de OS, SDK
+conocido, ruta, variante, locale y registros de herramientas. Conserva el archivo
+Codable de Apple, instrucciones, opciones/formats y metadatos admitidos; rechaza
+adjuntos/data, estructuras parciales y herramientas pendientes. Límite: 256 entries
+y 1 MiB de archivo nativo. No admite editar/truncar el historial ni garantiza la
+misma versión del modelo instalado. PCC requiere permiso explícito al restaurar.
+Consulta [contrato, errores y ejemplo](usage.md#export-and-restore-session-history).
+
 ## Generar tu primer resumen
+
+El resumen de esta sección funciona con 0.5.0 y con la versión local 1.9.0.
+Para los constraints nuevos, consulta [esquemas y límites](usage.md#structured-generation)
+y el [plan de versiones](../CHANGELOG.md#planned-feature-versions). Puedes definir
+esquemas con constructores Dart o importar datos compatibles con
+`StructuredSchema.fromJsonSchema`; F09 ofrece ahora un generador Dart separado y opcional, sin cambiar las vías
+manuales ni importadas. Consulta [instalación y perfil](usage.md#optional-dart-generation).
+
+La importación exige `type` explícito, `items` tipados en arrays y
+`additionalProperties: false` en cada objeto. Omitir `required` en JSON deja todos
+los campos opcionales en ese nivel, a diferencia del default manual anidado.
+Los keywords no admitidos producen un error tipado con la ruta de entrada;
+`pattern` exige elegir explícitamente sintaxis Swift mediante
+`allowSwiftPatterns: true`. Consulta el [perfil completo](usage.md#import-json-schema-definitions).
+
+Usa `generateStructuredDecoded<T>` en la fachada o sesión cuando quieras un
+modelo de tu dominio, o `response.decodeStructured<T>` si ya tienes la respuesta
+final. El decoder síncrono recibe `Object?`; `result.value` contiene tu tipo y
+`result.response` conserva texto, modo, metadatos, uso y terminación originales.
+Los errores del decoder producen `StructuredDecodingException` con respuesta,
+causa y stack; los fallos nativos/JSON mantienen su contrato. No se decodifican
+parciales ni se autoriza guardar datos por convertirlos. Consulta el
+[contrato de conversión final](usage.md#decode-final-values-to-dart-types).
+
+Para mostrar progreso, usa `GenerationOptions(includeStructuredSnapshots: true)`
+en un stream guiado y lee `TextSnapshotEvent.structuredSnapshot`. El valor es una
+proyección inmutable del árbol nativo: conserva contenedores parciales y hojas
+completas, con rutas observadas/completas. No repara números ni strings cortados.
+Reemplaza el snapshot anterior; incluso `isComplete: true` requiere esperar
+`CompletionEvent` antes de convertir o revisar el resultado final.
+
+Los objetos admiten `propertyOrder` con todos sus campos una vez; omitirlo
+mantiene el orden alfabético. Para importar JSON usa `propertyOrders` por ruta
+de definición, sin introducir keywords ajenos al estándar. Consulta
+[parciales y orden](usage.md#structured-snapshots-and-property-order).
 
 Llama esta función desde tu app Flutter. Comprueba la disponibilidad, crea una
 sesión local y la libera al terminar. Si devuelve null, tu interfaz puede
