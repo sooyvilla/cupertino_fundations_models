@@ -720,3 +720,8 @@ Cada cambio futuro debe actualizar esta seccion con:
 - Reparación del control de entrega: versión sin cambios sólo se omite si ya está publicada. Una versión inédita y sin tag puede recuperar una entrega interrumpida en el commit validado; tags existentes siguen protegidos contra movimiento/reemplazo. Runbook y tests cubren publicado/inédito con misma versión.
 - Comprobación: checkout nuevo desde git archive, sin .dart_tool/locks/entornos ignorados, resolución de los tres paquetes y flutter analyze --no-pub sin issues;46tests Python aprobaron. No se añadió ejecución de apps/dispositivos ni se tocaron .env. Se conserva1.9.0; autorizado por el encargo arreglar el fallo de la entrega y volver a subir a main.
 - El resultado del nuevo run y de pub.dev debe verificarse después del push; estos checks locales no prueban CI remoto, builds Apple o publicación.
+
+### Seguimiento de recuperación — cobertura Linux
+
+- Run38069041638 de845f724 confirmó análisis/dependencias reparados; pruebas Python/generador/Flutter aprobaron, pero el gate Linux señaló constructores de StructuredModel/StructuredField sin ejecutar. El test de sus opciones usaba const y podía resolverse en compilación.
+- Ahora ese escenario también construye ambas anotaciones con opciones de un mapa dinámico de app; conserva las mismas assertions/escenarios. No se baja el umbral ni se excluyen líneas; fuente runtime y versiones no cambian.410Flutter, análisis sin issues y gate1791/1791(40fuentes)100% aprobaron localmente. La confirmación Linux/Apple/publicación corresponde al siguiente run.

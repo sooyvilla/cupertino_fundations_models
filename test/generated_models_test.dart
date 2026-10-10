@@ -23,10 +23,11 @@ Map<String,Object?> choices({Object? note, List<Object?> rows = const []}) => {
 
 void main() {
   test('annotation options remain ordinary dependency-free Dart values', () {
-    const annotation = StructuredModel(name: 'Row', description: 'Source', propertyOrder: ['x'], explicitNulls: true, constructor: 'named');
+    final names = <String, String>{'model': 'Row', 'field': 'x'};
+    final annotation = StructuredModel(name: names['model'], description: 'Source', propertyOrder: ['x'], explicitNulls: true, constructor: 'named');
     expect(annotation.name, 'Row'); expect(annotation.description, 'Source');
     expect(annotation.propertyOrder, ['x']); expect(annotation.explicitNulls, true); expect(annotation.constructor, 'named');
-    const field = StructuredField(name: 'x', description: 'Guide', required: true, minimum: 0,
+    final field = StructuredField(name: names['field'], description: 'Guide', required: true, minimum: 0,
       maximum: 1, pattern: '^x', minItems: 0, maxItems: 1, exactItems: 1);
     expect(field.name, 'x'); expect(field.description, 'Guide'); expect(field.required, true);
     expect(field.minimum, 0); expect(field.maximum, 1); expect(field.pattern, '^x');
