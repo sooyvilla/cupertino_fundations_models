@@ -17,7 +17,10 @@ def check(report, root):
             counts = summary[kind]
             total, covered = counts['count'], counts['covered']
             if type(total) is not int or type(covered) is not int or total <= 0 or covered != total:
-                raise ValueError(f'Native {name} {kind} coverage must be exactly 100%: {covered}/{total}.')
+                uncovered = sorted({f'{segment[0]}:{segment[1]}' for segment in files[0].get('segments', [])
+                                    if len(segment) >= 5 and segment[2] == 0 and segment[3] and segment[4]})
+                detail = f' Uncovered region starts: {", ".join(uncovered)}.' if uncovered else ''
+                raise ValueError(f'Native {name} {kind} coverage must be exactly 100%: {covered}/{total}.{detail}')
         lines = summary['lines']['count']
         results.append(f'Native {name} coverage: {lines}/{lines} lines (100%); functions and regions 100%.')
     return '\n'.join(results)

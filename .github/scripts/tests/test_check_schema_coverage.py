@@ -58,6 +58,14 @@ class NativeSchemaCoverageTests(unittest.TestCase):
                     self.check([self.entry])
                 self.entry['summary'][kind]['covered'] = 5
 
+    def test_uncovered_regions_report_source_coordinates_without_counting_gaps(self):
+        self.entry['summary']['lines']['covered'] = 4
+        self.entry['segments'] = [[12, 3, 0, True, True, False], [12, 3, 0, True, True, False],
+                                  [13, 2, 1, True, True, False], [14, 1, 0, False, True, False],
+                                  [15, 1, 0, True, False, False]]
+        with self.assertRaisesRegex(ValueError, r'Uncovered region starts: 12:3\.'):
+            self.check([self.entry])
+
     def test_empty_negative_or_overstated_counters_fail(self):
         for total, covered in [(0, 0), (-1, -1), (5, 6), (5, -1), (True, True)]:
             with self.subTest(total=total, covered=covered):
